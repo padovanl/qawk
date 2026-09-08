@@ -3,6 +3,12 @@
    for anything you might have to compare by eye. */
 
 :root {
+  /* Without this the browser draws its own widgets -- the date picker, its
+     calendar popup, the spinners, the scrollbars -- in light, inside a dark
+     page. It is one line and it is the difference between a native control
+     that belongs here and one that looks pasted on. */
+  color-scheme: dark;
+
   --bg:        #0d1117;
   --bg-2:      #141a22;
   --bg-3:      #1b232d;
@@ -23,6 +29,7 @@
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
+    color-scheme: light;
     --bg: #f6f8fa; --bg-2: #ffffff; --bg-3: #eef2f6;
     --line: #d5dde5; --line-2: #c0cad4;
     --fg: #16202b; --fg-dim: #55637300; --fg-dim: #556373; --fg-faint: #7b8794;
@@ -502,3 +509,53 @@ dialog:has(.colpick) { width: min(660px, 94vw); }
 .chip:hover { border-color: var(--accent); color: var(--fg); background: color-mix(in srgb, var(--accent) 12%, var(--bg-3)); }
 .chip .plus { color: var(--accent-2); font-weight: 700; }
 .chip.attr .plus { color: var(--warn); }
+
+/* ------------------------------------------------------------ date fields */
+input[type=datetime-local] {
+  font-family: var(--mono); font-size: 12px; letter-spacing: .2px;
+}
+input[type=datetime-local]::-webkit-calendar-picker-indicator {
+  opacity: .55; cursor: pointer; padding: 2px; border-radius: 4px;
+}
+input[type=datetime-local]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1; background: var(--bg-3);
+}
+input[type=datetime-local]:disabled { opacity: .4; }
+
+/* Nobody wants to spin four fields to say "tonight at three": the shortcuts
+   are what the field is actually for. */
+.when-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.when-quick .chip { height: 22px; padding: 0 9px; font-size: 12px; }
+
+/* ------------------------------------------------- native widget cleanup */
+/* The browser's own spinner is a light box with two grey chevrons in it. It
+   cannot be themed properly, only removed, so number fields are typed and
+   stepped with our own buttons where stepping is actually useful. */
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.stepper { display: flex; align-items: center; gap: 6px; }
+.stepper input { flex: 1; text-align: center; font-family: var(--mono); }
+.stepper button {
+  width: 26px; height: var(--ctl); flex: 0 0 26px;
+  border: 1px solid var(--line); border-radius: var(--r);
+  background: var(--bg-3); color: var(--fg-dim); cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.stepper button:hover { border-color: var(--accent); color: var(--accent-2); }
+.stepper button:active { background: var(--line); }
+
+/* Selects get one chevron of ours instead of whatever the platform draws. */
+select {
+  appearance: none; -webkit-appearance: none;
+  padding-right: 26px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--fg-faint) 50%),
+                    linear-gradient(135deg, var(--fg-faint) 50%, transparent 50%);
+  background-position: calc(100% - 15px) center, calc(100% - 10px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+select:hover { background-image: linear-gradient(45deg, transparent 50%, var(--accent-2) 50%),
+                                 linear-gradient(135deg, var(--accent-2) 50%, transparent 50%); }
+.side-foot select, .pager select { padding-right: 22px; background-position: calc(100% - 12px) center, calc(100% - 8px) center; }

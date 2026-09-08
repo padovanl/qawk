@@ -133,10 +133,53 @@ async function upload(smId, file, onProgress) {
 
 /* Dates are picked, never typed. hawkBit speaks epoch milliseconds, which is
  * the right thing on the wire and the wrong thing to ask a person for. */
+// A number field with our own stepper: the native one cannot be themed, and a
+// group count or a percentage is something you nudge rather than type.
+function numInput(value, min, max, step = 1) {
+  const inp = h('input', { type: 'number', value, min, max });
+  const bump = d => {
+    const v = Math.max(min, Math.min(max, (Number(inp.value) || 0) + d * step));
+    inp.value = v; inp.dispatchEvent(new Event('change'));
+  };
+  const box = h('div.stepper',
+    h('button', { type: 'button', onclick: e => { e.preventDefault(); bump(-1); } }, '\u2212'),
+    inp,
+    h('button', { type: 'button', onclick: e => { e.preventDefault(); bump(1); } }, '+'));
+  box.input = inp;
+  return box;
+}
+
 function dtInput(ms) {
   const v = ms ? new Date(ms - new Date().getTimezoneOffset() * 60000)
                   .toISOString().slice(0, 16) : '';
   return h('input', { type: 'datetime-local', value: v });
+}
+
+const dtSet = (el, d) => {
+  el.value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  el.dispatchEvent(new Event('change'));
+};
+
+// The maintenance window is nearly always tonight or tomorrow at three, so
+// those are buttons rather than eight keystrokes in four spinners.
+function dtQuick(el) {
+  const at = (days, hh) => {
+    const d = new Date(); d.setDate(d.getDate() + days); d.setHours(hh, 0, 0, 0); return d;
+  };
+  const plus = mins => new Date(Date.now() + mins * 60000);
+  const mk = (label, fn) => h('button.chip', {
+    onclick: e => { e.preventDefault(); if (!el.disabled) dtSet(el, fn()); },
+  }, label);
+  return h('div.when-quick',
+    mk('in 1h', () => plus(60)),
+    mk('in 4h', () => plus(240)),
+    mk('tonight 03:00', () => at(new Date().getHours() < 3 ? 0 : 1, 3)),
+    mk('tomorrow 03:00', () => at(1, 3)),
+    mk('next Monday 03:00', () => {
+      const d = new Date(); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7));
+      d.setHours(3, 0, 0, 0); return d;
+    }),
+    h('button.chip', { onclick: e => { e.preventDefault(); el.value = ''; el.dispatchEvent(new Event('change')); } }, 'clear'));
 }
 const dtMs = el => {
   const v = (el.value || '').trim();
@@ -326,7 +369,10 @@ const D_COLS = {
   name:    { label: 'Name', cell: x => x.name, f: 'name' },
   version: { label: 'Version', cell: x => h('span.mono', x.version), f: 'version' },
   type:    { label: 'Type', cell: x => h('span.dim', x.type), f: 'type' },
-  complete:{ label: 'Complete', cell: x => x.complete ? h('span.faint', '—') : h('span.pill.err', 'incomplete') },
+  // Not shown by default: on a healthy server it is 'yes' on every row, and a
+  // column that never varies is width spent on nothing. Add it when you are
+  // hunting for the set that will not assign -- then it has to say both things.
+  complete:{ label: 'Complete', cell: x => x.complete ? h('span.pill.ok', 'complete') : h('span.pill.err', 'incomplete') },
   desc:    { label: 'Description', cell: x => h('span.faint', x.description || '—'), f: 'description' },
   created: { label: 'Created', cell: x => h('span.faint.nowrap', { title: when(x.createdAt) }, ago(x.createdAt)) },
 };
@@ -342,7 +388,7 @@ const M_COLS = {
 };
 const COLSETS = {
   targets: { defs: T_COLS, def: T_COLS_DEFAULT, attrs: true },
-  ds: { defs: D_COLS, def: ['id', 'name', 'version', 'type', 'complete', 'created'], attrs: false },
+  ds: { defs: D_COLS, def: ['id', 'name', 'version', 'type', 'created'], attrs: false },
   sm: { defs: M_COLS, def: ['id', 'name', 'version', 'type', 'vendor', 'created'], attrs: false },
 };
 
@@ -436,7 +482,7 @@ VIEWS.targets = {
     }
     if (!data.content.length) {
       return root.replaceChildren(chips,
-        tableOf(cols().map(colLabel).concat(['']), [], filterRow(fields, st, render)),
+        tableOf(cols().map(c => colLabel(c)).concat(['']), [], filterRow(fields, st, render)),
         h('div.empty', h('b', q ? 'Nothing matches' : 'No targets yet'),
           q ? 'Try a substring, or FIQL such as attribute.device_type==neo-intel'
             : 'A device registers itself on its first poll.'));
@@ -460,7 +506,7 @@ VIEWS.targets = {
       ]),
     }));
     root.replaceChildren(chips,
-      tableOf(chosen.map(colLabel).concat(['']), rows, filterRow(fields, st, render)),
+      tableOf(chosen.map(c => colLabel(c)).concat(['']), rows, filterRow(fields, st, render)),
       pager(st, data.total, render));
   },
 };
@@ -900,7 +946,7 @@ async function assignDialog(targetId, presetDs) {
 
   modal(targetId ? 'Deploy to ' + targetId : 'Deploy', [
     h('label.f', 'Distribution set', sel), h('label.f', 'Mode', type),
-    h('label.f', 'Force time', at), atHint,
+    h('label.f', 'Force time', at), dtQuick(at), atHint,
     h('label.f', h('span.flex', confirmReq, 'require confirmation on the device'), h('span')),
     h('label.f', 'Send it to', mode), row, count,
     h('p.faint', { style: 'margin:0;font-size:12px' },
@@ -1263,9 +1309,9 @@ async function newRolloutDialog() {
   const ds = h('select', sets.content.filter(d => d.complete)
     .map(d => h('option', { value: d.id }, `${d.name} ${d.version} · ${d.type}`)));
   const q = h('input', { type: 'text', value: 'attribute.device_type==neo-intel' });
-  const groups = h('input', { type: 'number', value: 3, min: 1, max: 50 });
-  const errTh = h('input', { type: 'number', value: 10, min: 0, max: 100 });
-  const okTh = h('input', { type: 'number', value: 100, min: 0, max: 100 });
+  const groupsBox = numInput(3, 1, 50), groups = groupsBox.input;
+  const errThBox = numInput(10, 0, 100, 5), errTh = errThBox.input;
+  const okThBox = numInput(100, 0, 100, 5), okTh = okThBox.input;
   const actType = h('select',
     h('option', { value: 'forced' }, 'forced'), h('option', { value: 'soft' }, 'soft'),
     h('option', { value: 'timeforced' }, 'timeforced'),
@@ -1297,11 +1343,12 @@ async function newRolloutDialog() {
     h('label.f', 'Name', name), h('label.f', 'Description', desc),
     h('label.f', 'Distribution set', ds),
     h('label.f', 'Target filter (FIQL)', q), preview, rollTypes,
-    h('label.f', 'Group count', groups),
+    h('label.f', 'Group count', groupsBox),
     h('label.f', 'Action type', actType),
-    h('label.f', 'Start type', startType), h('label.f', 'Scheduled at', startAt),
-    h('label.f', 'Success threshold, %', okTh),
-    h('label.f', 'Error threshold, % per group', errTh),
+    h('label.f', 'Start type', startType),
+    h('label.f', 'Scheduled at', startAt), dtQuick(startAt),
+    h('label.f', 'Success threshold, %', okThBox),
+    h('label.f', 'Error threshold, % per group', errThBox),
     h('p.faint', { style: 'margin:0;font-size:12px' },
       'The rollout pauses itself when a group exceeds the error threshold, so a bad build stops ' +
       'after the first group instead of taking down a venue.'),
