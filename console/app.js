@@ -131,6 +131,34 @@ async function upload(smId, file, onProgress) {
   });
 }
 
+function download(name, text) {
+  // The page is served locally, so a blob link just works: no sandbox, no
+  // server round trip, and the log lands where the browser puts downloads.
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  const a = h('a', { href: url, download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+async function actionLogText(id, a) {
+  const r = await get(`/targets/${enc(id)}/actions/${a.id}/status?limit=200&sort=id:ASC`).catch(() => ({ content: [] }));
+  const head = [
+    `# target      ${id}`,
+    `# action      ${a.id}`,
+    `# type        ${a.type || '-'}   force: ${a.forceType || '-'}`,
+    `# status      ${a.status}${a.active ? ' (active)' : ''}`,
+    `# created     ${new Date(a.createdAt).toISOString()}`,
+    `# last change ${new Date(a.lastModifiedAt || a.createdAt).toISOString()}`,
+    '',
+  ];
+  const body = (r.content || []).map(e => {
+    const m = (e.messages || []).filter(Boolean);
+    return `${new Date(e.reportedAt).toISOString()}  ${e.type}` +
+           (m.length ? '\n    ' + m.join('\n    ') : '');
+  });
+  return head.concat(body.length ? body : ['(no feedback recorded)']).join('\n') + '\n';
+}
+
 /* --------------------------------------------------------------- chrome */
 function toast(title, msg, kind = 'info', ms = 6000) {
   const t = h('div.toast.' + kind, h('b', title), msg ? h('div.m', msg) : null);
@@ -164,20 +192,22 @@ function closeDrawer() {
 // The Action object in this hawkBit build has no detailStatus: 'status' itself
 // carries running / retrieved / finished, and the verdict of a finished action
 // lives in the type of its last status entry.
+// 'live' spins: an action on its way is the one thing you sit and watch, and a
+// coloured box that never moves is indistinguishable from a stuck one.
 const ACTION_PILL = {
   finished: 'ok', error: 'err', canceled: 'mute', cancel_rejected: 'warn',
-  running: 'info', retrieved: 'info', download: 'info', downloaded: 'info',
-  warning: 'warn', scheduled: 'mute', canceling: 'warn', pending: 'info',
-  wait_for_confirmation: 'warn',
+  running: 'live', retrieved: 'live', download: 'live', downloaded: 'live',
+  warning: 'warn', scheduled: 'mute', canceling: 'live', pending: 'live',
+  wait_for_confirmation: 'warn pulse',
 };
 const TARGET_PILL = {
-  in_sync: 'ok', pending: 'info', error: 'err', registered: 'mute', unknown: 'mute',
+  in_sync: 'ok', pending: 'live', error: 'err', registered: 'mute', unknown: 'mute',
 };
 const pill = (t, k) => h('span.pill.' + (k || 'mute'), String(t || '—').toLowerCase().replace(/_/g, ' '));
 
-function tableOf(heads, rows) {
+function tableOf(heads, rows, filters) {
   return h('table.t',
-    h('thead', h('tr', heads.map(x => h('th', x)))),
+    h('thead', h('tr', heads.map(x => h('th', x))), filters || null),
     h('tbody', rows.map(r =>
       h('tr', { onclick: r.onclick, class: r.sel ? 'sel' : null }, r.cells.map(c => h('td', c))))));
 }
@@ -195,8 +225,11 @@ const VIEWS = {};
 VIEWS.dash = {
   title: 'Dashboard',
   async render(root) {
+    // 200 is a window, not the fleet: the counts come from 'total', and the
+    // per-target lookup below is capped so a thousand devices do not become a
+    // thousand requests every five seconds.
     const [tg, ds, sm, ro] = await Promise.all([
-      get('/targets?limit=200&sort=lastControllerRequestAt:DESC'),
+      get('/targets?limit=60&sort=lastControllerRequestAt:DESC'),
       get('/distributionsets?limit=1'), get('/softwaremodules?limit=1'),
       get('/rollouts?limit=1').catch(() => ({ total: 0 })),
     ]);
@@ -209,7 +242,8 @@ VIEWS.dash = {
 
     // hawkBit has no fleet-wide action feed, so this asks the most recently
     // seen targets for their latest one.
-    const recent = (await Promise.all(tg.content.slice(0, 25).map(async t => {
+    const SAMPLE = 20;
+    const recent = (await Promise.all(tg.content.slice(0, SAMPLE).map(async t => {
       try {
         const a = await get(`/targets/${enc(t.controllerId)}/actions?limit=1&sort=id:DESC`);
         return a.content[0] ? Object.assign({ _t: t.controllerId }, a.content[0]) : null;
@@ -227,7 +261,9 @@ VIEWS.dash = {
               h('button.btn.sm', { onclick: () => { S.status = k; go('targets'); } },
                 h('span.pill.' + (TARGET_PILL[k] || 'mute'), `${k.replace(/_/g, ' ')} · ${v}`)))
           : h('span.faint', 'no targets registered yet'))),
-      h('div.panel', h('h3', 'Latest action per target'),
+      h('div.panel', h('h3', tg.total > SAMPLE
+          ? `Latest action · ${SAMPLE} most recently seen of ${tg.total}`
+          : 'Latest action per target'),
         recent.length
           ? tableOf(['Target', 'Action', 'Status', 'Type', 'When'], recent.map(a => ({
               onclick: () => openTarget(a._t),
@@ -242,6 +278,56 @@ VIEWS.dash = {
 /* ------- targets ---------------------------------------------------- */
 const T_STATUS = ['', 'in_sync', 'pending', 'error', 'registered', 'unknown'];
 
+/* COLUMNS ARE CHOSEN BY WHOEVER IS LOOKING.
+ *
+ * The fixed part is here; anything a device reports about itself becomes a
+ * column of its own, discovered from the fleet rather than hardcoded. So
+ * device_type, slot and os_version are available today and centerid becomes
+ * available the day the first device sends it, with nothing to change here.
+ *
+ * The choice is per browser (localStorage): two people watching the same fleet
+ * usually want different columns. */
+const T_COLS = {
+  controllerId: { label: 'Controller', cell: t => h('span.mono', t.controllerId) },
+  name:         { label: 'Name', cell: t => h('span.dim', t.name !== t.controllerId ? t.name : '—') },
+  status:       { label: 'Status', cell: t => pill(t.updateStatus, TARGET_PILL[t.updateStatus]) },
+  ds:           { label: 'Assigned / installed', cell: t => {
+                    const c = h('span.faint', '…'); loadAssignedInstalled(t.controllerId, c); return c; } },
+  lastPoll:     { label: 'Last poll', cell: t => h('span.faint.nowrap', ago(t.lastControllerRequestAt)) },
+  nextPoll:     { label: 'Next', cell: t => t.pollStatus && t.pollStatus.overdue
+                    ? h('span.pill.warn.pulse', 'overdue')
+                    : h('span.faint.nowrap', t.pollStatus ? ago(t.pollStatus.nextExpectedRequestAt) : '—') },
+  ip:           { label: 'IP', cell: t => h('span.mono.faint', t.ipAddress || '—') },
+  targetType:   { label: 'Type', cell: t => h('span.dim', (t.targetType && (t.targetType.name || t.targetType)) || '—') },
+  created:      { label: 'Registered', cell: t => h('span.faint.nowrap', when(t.createdAt)) },
+  security:     { label: 'Token', cell: t => h('span.mono.faint', t.securityToken || '—') },
+};
+const T_COLS_DEFAULT = ['controllerId', 'name', 'status', 'ds', 'lastPoll', 'nextPoll', 'ip'];
+
+function cols() {
+  try {
+    const v = JSON.parse(localStorage.getItem('hb-cols') || 'null');
+    if (Array.isArray(v) && v.length) return v;
+  } catch (_) {}
+  return T_COLS_DEFAULT.slice();
+}
+function setCols(v) {
+  try { localStorage.setItem('hb-cols', JSON.stringify(v)); } catch (_) {}
+  render();
+}
+const colLabel = id => id.startsWith('attr:')
+  ? id.slice(5) : (T_COLS[id] ? T_COLS[id].label : id);
+
+// Attributes are one request per target, so they are fetched once per render
+// and shared by every attribute column.
+const attrCache = new Map();
+async function attrsOf(id) {
+  if (!attrCache.has(id)) {
+    attrCache.set(id, get(`/targets/${enc(id)}/attributes`).catch(() => ({})));
+  }
+  return attrCache.get(id);
+}
+
 VIEWS.targets = {
   title: 'Targets',
   bar: () => [
@@ -251,56 +337,60 @@ VIEWS.targets = {
         placeholder: 'name, id, or FIQL — attribute.device_type==neo-intel',
         oninput: e => { S.q = e.target.value; debounceRender(); },
       }), h('kbd', '/')),
+    h('div.vsep'),
+    h('button.btn.sm', { onclick: columnsDialog }, 'columns'),
     h('button.btn.sm', { onclick: registerTargetDialog }, 'register'),
     h('button.btn.sm', { onclick: () => saveFilterDialog(currentQuery()) }, 'save filter'),
     h('button.btn.sm', { onclick: () => assignDialog(null) }, 'deploy to…'),
   ],
   async render(root) {
-    const chips = h('div.wrap', { style: 'margin-bottom:12px' },
-      T_STATUS.map(s => h('button.btn.sm', {
-        class: S.status === s ? 'primary' : '',
-        onclick: () => { S.status = s; render(); },
-      }, s === '' ? 'all' : s.replace(/_/g, ' '))));
+    const chips = h('div', { style: 'margin-bottom:12px' },
+      h('div.seg', T_STATUS.map(x => h('button', {
+        class: S.status === x ? 'on' : '',
+        onclick: () => { S.status = x; render(); },
+      }, x === '' ? 'all' : x.replace(/_/g, ' ')))));
 
-    let path = '/targets?limit=200&sort=controllerId:ASC';
-    const q = currentQuery();
-    if (q) path += '&q=' + fiql(q);
+    const st = pg('targets');
+    const fields = cols().map(id => id.startsWith('attr:')
+      ? { key: 'attribute.' + id.slice(5), ph: 'filter' }
+      : ({ controllerId: { key: 'controllerid', ph: 'filter' },
+           name: { key: 'name', ph: 'filter' },
+           ip: { key: 'ipaddress', ph: 'filter' } }[id] || {}));
+    fields.push({});   // the actions column
 
+    const q = [currentQuery(), fiqlOf(fields.filter(f => f.key), st)].filter(Boolean).join(';');
     let data;
-    try { data = await get(path); }
+    try { data = await get(pagedPath('/targets', st, q, 'controllerId:ASC')); }
     catch (e) {
       return root.replaceChildren(chips, h('div.empty', h('b', 'That filter was refused'), e.message));
     }
     if (!data.content.length) {
-      return root.replaceChildren(chips, h('div.empty',
-        h('b', q ? 'Nothing matches' : 'No targets yet'),
-        q ? 'Try a substring, or FIQL such as attribute.device_type==neo-intel'
-          : 'A device registers itself on its first poll.'));
+      return root.replaceChildren(chips,
+        tableOf(cols().map(colLabel).concat(['']), [], filterRow(fields, st, render)),
+        h('div.empty', h('b', q ? 'Nothing matches' : 'No targets yet'),
+          q ? 'Try a substring, or FIQL such as attribute.device_type==neo-intel'
+            : 'A device registers itself on its first poll.'));
     }
 
-    const rows = data.content.map(t => {
-      // Assigned vs installed, as the simple UI shows them. hawkBit does not
-      // put these in the list, so each cell fills itself in afterwards.
-      const dsCell = h('span.faint', '…');
-      loadAssignedInstalled(t.controllerId, dsCell);
-      return {
-        sel: S.sel === t.controllerId,
-        onclick: () => openTarget(t.controllerId),
-        cells: [
-          h('span.mono', t.controllerId),
-          h('span.dim', t.name !== t.controllerId ? t.name : '—'),
-          pill(t.updateStatus, TARGET_PILL[t.updateStatus]),
-          dsCell,
-          h('span.faint.nowrap', ago(t.lastControllerRequestAt)),
-          t.pollStatus && t.pollStatus.overdue ? h('span.pill.warn', 'overdue')
-            : h('span.faint.nowrap', t.pollStatus ? ago(t.pollStatus.nextExpectedRequestAt) : '—'),
-          h('span.mono.faint', t.ipAddress || '—'),
-          h('button.btn.sm', { onclick: e => { e.stopPropagation(); assignDialog(t.controllerId); } }, 'deploy'),
-        ],
-      };
-    });
-    root.replaceChildren(chips, tableOf(
-      ['Controller', 'Name', 'Status', 'Assigned / installed', 'Last poll', 'Next', 'IP', ''], rows));
+    attrCache.clear();
+    const chosen = cols();
+    const rows = data.content.map(t => ({
+      sel: S.sel === t.controllerId,
+      onclick: () => openTarget(t.controllerId),
+      cells: chosen.map(id => {
+        if (id.startsWith('attr:')) {
+          const key = id.slice(5), c = h('span.mono.faint', '…');
+          attrsOf(t.controllerId).then(a => { c.textContent = (a && a[key]) || '—'; });
+          return c;
+        }
+        return T_COLS[id] ? T_COLS[id].cell(t) : '—';
+      }).concat([
+        h('button.btn.sm.ghost', { onclick: e => { e.stopPropagation(); assignDialog(t.controllerId); } }, 'deploy'),
+      ]),
+    }));
+    root.replaceChildren(chips,
+      tableOf(chosen.map(colLabel).concat(['']), rows, filterRow(fields, st, render)),
+      pager(st, data.total, render));
   },
 };
 
@@ -325,6 +415,40 @@ async function loadAssignedInstalled(id, cell) {
       : h('span', h('span.mono', name(a)), h('span.faint', ' → '), h('span.mono', name(i))));
     if (a && !same) cell.title = 'assigned but not yet installed';
   } catch (_) { cell.textContent = '—'; }
+}
+
+async function columnsDialog() {
+  const chosen = cols();
+  // Attribute keys are discovered from the fleet: a sample is enough, and it
+  // means a key nobody has sent yet simply is not offered.
+  const sample = await get('/targets?limit=12').catch(() => ({ content: [] }));
+  const keys = new Set();
+  await Promise.all(sample.content.map(async t => {
+    const a = await get(`/targets/${enc(t.controllerId)}/attributes`).catch(() => ({}));
+    Object.keys(a || {}).forEach(k => keys.add(k));
+  }));
+  chosen.filter(c => c.startsWith('attr:')).forEach(c => keys.add(c.slice(5)));
+
+  const mk = (id, label, extra) => h('label.flex', { style: 'gap:8px' },
+    h('input', { type: 'checkbox', value: id, checked: chosen.includes(id) }),
+    h('span', label), extra ? h('span.faint', extra) : null);
+
+  const fields = h('div.stack', Object.entries(T_COLS).map(([id, c]) => mk(id, c.label)));
+  const attrs = h('div.stack', keys.size
+    ? [...keys].sort().map(k => mk('attr:' + k, k, 'reported by the device'))
+    : [h('span.faint', 'no device has reported an attribute yet')]);
+
+  modal('Columns', [
+    h('div.panel', h('h3', 'Fields'), h('div.body', fields)),
+    h('div.panel', h('h3', 'Device attributes'), h('div.body', attrs)),
+    h('p.faint', { style: 'margin:0;font-size:12px' },
+      'Attribute columns cost one request per device, so add them when you need them. ' +
+      'The choice is remembered in this browser.'),
+  ], async () => {
+    const picked = [...$('#modal-body').querySelectorAll('input:checked')].map(i => i.value);
+    if (!picked.length) throw new Error('keep at least one column');
+    setCols(picked);
+  }, 'Apply');
 }
 
 async function registerTargetDialog() {
@@ -423,36 +547,89 @@ function overviewPane(t, attrs, autoc, id) {
 function actionsPane(id, actions) {
   if (!actions.length) return h('div.empty', 'no deployment has ever been sent here');
   const wrap = h('div.stack');
-  actions.forEach(a => {
-    const head = h('div.flex', { style: 'justify-content:space-between' },
-      h('div.flex', h('span.mono', '#' + a.id), pill(a.status, ACTION_PILL[a.status]),
-        a.active ? h('span.pill.info', 'active') : null, h('span.faint', a.type || '')),
-      h('span.faint.nowrap', when(a.lastModifiedAt || a.createdAt)));
+
+  const all = h('button.btn.sm', { onclick: async e => {
+    const b = e.currentTarget; b.classList.add('loading');
+    try {
+      const parts = [];
+      for (const a of actions) parts.push(await actionLogText(id, a));
+      download(`actions-${id}.log`, parts.join('\n' + '-'.repeat(72) + '\n\n'));
+    } catch (er) { fail(er); } finally { b.classList.remove('loading'); }
+  } }, 'download all logs');
+  const expand = h('button.btn.sm', { onclick: () => {
+    const shut = [...wrap.querySelectorAll('.acc:not(.open) .ahead')];
+    if (shut.length) shut.forEach(x => x.click());
+    else [...wrap.querySelectorAll('.acc.open .ahead')].forEach(x => x.click());
+  } }, 'expand / collapse all');
+  wrap.append(h('div.wrap', all, expand));
+
+  actions.forEach((a, idx) => {
+    const st = String(a.status || '').toLowerCase();
+    // Open the newest one and anything still moving; the rest stay shut. Thirty
+    // expanded logs is not a history, it is a wall, and it also meant thirty
+    // requests every time a target was opened.
+    const openByDefault = idx === 0 || a.active;
+
+    const chev = h('span.chev', '▸');
+    const summary = h('span.faint.sum', '');
+    const head = h('div.ahead',
+      chev, h('span.mono', '#' + a.id), pill(st, ACTION_PILL[st]),
+      a.active ? h('span.pill.live', 'active') : null,
+      h('span.faint', a.type || ''), summary,
+      h('span.faint.nowrap.when', when(a.lastModifiedAt || a.createdAt)));
+
     const cancelOne = async () => {
       try {
         await del(`/targets/${enc(id)}/actions/${a.id}`);
-        toast('Cancelled', '#' + a.id, 'ok');
-        openTarget(id);
+        toast('Cancelled', '#' + a.id, 'ok'); openTarget(id);
       } catch (e) { fail(e); }
     };
     const acts = h('div.wrap',
+      h('button.btn.sm', { onclick: async () => {
+          try { download(`action-${a.id}-${id}.log`, await actionLogText(id, a)); }
+          catch (e) { fail(e); } } }, 'download log'),
       a.active ? h('button.btn.sm.danger', { onclick: cancelOne }, 'cancel') : null,
-      String(a.status).toLowerCase() === 'wait_for_confirmation'
+      st === 'wait_for_confirmation'
         ? [h('button.btn.sm.primary', { onclick: () => confirmAction(id, a.id, 'confirmed') }, 'confirm'),
            h('button.btn.sm.danger', { onclick: () => confirmAction(id, a.id, 'denied') }, 'deny')]
         : null);
+
     const log = h('div.log', 'loading…');
-    wrap.append(h('div.panel', h('div.body.stack', head, acts, log)));
-    get(`/targets/${enc(id)}/actions/${a.id}/status?limit=30&sort=id:DESC`)
-      .then(s => {
-        const lines = (s.content || []).map(e => {
+    const guts = h('div.abody.stack', acts, log);
+    const panel = h('div.panel.acc', head, guts);
+    wrap.append(panel);
+
+    let loaded = false;
+    const load = async () => {
+      if (loaded) return; loaded = true;
+      try {
+        const r = await get(`/targets/${enc(id)}/actions/${a.id}/status?limit=30&sort=id:DESC`);
+        const lines = (r.content || []).map(e => {
           const m = (e.messages || []).filter(Boolean);
           return h('div', h('span.t', when(e.reportedAt) + '  '), e.type, m.length ? '  ' + m.join(' | ') : '');
         });
         log.replaceChildren(...lines);
         if (!lines.length) log.textContent = 'no feedback recorded';
-      })
-      .catch(e => { log.textContent = e.message; });
+      } catch (e) { log.textContent = e.message; }
+    };
+
+    // The collapsed header still says how it ended, so the history reads at a
+    // glance without opening anything.
+    get(`/targets/${enc(id)}/actions/${a.id}/status?limit=1&sort=id:DESC`)
+      .then(r => {
+        const e = (r.content || [])[0];
+        if (!e) return;
+        const m = (e.messages || []).filter(Boolean).join(' | ');
+        summary.textContent = (m || e.type || '').slice(0, 90);
+      }).catch(() => {});
+
+    const toggle = () => {
+      const open = panel.classList.toggle('open');
+      chev.textContent = open ? '▾' : '▸';
+      if (open) load();
+    };
+    head.addEventListener('click', toggle);
+    if (openByDefault) toggle();
   });
   return wrap;
 }
@@ -566,8 +743,11 @@ VIEWS.ds = {
   title: 'Distribution sets',
   bar: () => [h('button.btn.sm', { onclick: newDsDialog }, 'new set')],
   async render(root) {
-    const d = await distributionSets(true);
-    if (!d.content.length) return root.replaceChildren(h('div.empty',
+    const st = pg('ds');
+    const fields = [{}, { key: 'name', ph: 'filter' }, { key: 'version', ph: 'filter' },
+                    { key: 'type', ph: 'filter' }, {}, {}, {}];
+    const d = await get(pagedPath('/distributionsets', st, fiqlOf(fields.filter(f => f.key), st), 'id:DESC'));
+    if (!d.content.length && !Object.values(st.f).some(Boolean)) return root.replaceChildren(h('div.empty',
       h('b', 'No distribution sets'), 'A set is what you assign to devices.'));
     root.replaceChildren(tableOf(['Id', 'Name', 'Version', 'Type', 'Complete', 'Created', ''],
       d.content.map(x => ({
@@ -575,8 +755,9 @@ VIEWS.ds = {
         cells: [h('span.mono', x.id), x.name, h('span.mono', x.version), h('span.dim', x.type),
                 x.complete ? pill('yes', 'ok') : pill('no', 'err'),
                 h('span.faint.nowrap', when(x.createdAt)),
-                h('button.btn.sm', { onclick: e => { e.stopPropagation(); assignDialog(null, x.id); } }, 'deploy')],
-      }))));
+                h('button.btn.sm.ghost', { onclick: e => { e.stopPropagation(); assignDialog(null, x.id); } }, 'deploy')],
+      })), filterRow(fields, st, render)),
+      pager(st, d.total, render));
   },
 };
 
@@ -657,15 +838,19 @@ VIEWS.sm = {
   title: 'Software modules',
   bar: () => [h('button.btn.sm', { onclick: newSmDialog }, 'new module')],
   async render(root) {
-    const d = await get('/softwaremodules?limit=200&sort=id:DESC');
-    if (!d.content.length) return root.replaceChildren(h('div.empty',
+    const st = pg('sm');
+    const fields = [{}, { key: 'name', ph: 'filter' }, { key: 'version', ph: 'filter' },
+                    { key: 'type', ph: 'filter' }, { key: 'vendor', ph: 'filter' }, {}];
+    const d = await get(pagedPath('/softwaremodules', st, fiqlOf(fields.filter(f => f.key), st), 'id:DESC'));
+    if (!d.content.length && !Object.values(st.f).some(Boolean)) return root.replaceChildren(h('div.empty',
       h('b', 'No modules'), 'A module holds the .swu, and for a delta its .zck as well.'));
     root.replaceChildren(tableOf(['Id', 'Name', 'Version', 'Type', 'Vendor', 'Created'],
       d.content.map(m => ({
         onclick: () => openSm(m),
         cells: [h('span.mono', m.id), m.name, h('span.mono', m.version), h('span.dim', m.type),
                 h('span.faint', m.vendor || '—'), h('span.faint.nowrap', when(m.createdAt))],
-      }))));
+      })), filterRow(fields, st, render)),
+      pager(st, d.total, render));
   },
 };
 
@@ -676,7 +861,9 @@ async function openSm(m) {
     const arts = await get(`/softwaremodules/${m.id}/artifacts`).catch(() => []);
     const list = Array.isArray(arts) ? arts : (arts.content || []);
     const file = h('input', { type: 'file' });
-    const prog = h('div.bars', { style: 'display:none' }, h('i.run', { style: 'width:0%' }));
+    const bar = h('i.run', { style: 'width:0%' });
+    const pct = h('b', '0%');
+    const prog = h('div.upl', { style: 'display:none' }, h('div.bars', bar), pct);
     body.replaceChildren(h('div.stack',
       h('div.panel', h('h3', 'Module'), h('div.body', h('dl.kv',
         [['id', m.id], ['name', m.name], ['version', m.version], ['type', m.type],
@@ -696,9 +883,12 @@ async function openSm(m) {
       h('div.panel', h('h3', 'Add artifacts'), h('div.body.stack', file, prog,
         h('button.btn.primary', { onclick: async () => {
             if (!file.files[0]) return toast('Pick a file first', '', 'info');
-            prog.style.display = ''; const bar = prog.firstChild;
+            prog.style.display = '';
             try {
-              await upload(m.id, file.files[0], f => { bar.style.width = (f * 100).toFixed(1) + '%'; });
+              await upload(m.id, file.files[0], f => {
+                bar.style.width = (f * 100).toFixed(1) + '%';
+                pct.textContent = (f * 100).toFixed(0) + '%';
+              });
               toast('Uploaded', file.files[0].name, 'ok'); draw();
             } catch (e) { fail(e); prog.style.display = 'none'; }
           } }, 'upload'),
@@ -744,8 +934,12 @@ VIEWS.ro = {
   title: 'Rollouts',
   bar: () => [h('button.btn.sm', { onclick: newRolloutDialog }, 'new rollout')],
   async render(root) {
-    const d = await get('/rollouts?limit=100&representation=full&sort=id:DESC').catch(() => ({ content: [] }));
-    if (!d.content.length) return root.replaceChildren(h('div.empty',
+    const st = pg('ro');
+    const fields = [{}, { key: 'name', ph: 'filter' }, {}, {}, {}, {}, {}];
+    const q = fiqlOf(fields.filter(f => f.key), st);
+    const d = await get(pagedPath('/rollouts', st, q, 'id:DESC') + '&representation=full')
+      .catch(() => ({ content: [], total: 0 }));
+    if (!d.content.length && !Object.values(st.f).some(Boolean)) return root.replaceChildren(h('div.empty',
       h('b', 'No rollouts'),
       'A rollout deploys group by group and pauses itself when too many fail. ' +
       'Use one for a fleet; a direct assignment has no brake.'));
@@ -764,6 +958,7 @@ VIEWS.ro = {
               h('span.faint.nowrap', `${c.finished || 0}/${t}`)),
             h('span.faint.nowrap', when(r.createdAt)),
             h('div.wrap',
+              st === 'waiting_for_approval' ? actBtn('approve', () => post(`/rollouts/${r.id}/approve`)) : null,
               st === 'ready' ? actBtn('start', () => post(`/rollouts/${r.id}/start`)) : null,
               st === 'running' ? actBtn('pause', () => post(`/rollouts/${r.id}/pause`)) : null,
               st === 'paused' ? actBtn('resume', () => post(`/rollouts/${r.id}/resume`)) : null,
@@ -773,7 +968,8 @@ VIEWS.ro = {
               })),
           ],
         };
-      })));
+      }), filterRow(fields, st, render)),
+      pager(st, d.total, render));
   },
 };
 const actBtn = (label, fn) => h('button.btn.sm', {
@@ -789,7 +985,19 @@ async function openRollout(r) {
   drawer(r.name, body);
   const g = await get(`/rollouts/${r.id}/deploygroups?limit=50&representation=full`).catch(() => ({ content: [] }));
   const c = r.totalTargetsPerStatus || {};
+  const st = String(r.status || '').toLowerCase();
+
+  // One group at a time is the point of a rollout: this is the button for
+  // pushing the next one out without waiting for the success threshold.
+  const controls = h('div.wrap',
+    st === 'waiting_for_approval' ? actBtn('approve', () => post(`/rollouts/${r.id}/approve`)) : null,
+    st === 'ready' ? actBtn('start', () => post(`/rollouts/${r.id}/start`)) : null,
+    st === 'running' ? actBtn('pause', () => post(`/rollouts/${r.id}/pause`)) : null,
+    st === 'paused' ? actBtn('resume', () => post(`/rollouts/${r.id}/resume`)) : null,
+    st === 'running' || st === 'paused'
+      ? actBtn('trigger next group', () => post(`/rollouts/${r.id}/triggerNextGroup`)) : null);
   body.replaceChildren(h('div.stack',
+    controls,
     h('div.panel', h('h3', 'Rollout'), h('div.body', h('dl.kv',
       [['id', r.id], ['status', r.status], ['description', r.description || '—'],
        ['targets', r.totalTargets], ['groups', r.totalGroups],
@@ -802,15 +1010,43 @@ async function openRollout(r) {
         `${k} · ${v}`)))),
     h('div.panel', h('h3', 'Groups'), h('div.body',
       g.content.length
-        ? tableOf(['#', 'Name', 'Status', 'Targets', 'Finished', 'Error'], g.content.map(x => ({
-            cells: [h('span.mono', x.id), x.name,
-              pill(x.status, String(x.status).toLowerCase() === 'finished' ? 'ok'
-                : String(x.status).toLowerCase() === 'error' ? 'err' : 'info'),
-              h('span.mono', x.totalTargets ?? '—'),
-              h('span.mono', (x.totalTargetsPerStatus || {}).finished ?? 0),
-              h('span.mono', (x.totalTargetsPerStatus || {}).error ?? 0)],
-          })))
+        ? tableOf(['#', 'Name', 'Status', 'Progress', 'Targets', 'Finished', 'Error'],
+            g.content.map(x => {
+              const gs = String(x.status || '').toLowerCase();
+              const gc = x.totalTargetsPerStatus || {};
+              const tot = x.totalTargets || 0;
+              const seg = (n, cls) => n ? h('i.' + cls, { style: `width:${(n / tot * 100).toFixed(1)}%` }) : null;
+              return {
+                onclick: () => openRolloutGroup(r, x),
+                cells: [h('span.mono', x.id), x.name,
+                  pill(gs, gs === 'finished' ? 'ok' : gs === 'error' ? 'err'
+                    : gs === 'running' ? 'live' : 'mute'),
+                  h('div.bars', seg(gc.finished, 'ok'), seg(gc.running, 'run'),
+                    seg(gc.error, 'err'), seg((gc.scheduled || 0) + (gc.notstarted || 0), 'wait')),
+                  h('span.mono', tot || '—'),
+                  h('span.mono', gc.finished ?? 0), h('span.mono', gc.error ?? 0)],
+              };
+            }))
         : h('span.faint', 'no groups')))));
+}
+
+async function openRolloutGroup(r, g) {
+  const body = h('div', skeleton(5));
+  drawer(`${r.name} · ${g.name}`, body);
+  try {
+    const t = await get(`/rollouts/${r.id}/deploygroups/${g.id}/targets?limit=200`);
+    body.replaceChildren(h('div.stack',
+      h('button.btn', { onclick: () => openRollout(r) }, '← back to the rollout'),
+      h('div.panel', h('h3', `Targets in this group (${t.total})`), h('div.body',
+        t.content.length
+          ? tableOf(['Controller', 'Status', 'Last poll'], t.content.map(x => ({
+              onclick: () => openTarget(x.controllerId),
+              cells: [h('span.mono', x.controllerId),
+                pill(x.updateStatus, TARGET_PILL[x.updateStatus]),
+                h('span.faint.nowrap', ago(x.lastControllerRequestAt))],
+            })))
+          : h('span.faint', 'none')))));
+  } catch (e) { body.replaceChildren(h('div.empty', e.message)); }
 }
 
 async function newRolloutDialog() {
@@ -1099,7 +1335,15 @@ async function render() {
   $('#bar-extra').replaceChildren(...(v.bar ? v.bar() : []));
   const mine = ++renderToken;
   const root = $('#view');
-  if (!root.childNodes.length) root.replaceChildren(h('div.empty', h('span.spin')));
+  const first = !root.childNodes.length;
+  if (first) root.replaceChildren(skeleton());
+  // A page that answers at once should show nothing at all; one that does not
+  // has to say so, or it reads as broken.
+  const slow = setTimeout(() => {
+    if (mine !== renderToken) return;
+    $('#progress').classList.add('on');
+    if (!first) root.classList.add('stale');
+  }, 150);
   try {
     const tmp = h('div');
     await v.render(tmp);
@@ -1108,7 +1352,77 @@ async function render() {
   } catch (e) {
     if (mine !== renderToken) return;
     root.replaceChildren(h('div.empty', h('b', 'Could not load'), e.message));
+  } finally {
+    clearTimeout(slow);
+    if (mine === renderToken) {
+      $('#progress').classList.remove('on');
+      root.classList.remove('stale');
+    }
   }
+}
+
+const skeleton = (n = 7) => h('div.skel', Array.from({ length: n }, () => h('i')));
+
+/* PAGING AND PER-COLUMN FILTERS.
+ *
+ * Written for a fleet that does not fit on a screen: nothing here ever asks for
+ * "all of them". Every list is a server-side page, every filter becomes part of
+ * the FIQL query hawkBit resolves in the database, and the per-row lookups that
+ * cost one request each (assigned/installed, attributes) only ever run for the
+ * rows on the page in front of you.
+ *
+ * At a thousand devices the difference is not cosmetic: fetching the lot and
+ * filtering in the browser is a request per row plus a table the browser
+ * struggles to lay out. */
+const PG = {};
+function pg(view) {
+  if (!PG[view]) PG[view] = { page: 0, size: 50, f: {} };
+  return PG[view];
+}
+const esc = v => String(v).replace(/([\\;,()])/g, '\\$1');
+
+// A blank box means "no condition", so an empty filter row costs nothing.
+function fiqlOf(fields, state) {
+  return fields.map(f => {
+    const v = (state.f[f.key] || '').trim();
+    if (!v) return null;
+    if (f.exact) return `${f.key}==${esc(v)}`;
+    return /[*]/.test(v) ? `${f.key}==${esc(v)}` : `${f.key}==*${esc(v)}*`;
+  }).filter(Boolean).join(';');
+}
+
+function filterRow(fields, state, onChange) {
+  return h('tr.filters', fields.map(f => h('th',
+    f.key ? h('input', {
+      type: 'text', value: state.f[f.key] || '', placeholder: f.ph || '',
+      oninput: e => { state.f[f.key] = e.target.value; state.page = 0; onChange(); },
+    }) : null)));
+}
+
+function pager(state, total, onChange) {
+  const from = total ? state.page * state.size + 1 : 0;
+  const to = Math.min(total, (state.page + 1) * state.size);
+  const last = Math.max(0, Math.ceil(total / state.size) - 1);
+  const jump = p => { state.page = Math.max(0, Math.min(last, p)); onChange(); };
+  return h('div.pager',
+    h('span.faint', total ? `${from}–${to} of ${total}` : 'nothing'),
+    h('div.grow'),
+    h('select', {
+      onchange: e => { state.size = Number(e.target.value); state.page = 0; onChange(); },
+    }, [25, 50, 100, 200].map(n => h('option', { value: n, selected: state.size === n }, n + ' / page'))),
+    h('button.btn.sm', { disabled: state.page === 0, onclick: () => jump(0) }, '«'),
+    h('button.btn.sm', { disabled: state.page === 0, onclick: () => jump(state.page - 1) }, '‹'),
+    h('span.faint.nowrap', `${state.page + 1} / ${last + 1}`),
+    h('button.btn.sm', { disabled: state.page >= last, onclick: () => jump(state.page + 1) }, '›'),
+    h('button.btn.sm', { disabled: state.page >= last, onclick: () => jump(last) }, '»'));
+}
+
+// One place that builds a paged, filtered, sorted request.
+function pagedPath(base, state, q, sort) {
+  let p = `${base}?limit=${state.size}&offset=${state.page * state.size}`;
+  if (sort) p += '&sort=' + sort;
+  if (q) p += '&q=' + fiql(q);
+  return p;
 }
 
 let debounceT = null;

@@ -88,31 +88,102 @@ header.bar .grow { flex: 1; }
 #view { flex: 1; overflow: auto; padding: 16px; min-height: 0; }
 
 /* ---------------------------------------------------------------- controls */
-.btn {
-  border: 1px solid var(--line-2); background: var(--bg-3); color: var(--fg);
-  padding: 6px 11px; border-radius: 6px; cursor: pointer; white-space: nowrap;
-}
-.btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-2); }
-.btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #04211f; font-weight: 600; }
-.btn.primary:hover:not(:disabled) { background: var(--accent-2); color: #04211f; }
-.btn.danger:hover:not(:disabled) { border-color: var(--err); color: var(--err); }
-.btn.sm { padding: 3px 8px; font-size: 12px; }
+/* One height for everything on a toolbar, so nothing sits half a pixel off. */
+:root { --ctl: 30px; --r: 8px; }
 
-input[type=text], input[type=password], input[type=number], select, textarea {
-  background: var(--bg); border: 1px solid var(--line-2); border-radius: 6px;
-  padding: 6px 9px; min-width: 0;
+.btn {
+  height: var(--ctl);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 10px; border-radius: var(--r);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer; white-space: nowrap;
+  font-weight: 500;
+  transition: background .12s, color .12s, border-color .12s;
 }
-input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-label.f { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--fg-dim); }
+.btn:hover:not(:disabled) { background: var(--bg-3); color: var(--fg); }
+.btn:active:not(:disabled) { background: var(--line); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Outline only where a button has to look like an edge -- dialogs, mostly. */
+.btn.outline { border-color: var(--line); }
+.btn.outline:hover:not(:disabled) { border-color: var(--line-2); background: var(--bg-3); }
+
+/* Exactly one filled button per screen: the thing you came to do. */
+.btn.primary {
+  background: var(--accent); border-color: var(--accent);
+  color: #04211f; font-weight: 600;
+}
+.btn.primary:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); color: #04211f; }
+.btn.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--err) 16%, transparent); color: var(--err); }
+.btn.ghost { color: var(--fg-faint); }
+.btn.ghost:hover:not(:disabled) { background: var(--bg-3); color: var(--accent-2); }
+
+.btn.sm { height: 24px; padding: 0 9px; font-size: 12px; border-radius: 6px; }
+
+/* A button that is waiting for the server says so itself. */
+.btn.loading { pointer-events: none; color: transparent !important; position: relative; }
+.btn.loading::after {
+  content: ""; position: absolute; inset: 0; margin: auto;
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--fg) 25%, transparent);
+  border-top-color: var(--accent-2); animation: sp .6s linear infinite;
+}
+
+/* Segmented control: one object, not six loose boxes. */
+.seg {
+  display: inline-flex; padding: 3px; gap: 2px;
+  background: var(--bg-2); border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.seg button {
+  height: 24px; padding: 0 11px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--fg-faint); cursor: pointer;
+  font-size: 12px; white-space: nowrap;
+  transition: background .13s, color .13s;
+}
+.seg button:hover { color: var(--fg); background: var(--bg-3); }
+.seg button.on {
+  background: color-mix(in srgb, var(--accent) 20%, var(--bg-3));
+  color: var(--accent-2); font-weight: 600;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.seg button .n { opacity: .65; margin-left: 5px; font-family: var(--mono); font-size: 11px; }
+
+input[type=text], input[type=password], input[type=number], input[type=color], select, textarea {
+  height: var(--ctl);
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r);
+  padding: 0 10px; min-width: 0;
+  transition: border-color .13s, box-shadow .13s;
+}
+textarea { height: auto; padding: 8px 10px; }
+input[type=color] { padding: 2px; width: 46px; }
+input:hover, select:hover { border-color: var(--line-2); }
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+input[type=checkbox] { height: auto; accent-color: var(--accent); width: 15px; height: 15px; }
+label.f { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--fg-dim); }
 label.f input, label.f select, label.f textarea { color: var(--fg); }
 
-.search { flex: 0 1 340px; display: flex; align-items: center; gap: 6px;
-          background: var(--bg); border: 1px solid var(--line-2); border-radius: 6px; padding: 0 9px; }
-.search input { border: 0; background: transparent; padding: 6px 0; flex: 1; }
-.search input:focus { outline: none; }
-.search kbd { font: 10px/1 var(--mono); color: var(--fg-faint);
-              border: 1px solid var(--line-2); border-radius: 4px; padding: 2px 4px; }
+.search {
+  height: var(--ctl); flex: 0 1 360px; display: flex; align-items: center; gap: 8px;
+  background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); padding: 0 10px;
+  transition: border-color .13s, box-shadow .13s;
+}
+.search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.search input { height: auto; border: 0; background: transparent; padding: 0; flex: 1; }
+.search input:focus { box-shadow: none; }
+.search kbd {
+  font: 10px/1 var(--mono); color: var(--fg-faint);
+  background: var(--bg-3); border-radius: 4px; padding: 3px 5px;
+}
+
+/* A thin rule between groups of toolbar buttons. */
+.vsep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
 
 /* ---------------------------------------------------------------- tables */
 table.t { width: 100%; border-collapse: collapse; }
@@ -146,6 +217,21 @@ table.t tbody tr.sel { background: var(--bg-3); }
 .pill.err  { color: var(--err);  background: color-mix(in srgb, var(--err) 14%, transparent); }
 .pill.info { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
 .pill.mute { color: var(--fg-faint); background: var(--bg-3); }
+
+/* IN FLIGHT. A deployment on its way is the one thing you sit and watch, so it
+   spins instead of sitting there as a coloured box that might as well be
+   stuck. Same for a device that has missed its poll: it breathes. */
+.pill.live { color: var(--info); background: color-mix(in srgb, var(--info) 14%, transparent); }
+.pill.live::before {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: none; border: 1.6px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor; animation: sp .7s linear infinite;
+}
+.pill.pulse::before { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent); }
+  50%      { opacity: .55; box-shadow: 0 0 0 4px transparent; }
+}
 
 /* ---------------------------------------------------------------- cards */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
@@ -198,7 +284,14 @@ dl.kv dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: bre
 /* ---------------------------------------------------------------- misc */
 .bars { display: flex; height: 7px; border-radius: 4px; overflow: hidden; background: var(--bg-3); min-width: 90px; }
 .bars i { display: block; height: 100%; }
-.bars i.ok { background: var(--ok); } .bars i.run { background: var(--info); }
+.bars i.ok { background: var(--ok); }
+.bars i.run {
+  background: repeating-linear-gradient(115deg,
+    var(--info) 0 8px, color-mix(in srgb, var(--info) 62%, transparent) 8px 16px);
+  background-size: 22px 100%;
+  animation: flow .8s linear infinite;
+}
+@keyframes flow { to { background-position: 22px 0; } }
 .bars i.err { background: var(--err); } .bars i.wait { background: var(--line-2); }
 
 .log { font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap;
@@ -241,3 +334,89 @@ dialog .da { padding: 12px 16px; border-top: 1px solid var(--line);
 .flex { display: flex; align-items: center; gap: 8px; }
 .wrap { display: flex; flex-wrap: wrap; gap: 8px; }
 .stack { display: flex; flex-direction: column; gap: 12px; }
+
+/* --------------------------------------------------------- loading states */
+/* A skeleton beats a spinner in the middle of an empty page: the shape of what
+   is coming is already there, so the table does not jump when it lands. */
+.skel { display: flex; flex-direction: column; gap: 1px; }
+.skel i {
+  display: block; height: 34px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--bg-2) 25%, var(--bg-3) 37%, var(--bg-2) 63%);
+  background-size: 400% 100%; animation: shimmer 1.3s ease-in-out infinite;
+}
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+
+/* The upload bar carries its own percentage, so a 594 MB .swu does not look
+   like a frozen page. */
+.upl { display: flex; align-items: center; gap: 10px; }
+.upl .bars { flex: 1; height: 9px; }
+.upl b { font-family: var(--mono); font-size: 12px; min-width: 46px; text-align: right; }
+
+/* Row-level activity: a target with an action in flight gets a moving edge. */
+tr.busy td:first-child { position: relative; }
+tr.busy td:first-child::before {
+  content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px;
+  border-radius: 2px; background: var(--info); animation: pulse 1.6s ease-in-out infinite;
+}
+
+/* Toasts arrive from the side rather than appearing. */
+.toast { animation: slidein .18s ease-out; }
+@keyframes slidein { from { opacity: 0; transform: translateX(14px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; animation-iteration-count: 1 !important;
+      transition-duration: .001ms !important; }
+}
+
+/* ------------------------------------------------------------- accordion */
+/* Thirty expanded logs is a wall, not a history: shut by default, and the
+   header alone says how each one ended. */
+.panel.acc { transition: box-shadow .13s; }
+.panel.acc:hover { box-shadow: 0 0 0 1px var(--line-2); }
+.ahead {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px 12px; cursor: pointer; user-select: none;
+}
+.ahead:hover { background: var(--bg-3); }
+.ahead .chev { color: var(--fg-faint); width: 10px; transition: transform .13s; }
+.ahead .sum {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 12px;
+}
+.ahead .when { flex: 0 0 auto; }
+.abody { display: none; padding: 0 12px 12px; }
+.panel.acc.open .abody { display: flex; }
+.panel.acc.open .ahead { border-bottom: 1px solid var(--line); }
+.panel.acc.open .ahead .sum { display: none; }
+
+/* ------------------------------------------------------------- progress */
+/* Only when a page does not open at once: under ~150 ms a flashing bar is
+   noise, over it the page looks broken without one. */
+#progress { height: 2px; background: transparent; overflow: hidden; }
+#progress.on::after {
+  content: ""; display: block; height: 100%; width: 40%;
+  background: linear-gradient(90deg, transparent, var(--accent-2), transparent);
+  animation: sweep 1s ease-in-out infinite;
+}
+@keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(350%); } }
+
+/* The old content stays put while the new one loads -- greyed, and not
+   clickable, so nothing is acted on twice. */
+#view.stale { opacity: .45; pointer-events: none; transition: opacity .1s; }
+
+/* ---------------------------------------------------------------- pager */
+.pager {
+  display: flex; align-items: center; gap: 8px; padding: 10px 2px 2px;
+  border-top: 1px solid var(--line); margin-top: 8px;
+}
+.pager .grow { flex: 1; }
+.pager select { height: 24px; padding: 0 6px; font-size: 12px; }
+
+/* Per-column filter row: part of the header, not a second toolbar. */
+tr.filters th { padding: 0 6px 8px; background: var(--bg); border-bottom: 1px solid var(--line); }
+tr.filters input {
+  width: 100%; height: 24px; font-size: 12px; padding: 0 7px;
+  background: var(--bg-2); border-color: transparent;
+}
+tr.filters input:hover { border-color: var(--line); }
+tr.filters input:focus { background: var(--bg); }
