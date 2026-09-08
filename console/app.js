@@ -263,6 +263,12 @@ const ACTION_PILL = {
 const TARGET_PILL = {
   in_sync: 'ok', pending: 'live amber', error: 'err', registered: 'mute', unknown: 'mute',
 };
+/* Types are a small closed set that you scan down a column, so they are read
+ * as colour first and text second: system and application are different kinds
+ * of update, and a combined set is a third thing rather than a bit of both. */
+const TYPE_PILL = { os: 'ty-os', app: 'ty-app', application: 'ty-app', os_app: 'ty-both' };
+const typePill = t => h('span.pill.' + (TYPE_PILL[t] || 'mute'), String(t || '—'));
+
 const pill = (t, k) => h('span.pill.' + (k || 'mute'), String(t || '—').toLowerCase().replace(/_/g, ' '));
 
 function tableOf(heads, rows, filters) {
@@ -380,7 +386,7 @@ const M_COLS = {
   id:      { label: 'Id', cell: m => h('span.mono', m.id) },
   name:    { label: 'Name', cell: m => m.name, f: 'name' },
   version: { label: 'Version', cell: m => h('span.mono', m.version), f: 'version' },
-  type:    { label: 'Type', cell: m => h('span.dim', m.type), f: 'type' },
+  type:    { label: 'Type', cell: m => typePill(m.type), f: 'type' },
   vendor:  { label: 'Vendor', cell: m => h('span.faint', m.vendor || '—'), f: 'vendor' },
   desc:    { label: 'Description', cell: m => h('span.faint', m.description || '—'), f: 'description' },
   enc:     { label: 'Encrypted', cell: m => m.encrypted ? h('span.pill.info', 'yes') : h('span.faint', '—') },
@@ -1025,7 +1031,7 @@ async function openDs(x) {
         sm.content.length
           ? tableOf(['Id', 'Name', 'Version', 'Type', ''], sm.content.map(m => ({
               onclick: () => openSm(m),
-              cells: [h('span.mono', m.id), m.name, h('span.mono', m.version), h('span.dim', m.type),
+              cells: [h('span.mono', m.id), m.name, h('span.mono', m.version), typePill(m.type),
                 h('button.btn.sm.danger', { onclick: async e => {
                     e.stopPropagation();
                     try { await del(`/distributionsets/${x.id}/assignedSM/${m.id}`); draw(); }

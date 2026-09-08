@@ -559,3 +559,14 @@ select {
 select:hover { background-image: linear-gradient(45deg, transparent 50%, var(--accent-2) 50%),
                                  linear-gradient(135deg, var(--accent-2) 50%, transparent 50%); }
 .side-foot select, .pager select { padding-right: 22px; background-position: calc(100% - 12px) center, calc(100% - 8px) center; }
+
+/* ------------------------------------------------------------- type badges */
+/* os and app are different kinds of update; os_app is a third thing, not a
+   blend, so it gets its own hue rather than a mix of the other two. */
+.pill.ty-os   { color: #7aa2f7; background: color-mix(in srgb, #7aa2f7 15%, transparent); }
+.pill.ty-app  { color: var(--accent-2); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.pill.ty-both { color: #bb9af7; background: color-mix(in srgb, #bb9af7 16%, transparent); }
+.pill.ty-os::before, .pill.ty-app::before, .pill.ty-both::before { display: none; }
+.pill.ty-os, .pill.ty-app, .pill.ty-both {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .2px; padding: 2px 8px;
+}
