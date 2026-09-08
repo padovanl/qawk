@@ -131,6 +131,20 @@ async function upload(smId, file, onProgress) {
   });
 }
 
+/* Dates are picked, never typed. hawkBit speaks epoch milliseconds, which is
+ * the right thing on the wire and the wrong thing to ask a person for. */
+function dtInput(ms) {
+  const v = ms ? new Date(ms - new Date().getTimezoneOffset() * 60000)
+                  .toISOString().slice(0, 16) : '';
+  return h('input', { type: 'datetime-local', value: v });
+}
+const dtMs = el => {
+  const v = (el.value || '').trim();
+  if (!v) return null;
+  const t = new Date(v).getTime();
+  return Number.isFinite(t) ? t : null;
+};
+
 function download(name, text) {
   // The page is served locally, so a blob link just works: no sandbox, no
   // server round trip, and the log lands where the browser puts downloads.
@@ -762,6 +776,25 @@ async function cancelLatest(id, force) {
 }
 
 /* ------- deploy ------------------------------------------------------ */
+/* WHICH MODELS ARE OUT THERE. hawkBit has no "distinct values of an attribute"
+ * call, so this is the union of two things: the target types someone defined on
+ * the server, and the device_type the devices actually report. They usually
+ * agree; when they do not, the one from the devices is the true one, because a
+ * target type is a label a device cannot set. */
+async function deviceTypes() {
+  const out = new Set();
+  const [types, sample] = await Promise.all([
+    get('/targettypes?limit=50').catch(() => ({ content: [] })),
+    get('/targets?limit=50').catch(() => ({ content: [] })),
+  ]);
+  types.content.forEach(t => out.add(t.name));
+  await Promise.all(sample.content.map(async t => {
+    const a = await limited(() => get(`/targets/${enc(t.controllerId)}/attributes`)).catch(() => ({}));
+    if (a && a.device_type) out.add(a.device_type);
+  }));
+  return [...out].sort();
+}
+
 async function assignDialog(targetId, presetDs) {
   let sets;
   try { sets = await distributionSets(true); } catch (e) { return fail(e); }
@@ -775,38 +808,92 @@ async function assignDialog(targetId, presetDs) {
     h('option', { value: 'soft' }, 'soft — the device may defer'),
     h('option', { value: 'timeforced' }, 'timeforced — soft, then forced'),
     h('option', { value: 'downloadonly' }, 'downloadonly — fetch, do not install'));
-  const at = h('input', { type: 'text', placeholder: 'forced from (epoch ms) — timeforced only' });
-  const confirmReq = h('input', { type: 'checkbox' });
-  const who = h('input', { type: 'text', value: targetId || '',
-    placeholder: 'controllerId, or a FIQL query for many' });
-  const count = h('span.faint', '');
-  who.addEventListener('change', async () => {
-    const q = who.value.trim();
-    if (!/[=!<>*]/.test(q)) return count.textContent = '';
-    try { count.textContent = `${(await get('/targets?limit=1&q=' + fiql(q))).total} target(s)`; }
-    catch (e) { count.textContent = 'invalid query'; }
+  const at = dtInput(null);
+  at.disabled = true;
+  const atHint = h('span.faint', 'only for timeforced: when a soft assignment turns forced');
+  type.addEventListener('change', () => {
+    at.disabled = type.value !== 'timeforced';
+    if (at.disabled) at.value = '';
   });
+  const confirmReq = h('input', { type: 'checkbox' });
+  // Picking who gets it is the part people do most, so it is a choice, not a
+  // query language: one device, a model, everything, or FIQL when none of those
+  // is enough.
+  const mode = h('select',
+    h('option', { value: 'one', selected: !!targetId }, 'this device'),
+    h('option', { value: 'type', selected: !targetId }, 'by device type'),
+    h('option', { value: 'all' }, 'every registered device'),
+    h('option', { value: 'fiql' }, 'by query (FIQL)'));
+  const one = h('input', { type: 'text', value: targetId || '', placeholder: 'controllerId' });
+  const typeSel = h('select', h('option', { value: '' }, 'loading…'));
+  const fq = h('input', { type: 'text', placeholder: 'attribute.slot==B' });
+  const count = h('span.faint', '');
+  const row = h('div');
+
+  deviceTypes().then(list => {
+    typeSel.replaceChildren(...(list.length
+      ? list.map(x => h('option', { value: x }, x))
+      : [h('option', { value: '' }, 'no device has reported one yet')]));
+    recount();
+  });
+
+  const queryOf = () => {
+    switch (mode.value) {
+      case 'one':  return one.value.trim() ? `controllerid==${one.value.trim()}` : '';
+      case 'type': return typeSel.value ? `attribute.device_type==${typeSel.value}` : '';
+      case 'all':  return '';
+      default:     return fq.value.trim();
+    }
+  };
+  async function recount() {
+    const q = queryOf();
+    if (mode.value === 'one') { count.textContent = one.value.trim() ? '1 device' : 'name a device'; return; }
+    try {
+      const r = await get('/targets?limit=1' + (q ? '&q=' + fiql(q) : ''));
+      count.textContent = `${r.total} device(s) match`;
+    } catch (e) { count.textContent = 'invalid query: ' + e.message; }
+  }
+  const paint = () => {
+    row.replaceChildren(mode.value === 'one' ? one : mode.value === 'type' ? typeSel
+      : mode.value === 'fiql' ? fq : h('span.faint', 'no filter: everything registered'));
+    recount();
+  };
+  mode.addEventListener('change', paint);
+  [one, typeSel, fq].forEach(el => { el.addEventListener('change', recount); el.addEventListener('input', recount); });
+  paint();
 
   modal(targetId ? 'Deploy to ' + targetId : 'Deploy', [
     h('label.f', 'Distribution set', sel), h('label.f', 'Mode', type),
-    h('label.f', 'Force time', at),
+    h('label.f', 'Force time', at), atHint,
     h('label.f', h('span.flex', confirmReq, 'require confirmation on the device'), h('span')),
-    h('label.f', 'Targets', who), count,
+    h('label.f', 'Send it to', mode), row, count,
     h('p.faint', { style: 'margin:0;font-size:12px' },
-      'A set whose type is not compatible with the target type is refused. forced is re-offered ' +
-      'at every poll until the action closes.'),
+      'A set is refused if it is incomplete, or if its type is not among those the target type ' +
+      'accepts. forced is re-offered at every poll until the action closes.'),
   ], async () => {
-    const q = who.value.trim();
-    if (!q) throw new Error('name at least one target');
-    let ids = [q];
-    if (/[=!<>*]/.test(q)) {
-      const r = await get('/targets?limit=500&q=' + fiql(q));
-      ids = r.content.map(t => t.controllerId);
-      if (!ids.length) throw new Error('that query matches no target');
+    let ids;
+    if (mode.value === 'one') {
+      if (!one.value.trim()) throw new Error('name a device');
+      ids = [one.value.trim()];
+    } else {
+      const q = queryOf();
+      if (mode.value === 'type' && !q) throw new Error('pick a device type');
+      if (mode.value === 'fiql' && !q) throw new Error('write a query, or pick another mode');
+      // Paged: a fleet does not fit in one response, and assigning to "all"
+      // has to mean all of them.
+      ids = [];
+      for (let off = 0; ; off += 200) {
+        const r = await get(`/targets?limit=200&offset=${off}` + (q ? '&q=' + fiql(q) : ''));
+        ids.push(...r.content.map(t => t.controllerId));
+        if (ids.length >= r.total || !r.content.length) break;
+      }
+      if (!ids.length) throw new Error('that matches no device');
+      if (ids.length > 1 && !confirm(`Deploy to ${ids.length} devices?`)) return false;
     }
     const body = ids.map(id => {
       const o = { id, type: type.value };
-      if (at.value.trim()) o.forcetime = Number(at.value.trim());
+      const ft = dtMs(at);
+      if (ft) o.forcetime = ft;
       if (confirmReq.checked) o.confirmationRequired = true;
       return o;
     });
@@ -1145,18 +1232,29 @@ async function newRolloutDialog() {
     h('option', { value: 'manual' }, 'manual — create it ready, press start'),
     h('option', { value: 'auto' }, 'auto — start immediately'),
     h('option', { value: 'scheduled' }, 'scheduled — start at a time'));
-  const startAt = h('input', { type: 'text', placeholder: 'epoch ms (scheduled only)' });
+  const startAt = dtInput(null);
+  startAt.disabled = true;
+  startType.addEventListener('change', () => {
+    startAt.disabled = startType.value !== 'scheduled';
+    if (startAt.disabled) startAt.value = '';
+  });
   const preview = h('span.faint', '—');
   const check = async () => {
     try { preview.textContent = `${(await get('/targets?limit=1&q=' + fiql(q.value.trim()))).total} target(s) match`; }
     catch (e) { preview.textContent = 'invalid query: ' + e.message; }
   };
-  q.addEventListener('change', check); check();
+  q.addEventListener('change', check); q.addEventListener('input', check); check();
+
+  // Shortcut for the query almost every fleet rollout uses.
+  const rollTypes = h('div.wrap');
+  deviceTypes().then(list => rollTypes.replaceChildren(...list.map(x =>
+    h('button.chip', { onclick: () => { q.value = `attribute.device_type==${x}`; check(); } },
+      h('span.plus', '+'), x))));
 
   modal('Create rollout', [
     h('label.f', 'Name', name), h('label.f', 'Description', desc),
     h('label.f', 'Distribution set', ds),
-    h('label.f', 'Target filter (FIQL)', q), preview,
+    h('label.f', 'Target filter (FIQL)', q), preview, rollTypes,
     h('label.f', 'Group count', groups),
     h('label.f', 'Action type', actType),
     h('label.f', 'Start type', startType), h('label.f', 'Scheduled at', startAt),
@@ -1178,8 +1276,9 @@ async function newRolloutDialog() {
       errorAction: { action: 'PAUSE', expression: '' },
     };
     if (desc.value.trim()) b.description = desc.value.trim();
-    if (startType.value === 'scheduled' && startAt.value.trim()) b.startAt = Number(startAt.value.trim());
-    else delete b.startAt;
+    const sa = startType.value === 'scheduled' ? dtMs(startAt) : null;
+    if (sa) b.startAt = sa; else delete b.startAt;
+    if (startType.value === 'scheduled' && !sa) throw new Error('pick a date and time, or choose another start type');
     const r = await post('/rollouts', b);
     if (startType.value === 'auto') await post(`/rollouts/${r.id}/start`).catch(() => {});
     toast('Created', startType.value === 'auto' ? 'started' : 'press start when ready', 'ok');
