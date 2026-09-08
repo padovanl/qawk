@@ -321,19 +321,52 @@ const T_COLS = {
 };
 const T_COLS_DEFAULT = ['controllerId', 'name', 'status', 'ds', 'lastPoll', 'nextPoll', 'ip'];
 
-function cols() {
+const D_COLS = {
+  id:      { label: 'Id', cell: x => h('span.mono', x.id) },
+  name:    { label: 'Name', cell: x => x.name, f: 'name' },
+  version: { label: 'Version', cell: x => h('span.mono', x.version), f: 'version' },
+  type:    { label: 'Type', cell: x => h('span.dim', x.type), f: 'type' },
+  complete:{ label: 'Complete', cell: x => x.complete ? h('span.faint', '—') : h('span.pill.err', 'incomplete') },
+  desc:    { label: 'Description', cell: x => h('span.faint', x.description || '—'), f: 'description' },
+  created: { label: 'Created', cell: x => h('span.faint.nowrap', { title: when(x.createdAt) }, ago(x.createdAt)) },
+};
+const M_COLS = {
+  id:      { label: 'Id', cell: m => h('span.mono', m.id) },
+  name:    { label: 'Name', cell: m => m.name, f: 'name' },
+  version: { label: 'Version', cell: m => h('span.mono', m.version), f: 'version' },
+  type:    { label: 'Type', cell: m => h('span.dim', m.type), f: 'type' },
+  vendor:  { label: 'Vendor', cell: m => h('span.faint', m.vendor || '—'), f: 'vendor' },
+  desc:    { label: 'Description', cell: m => h('span.faint', m.description || '—'), f: 'description' },
+  enc:     { label: 'Encrypted', cell: m => m.encrypted ? h('span.pill.info', 'yes') : h('span.faint', '—') },
+  created: { label: 'Created', cell: m => h('span.faint.nowrap', { title: when(m.createdAt) }, ago(m.createdAt)) },
+};
+const COLSETS = {
+  targets: { defs: T_COLS, def: T_COLS_DEFAULT, attrs: true },
+  ds: { defs: D_COLS, def: ['id', 'name', 'version', 'type', 'complete', 'created'], attrs: false },
+  sm: { defs: M_COLS, def: ['id', 'name', 'version', 'type', 'vendor', 'created'], attrs: false },
+};
+
+// Filter fields follow the chosen columns, so a column you added is a column
+// you can search.
+function fieldsFor(view) {
+  return cols(view).map(id => {
+    const d = COLSETS[view].defs[id];
+    return d && d.f ? { key: d.f, ph: 'filter' } : {};
+  }).concat([{}]);
+}
+function cols(view = 'targets') {
   try {
-    const v = JSON.parse(localStorage.getItem('hb-cols') || 'null');
+    const v = JSON.parse(localStorage.getItem('hb-cols-' + view) || 'null');
     if (Array.isArray(v) && v.length) return v;
   } catch (_) {}
-  return T_COLS_DEFAULT.slice();
+  return COLSETS[view].def.slice();
 }
-function setCols(v) {
-  try { localStorage.setItem('hb-cols', JSON.stringify(v)); } catch (_) {}
+function setCols(v, view = 'targets') {
+  try { localStorage.setItem('hb-cols-' + view, JSON.stringify(v)); } catch (_) {}
   render();
 }
-const colLabel = id => id.startsWith('attr:')
-  ? id.slice(5) : (T_COLS[id] ? T_COLS[id].label : id);
+const colLabel = (id, view = 'targets') => id.startsWith('attr:')
+  ? id.slice(5) : ((COLSETS[view].defs[id] || {}).label || id);
 
 // Attributes are one request per target, so they are fetched once per render
 // and shared by every attribute column.
@@ -461,18 +494,21 @@ async function loadAssignedInstalled(id, cell) {
   } catch (_) { cell.textContent = '—'; }
 }
 
-async function columnsDialog() {
+async function columnsDialog(view = 'targets') {
   // Checkboxes could say which columns, never in what order -- and the order is
   // half the point: whoever is looking wants their own two or three first.
-  let chosen = cols().slice();
+  const CS = COLSETS[view];
+  let chosen = cols(view).slice();
 
-  const sample = await get('/targets?limit=12').catch(() => ({ content: [] }));
   const keys = new Set();
-  await Promise.all(sample.content.map(async t => {
-    const a = await get(`/targets/${enc(t.controllerId)}/attributes`).catch(() => ({}));
-    Object.keys(a || {}).forEach(k => keys.add(k));
-  }));
-  chosen.filter(c => c.startsWith('attr:')).forEach(c => keys.add(c.slice(5)));
+  if (CS.attrs) {
+    const sample = await get('/targets?limit=12').catch(() => ({ content: [] }));
+    await Promise.all(sample.content.map(async t => {
+      const a = await get(`/targets/${enc(t.controllerId)}/attributes`).catch(() => ({}));
+      Object.keys(a || {}).forEach(k => keys.add(k));
+    }));
+    chosen.filter(c => c.startsWith('attr:')).forEach(c => keys.add(c.slice(5)));
+  }
 
   const shown = h('div.colpick-list');
   const pool = h('div.wrap');
@@ -489,7 +525,7 @@ async function columnsDialog() {
     shown.replaceChildren(...chosen.map((id, i) => {
       const row = h('div.colrow', { draggable: 'true' },
         h('span.grip', '⠿'),
-        h('span.cl', colLabel(id)),
+        h('span.cl', colLabel(id, view)),
         id.startsWith('attr:') ? h('span.tag', 'attribute') : null,
         h('div.flex',
           h('button.btn.sm.ghost', { disabled: i === 0, onclick: () => move(i, -1), title: 'up' }, '↑'),
@@ -512,8 +548,8 @@ async function columnsDialog() {
     }));
     if (!chosen.length) shown.append(h('div.faint', { style: 'padding:10px' }, 'no columns — add at least one'));
 
-    const avail = Object.keys(T_COLS).filter(id => !chosen.includes(id))
-      .map(id => ['f', id, T_COLS[id].label])
+    const avail = Object.keys(CS.defs).filter(id => !chosen.includes(id))
+      .map(id => ['f', id, CS.defs[id].label])
       .concat([...keys].sort().filter(k => !chosen.includes('attr:' + k))
         .map(k => ['a', 'attr:' + k, k]));
     pool.replaceChildren(...(avail.length
@@ -528,18 +564,18 @@ async function columnsDialog() {
     h('div.colpick',
       h('div.colpick-h', 'Shown, in order', h('div.grow'),
         h('button.btn.sm.ghost', {
-          onclick: () => { chosen = T_COLS_DEFAULT.slice(); draw(); },
+          onclick: () => { chosen = CS.def.slice(); draw(); },
         }, 'reset')),
       shown,
       h('div.colpick-h', 'Add a column'),
       pool,
-      h('p.faint', { style: 'margin:6px 0 0;font-size:12px' },
+      CS.attrs ? h('p.faint', { style: 'margin:6px 0 0;font-size:12px' },
         'Attributes are what the devices report about themselves, so the list grows on its own: ' +
         'a new one appears here as soon as the first device sends it. Those columns cost one ' +
-        'request per row, so add them when you need them.')),
+        'request per row, so add them when you need them.') : null),
   ], async () => {
     if (!chosen.length) throw new Error('keep at least one column');
-    setCols(chosen);
+    setCols(chosen, view);
   }, 'Apply');
 }
 
@@ -906,22 +942,25 @@ async function assignDialog(targetId, presetDs) {
 /* ------- distribution sets ------------------------------------------ */
 VIEWS.ds = {
   title: 'Distribution sets',
-  bar: () => [h('button.btn.sm', { onclick: newDsDialog }, 'new set')],
+  bar: () => [
+    h('button.btn.sm', { onclick: () => columnsDialog('ds') }, 'columns'),
+    h('button.btn.sm', { onclick: newDsDialog }, 'new set'),
+  ],
   async render(root) {
     const st = pg('ds');
-    const fields = [{}, { key: 'name', ph: 'filter' }, { key: 'version', ph: 'filter' },
-                    { key: 'type', ph: 'filter' }, {}, {}, {}];
+    const fields = fieldsFor('ds');
+    const chosen = cols('ds');
     const d = await get(pagedPath('/distributionsets', st, fiqlOf(fields.filter(f => f.key), st), 'id:DESC'));
     if (!d.content.length && !Object.values(st.f).some(Boolean)) return root.replaceChildren(h('div.empty',
       h('b', 'No distribution sets'), 'A set is what you assign to devices.'));
-    root.replaceChildren(tableOf(['Id', 'Name', 'Version', 'Type', 'Complete', 'Created', ''],
-      d.content.map(x => ({
-        onclick: () => openDs(x),
-        cells: [h('span.mono', x.id), x.name, h('span.mono', x.version), h('span.dim', x.type),
-                x.complete ? pill('yes', 'ok') : pill('no', 'err'),
-                h('span.faint.nowrap', when(x.createdAt)),
-                h('button.btn.sm.ghost', { onclick: e => { e.stopPropagation(); assignDialog(null, x.id); } }, 'deploy')],
-      })), filterRow(fields, st, render)),
+    root.replaceChildren(
+      tableOf(chosen.map(c => colLabel(c, 'ds')).concat(['']),
+        d.content.map(x => ({
+          onclick: () => openDs(x),
+          cells: chosen.map(c => D_COLS[c].cell(x)).concat([
+            h('button.btn.sm.ghost', { onclick: e => { e.stopPropagation(); assignDialog(null, x.id); } }, 'deploy'),
+          ]),
+        })), filterRow(fields, st, render)),
       pager(st, d.total, render));
   },
 };
@@ -1001,20 +1040,23 @@ async function newDsDialog() {
 /* ------- software modules ------------------------------------------- */
 VIEWS.sm = {
   title: 'Software modules',
-  bar: () => [h('button.btn.sm', { onclick: newSmDialog }, 'new module')],
+  bar: () => [
+    h('button.btn.sm', { onclick: () => columnsDialog('sm') }, 'columns'),
+    h('button.btn.sm', { onclick: newSmDialog }, 'new module'),
+  ],
   async render(root) {
     const st = pg('sm');
-    const fields = [{}, { key: 'name', ph: 'filter' }, { key: 'version', ph: 'filter' },
-                    { key: 'type', ph: 'filter' }, { key: 'vendor', ph: 'filter' }, {}];
+    const fields = fieldsFor('sm');
+    const chosen = cols('sm');
     const d = await get(pagedPath('/softwaremodules', st, fiqlOf(fields.filter(f => f.key), st), 'id:DESC'));
     if (!d.content.length && !Object.values(st.f).some(Boolean)) return root.replaceChildren(h('div.empty',
       h('b', 'No modules'), 'A module holds the .swu, and for a delta its .zck as well.'));
-    root.replaceChildren(tableOf(['Id', 'Name', 'Version', 'Type', 'Vendor', 'Created'],
-      d.content.map(m => ({
-        onclick: () => openSm(m),
-        cells: [h('span.mono', m.id), m.name, h('span.mono', m.version), h('span.dim', m.type),
-                h('span.faint', m.vendor || '—'), h('span.faint.nowrap', when(m.createdAt))],
-      })), filterRow(fields, st, render)),
+    root.replaceChildren(
+      tableOf(chosen.map(c => colLabel(c, 'sm')).concat(['']),
+        d.content.map(m => ({
+          onclick: () => openSm(m),
+          cells: chosen.map(c => M_COLS[c].cell(m)).concat([h('span')]),
+        })), filterRow(fields, st, render)),
       pager(st, d.total, render));
   },
 };
@@ -1121,7 +1163,7 @@ VIEWS.ro = {
             h('div.flex', h('div.bars', seg(c.finished, 'ok'), seg(c.running, 'run'),
               seg(c.error, 'err'), seg((c.scheduled || 0) + (c.notstarted || 0), 'wait')),
               h('span.faint.nowrap', `${c.finished || 0}/${t}`)),
-            h('span.faint.nowrap', when(r.createdAt)),
+            h('span.faint.nowrap', { title: when(r.createdAt) }, ago(r.createdAt)),
             h('div.wrap',
               st === 'waiting_for_approval' ? actBtn('approve', () => post(`/rollouts/${r.id}/approve`)) : null,
               st === 'ready' ? actBtn('start', () => post(`/rollouts/${r.id}/start`)) : null,
