@@ -413,10 +413,48 @@ tr.busy td:first-child::before {
 .pager select { height: 24px; padding: 0 6px; font-size: 12px; }
 
 /* Per-column filter row: part of the header, not a second toolbar. */
-tr.filters th { padding: 0 6px 8px; background: var(--bg); border-bottom: 1px solid var(--line); }
-tr.filters input {
-  width: 100%; height: 24px; font-size: 12px; padding: 0 7px;
-  background: var(--bg-2); border-color: transparent;
+/* The filter row is part of the header, not a strip of boxes parked on top of
+   it: no field until you touch one, just a line that lights up. */
+tr.filters th {
+  position: sticky; top: 30px; z-index: 1;
+  padding: 0 10px 7px; background: var(--bg); border-bottom: 1px solid var(--line);
 }
-tr.filters input:hover { border-color: var(--line); }
-tr.filters input:focus { background: var(--bg); }
+tr.filters input {
+  width: 100%; height: 22px; font-size: 12px; padding: 0 2px;
+  background: transparent; border: 0; border-bottom: 1px solid transparent;
+  border-radius: 0; color: var(--fg-dim);
+  transition: border-color .12s, color .12s;
+}
+tr.filters input::placeholder { color: color-mix(in srgb, var(--fg-faint) 55%, transparent); }
+tr.filters input:hover { border-bottom-color: var(--line-2); }
+tr.filters input:focus {
+  outline: none; box-shadow: none; color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+/* A filter with something in it stays visible, so you never wonder why a table
+   is short. */
+tr.filters input:not(:placeholder-shown) {
+  color: var(--accent-2); border-bottom-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+/* The sidebar says when the clock is held, so a table that is not moving is
+   never mistaken for one that is broken. */
+#paused { color: var(--warn); font-size: 11px; }
+.side-foot select { height: 22px; padding: 0 4px; font-size: 11px; }
+
+/* ------------------------------------------------- assigned / installed */
+.ai { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.ai-row { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+.ai-k {
+  flex: 0 0 30px; font-size: 10px; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.ai-k.wait { color: var(--warn); }
+.ai-v {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 12px;
+}
+.ai-row:nth-child(2) .ai-v { color: var(--fg-dim); }
+
+/* Amber for a device that is mid-update: visible without shouting. */
+.pill.amber { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); }

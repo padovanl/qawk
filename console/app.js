@@ -200,8 +200,11 @@ const ACTION_PILL = {
   warning: 'warn', scheduled: 'mute', canceling: 'live', pending: 'live',
   wait_for_confirmation: 'warn pulse',
 };
+// 'pending' means the server has given this device something it has not
+// finished yet: amber, because it is a state you want to notice, and spinning,
+// because it is supposed to end.
 const TARGET_PILL = {
-  in_sync: 'ok', pending: 'live', error: 'err', registered: 'mute', unknown: 'mute',
+  in_sync: 'ok', pending: 'live amber', error: 'err', registered: 'mute', unknown: 'mute',
 };
 const pill = (t, k) => h('span.pill.' + (k || 'mute'), String(t || '—').toLowerCase().replace(/_/g, ' '));
 
@@ -320,10 +323,30 @@ const colLabel = id => id.startsWith('attr:')
 
 // Attributes are one request per target, so they are fetched once per render
 // and shared by every attribute column.
+/* AT TWO HUNDRED ROWS the per-row lookups are hundreds of requests, and a
+ * browser will happily open all of them at once: the page stalls, and hawkBit
+ * sees a burst that looks like an attack. Six at a time keeps the table filling
+ * visibly from the top without ever queueing the whole page. */
+let inFlight = 0;
+const waiting = [];
+function limited(fn) {
+  return new Promise((res, rej) => {
+    const run = () => {
+      inFlight++;
+      fn().then(res, rej).finally(() => {
+        inFlight--;
+        const next = waiting.shift();
+        if (next) next();
+      });
+    };
+    if (inFlight < 6) run(); else waiting.push(run);
+  });
+}
+
 const attrCache = new Map();
 async function attrsOf(id) {
   if (!attrCache.has(id)) {
-    attrCache.set(id, get(`/targets/${enc(id)}/attributes`).catch(() => ({})));
+    attrCache.set(id, limited(() => get(`/targets/${enc(id)}/attributes`)).catch(() => ({})));
   }
   return attrCache.get(id);
 }
@@ -373,6 +396,7 @@ VIEWS.targets = {
     }
 
     attrCache.clear();
+    waiting.length = 0;      // rows from the previous page are no longer wanted
     const chosen = cols();
     const rows = data.content.map(t => ({
       sel: S.sel === t.controllerId,
@@ -404,16 +428,22 @@ function currentQuery() {
 
 async function loadAssignedInstalled(id, cell) {
   try {
-    const [a, i] = await Promise.all([
+    const [a, i] = await limited(() => Promise.all([
       get(`/targets/${enc(id)}/assignedDS`).catch(() => null),
       get(`/targets/${enc(id)}/installedDS`).catch(() => null),
-    ]);
+    ]));
     const name = d => d ? `${d.name} ${d.version}` : '—';
     const same = a && i && a.id === i.id;
+    // Two long names on one line wrap into porridge. One line each, labelled,
+    // clipped, with the whole thing in the tooltip -- and the second line only
+    // when the device is actually between two versions.
+    const line = (lab, d, cls) => h('div.ai-row',
+      h('span.ai-k' + (cls ? '.' + cls : ''), lab),
+      h('span.ai-v.mono', { title: name(d) }, name(d)));
     cell.replaceChildren(same
-      ? h('span.mono', name(i))
-      : h('span', h('span.mono', name(a)), h('span.faint', ' → '), h('span.mono', name(i))));
-    if (a && !same) cell.title = 'assigned but not yet installed';
+      ? h('div.ai', line('inst', i))
+      : h('div.ai', line('inst', i), line('asgn', a, 'wait')));
+    cell.title = same ? '' : 'assigned, not yet installed';
   } catch (_) { cell.textContent = '—'; }
 }
 
@@ -1262,7 +1292,17 @@ VIEWS.cfg = {
             } catch (e) { fail(e); } } }, 'save'));
     }).filter(Boolean);
 
+    const refresh = h('select', REFRESH_CHOICES.map(([v, l]) =>
+      h('option', { value: v, selected: v === refreshMs() }, l)));
+    refresh.onchange = e => { setRefreshMs(Number(e.target.value)); toast('Saved', 'refresh ' + e.target.selectedOptions[0].text, 'ok'); };
+
     root.replaceChildren(h('div.stack',
+      h('div.panel', h('h3', 'This console'), h('div.body.flex',
+        h('div', { style: 'flex:0 0 320px' }, h('div.mono', 'auto-refresh'),
+          h('div.faint', { style: 'font-size:11px' },
+            'how often the tables reload — suspended anyway while a dialog is open ' +
+            'or the pointer is over the table')),
+        refresh)),
       h('div.panel', h('h3', 'Tenant configuration'), h('div.body.stack', rows)),
       h('div.panel', h('h3', 'Careful'), h('div.body.faint',
         'This hawkBit keeps its database in memory: restarting the container wipes targets, ' +
@@ -1428,14 +1468,55 @@ function pagedPath(base, state, q, sort) {
 let debounceT = null;
 function debounceRender() { clearTimeout(debounceT); debounceT = setTimeout(render, 220); }
 
+/* AUTO-REFRESH.
+ *
+ * A table that rebuilds itself under the cursor is worse than a stale one: the
+ * row you were about to click moves, a half-typed filter is thrown away, and a
+ * hover menu closes on its own. So this is both configurable and, whatever the
+ * interval, suspended whenever someone is plainly in the middle of something:
+ * a dialog or the drawer open, the tab in the background, or the pointer or the
+ * keyboard focus inside the table itself.
+ *
+ * Off is a first-class choice, and it is remembered. */
+const REFRESH_CHOICES = [
+  [0, 'off'], [5000, '5s'], [10000, '10s'], [30000, '30s'], [60000, '1m'], [300000, '5m'],
+];
+function refreshMs() {
+  const v = Number(localStorage.getItem('hb-refresh'));
+  return Number.isFinite(v) && REFRESH_CHOICES.some(([n]) => n === v) ? v : 10000;
+}
+function setRefreshMs(v) {
+  try { localStorage.setItem('hb-refresh', String(v)); } catch (_) {}
+  tick();
+}
+
+let pointerInside = false;
+function busyInteracting() {
+  if (document.hidden) return true;
+  if ($('#modal').open || $('#drawer').classList.contains('open')) return true;
+  if (pointerInside) return true;
+  const a = document.activeElement;
+  return !!(a && a.matches('input, select, textarea') && $('#view').contains(a));
+}
+
 function tick() {
   clearInterval(S.timer);
-  // Auto-refresh is off while a dialog or the drawer is open: re-rendering
-  // under someone's cursor loses what they were typing.
-  if ($('#auto').checked) S.timer = setInterval(() => {
-    if (document.hidden || $('#modal').open || $('#drawer').classList.contains('open')) return;
+  const ms = refreshMs();
+  const sel = $('#auto');
+  if (sel && !sel.options.length) {
+    sel.replaceChildren(...REFRESH_CHOICES.map(([v, l]) =>
+      h('option', { value: v, selected: v === ms }, l)));
+    sel.onchange = e => setRefreshMs(Number(e.target.value));
+  } else if (sel) {
+    sel.value = String(ms);
+  }
+  $('#paused').classList.add('hidden');
+  if (!ms) return;
+  S.timer = setInterval(() => {
+    if (busyInteracting()) { $('#paused').classList.remove('hidden'); return; }
+    $('#paused').classList.add('hidden');
     render();
-  }, 5000);
+  }, ms);
 }
 
 /* ---------------------------------------------------------------- auth */
@@ -1469,7 +1550,8 @@ $('#login-form').addEventListener('submit', async e => {
 });
 
 $('#refresh').onclick = render;
-$('#auto').onchange = tick;
+$('#view').addEventListener('pointerenter', () => { pointerInside = true; });
+$('#view').addEventListener('pointerleave', () => { pointerInside = false; });
 $('#logout').onclick = signOut;
 $('#drawer-close').onclick = closeDrawer;
 $('#scrim').onclick = closeDrawer;

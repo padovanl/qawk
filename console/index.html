@@ -37,11 +37,13 @@
     <div class="side-foot">
       <div class="row"><span id="conn">—</span><span id="busy"></span></div>
       <div class="row">
-        <label class="flex" style="gap:5px;cursor:pointer">
-          <input type="checkbox" id="auto" checked> auto-refresh
+        <label class="flex" style="gap:6px" title="how often the tables reload">
+          <span>refresh</span>
+          <select id="auto"></select>
         </label>
         <button class="btn sm" id="logout">exit</button>
       </div>
+      <div class="row"><span id="paused" class="hidden">paused while you work</span></div>
     </div>
   </aside>
 
