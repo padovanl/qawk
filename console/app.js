@@ -374,7 +374,7 @@ const D_COLS = {
   id:      { label: 'Id', cell: x => h('span.mono', x.id) },
   name:    { label: 'Name', cell: x => x.name, f: 'name' },
   version: { label: 'Version', cell: x => h('span.mono', x.version), f: 'version' },
-  type:    { label: 'Type', cell: x => h('span.dim', x.type), f: 'type' },
+  type:    { label: 'Type', cell: x => typePill(x.type), f: 'type' },
   // Not shown by default: on a healthy server it is 'yes' on every row, and a
   // column that never varies is width spent on nothing. Add it when you are
   // hunting for the set that will not assign -- then it has to say both things.

@@ -110,6 +110,20 @@ class Handler(SimpleHTTPRequestHandler):
             }).encode()
             self.relay(502, {"Content-Type": "application/json"}, msg)
 
+    def end_headers(self):
+        # NO CACHING for the console's own files.
+        #
+        # The page is rebuilt and redeployed constantly while it is being worked
+        # on, and without this the browser keeps serving what it already has:
+        # the container is new, the file on disk is new, and the screen shows
+        # the old one. Every "that change did not take effect" costs a hard
+        # refresh to discover, and half of them get blamed on the code instead.
+        # These files are a few kilobytes served over a LAN; there is nothing to
+        # save by caching them.
+        if not self.path.startswith("/rest/"):
+            self.send_header("Cache-Control", "no-store, must-revalidate")
+        super().end_headers()
+
     def relay(self, status, headers, body):
         self.send_response(status)
         for k, v in (headers.items() if hasattr(headers, "items") else headers.items()):
