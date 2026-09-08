@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QubicaAMF · hawkBit console</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='13' font-size='13'>🛰</text></svg>">
+</head>
+<body>
+
+<!-- login ------------------------------------------------------------ -->
+<section id="login">
+  <form id="login-form">
+    <div>
+      <h1>hawkBit console</h1>
+      <p>QubicaAMF · OTA</p>
+    </div>
+    <label class="f">User
+      <input type="text" id="u" autocomplete="username" value="admin" required>
+    </label>
+    <label class="f">Password
+      <input type="password" id="p" autocomplete="current-password" required>
+    </label>
+    <button class="btn primary" type="submit">Sign in</button>
+    <p id="login-err" class="hidden" style="color:var(--err)"></p>
+    <p>Credentials are held in this tab only and sent straight to hawkBit.
+       Nothing is stored on the server side.</p>
+  </form>
+</section>
+
+<!-- app -------------------------------------------------------------- -->
+<div id="app" class="hidden">
+  <aside id="sidebar">
+    <div class="brand"><b>hawkBit</b><span>QubicaAMF</span></div>
+    <nav id="nav"></nav>
+    <div class="side-foot">
+      <div class="row"><span id="conn">—</span><span id="busy"></span></div>
+      <div class="row">
+        <label class="flex" style="gap:5px;cursor:pointer">
+          <input type="checkbox" id="auto" checked> auto-refresh
+        </label>
+        <button class="btn sm" id="logout">exit</button>
+      </div>
+    </div>
+  </aside>
+
+  <main id="main">
+    <header class="bar">
+      <h1 id="title">Dashboard</h1>
+      <div class="grow"></div>
+      <div id="bar-extra" class="flex"></div>
+      <button class="btn sm" id="refresh" title="Refresh (r)">refresh</button>
+    </header>
+    <div id="view"></div>
+  </main>
+</div>
+
+<div id="scrim"></div>
+<aside id="drawer">
+  <div class="dhead">
+    <h2 id="drawer-title"></h2>
+    <div class="grow" style="flex:1"></div>
+    <button class="btn sm" id="drawer-close">close</button>
+  </div>
+  <div class="dbody" id="drawer-body"></div>
+</aside>
+
+<div class="toast-wrap" id="toasts"></div>
+
+<dialog id="modal">
+  <h3 id="modal-title"></h3>
+  <div class="dc" id="modal-body"></div>
+  <div class="da">
+    <button class="btn" id="modal-cancel">Cancel</button>
+    <button class="btn primary" id="modal-ok">OK</button>
+  </div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
