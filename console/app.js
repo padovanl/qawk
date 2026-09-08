@@ -448,9 +448,10 @@ async function loadAssignedInstalled(id, cell) {
 }
 
 async function columnsDialog() {
-  const chosen = cols();
-  // Attribute keys are discovered from the fleet: a sample is enough, and it
-  // means a key nobody has sent yet simply is not offered.
+  // Checkboxes could say which columns, never in what order -- and the order is
+  // half the point: whoever is looking wants their own two or three first.
+  let chosen = cols().slice();
+
   const sample = await get('/targets?limit=12').catch(() => ({ content: [] }));
   const keys = new Set();
   await Promise.all(sample.content.map(async t => {
@@ -459,25 +460,72 @@ async function columnsDialog() {
   }));
   chosen.filter(c => c.startsWith('attr:')).forEach(c => keys.add(c.slice(5)));
 
-  const mk = (id, label, extra) => h('label.flex', { style: 'gap:8px' },
-    h('input', { type: 'checkbox', value: id, checked: chosen.includes(id) }),
-    h('span', label), extra ? h('span.faint', extra) : null);
+  const shown = h('div.colpick-list');
+  const pool = h('div.wrap');
 
-  const fields = h('div.stack', Object.entries(T_COLS).map(([id, c]) => mk(id, c.label)));
-  const attrs = h('div.stack', keys.size
-    ? [...keys].sort().map(k => mk('attr:' + k, k, 'reported by the device'))
-    : [h('span.faint', 'no device has reported an attribute yet')]);
+  const move = (i, d) => {
+    const j = i + d;
+    if (j < 0 || j >= chosen.length) return;
+    [chosen[i], chosen[j]] = [chosen[j], chosen[i]];
+    draw();
+  };
+
+  let dragFrom = null;
+  function draw() {
+    shown.replaceChildren(...chosen.map((id, i) => {
+      const row = h('div.colrow', { draggable: 'true' },
+        h('span.grip', '⠿'),
+        h('span.cl', colLabel(id)),
+        id.startsWith('attr:') ? h('span.tag', 'attribute') : null,
+        h('div.flex',
+          h('button.btn.sm.ghost', { disabled: i === 0, onclick: () => move(i, -1), title: 'up' }, '↑'),
+          h('button.btn.sm.ghost', { disabled: i === chosen.length - 1, onclick: () => move(i, 1), title: 'down' }, '↓'),
+          h('button.btn.sm.ghost.danger', {
+            onclick: () => { chosen.splice(i, 1); draw(); }, title: 'remove',
+          }, '×')));
+      row.addEventListener('dragstart', () => { dragFrom = i; row.classList.add('dragging'); });
+      row.addEventListener('dragend', () => { dragFrom = null; row.classList.remove('dragging'); });
+      row.addEventListener('dragover', e => { e.preventDefault(); row.classList.add('over'); });
+      row.addEventListener('dragleave', () => row.classList.remove('over'));
+      row.addEventListener('drop', e => {
+        e.preventDefault(); row.classList.remove('over');
+        if (dragFrom === null || dragFrom === i) return;
+        const [m] = chosen.splice(dragFrom, 1);
+        chosen.splice(i, 0, m);
+        draw();
+      });
+      return row;
+    }));
+    if (!chosen.length) shown.append(h('div.faint', { style: 'padding:10px' }, 'no columns — add at least one'));
+
+    const avail = Object.keys(T_COLS).filter(id => !chosen.includes(id))
+      .map(id => ['f', id, T_COLS[id].label])
+      .concat([...keys].sort().filter(k => !chosen.includes('attr:' + k))
+        .map(k => ['a', 'attr:' + k, k]));
+    pool.replaceChildren(...(avail.length
+      ? avail.map(([kind, id, label]) => h('button.chip' + (kind === 'a' ? '.attr' : ''), {
+          onclick: () => { chosen.push(id); draw(); },
+        }, h('span.plus', '+'), label))
+      : [h('span.faint', 'everything is already shown')]));
+  }
+  draw();
 
   modal('Columns', [
-    h('div.panel', h('h3', 'Fields'), h('div.body', fields)),
-    h('div.panel', h('h3', 'Device attributes'), h('div.body', attrs)),
-    h('p.faint', { style: 'margin:0;font-size:12px' },
-      'Attribute columns cost one request per device, so add them when you need them. ' +
-      'The choice is remembered in this browser.'),
+    h('div.colpick',
+      h('div.colpick-h', 'Shown, in order', h('div.grow'),
+        h('button.btn.sm.ghost', {
+          onclick: () => { chosen = T_COLS_DEFAULT.slice(); draw(); },
+        }, 'reset')),
+      shown,
+      h('div.colpick-h', 'Add a column'),
+      pool,
+      h('p.faint', { style: 'margin:6px 0 0;font-size:12px' },
+        'Attributes are what the devices report about themselves, so the list grows on its own: ' +
+        'a new one appears here as soon as the first device sends it. Those columns cost one ' +
+        'request per row, so add them when you need them.')),
   ], async () => {
-    const picked = [...$('#modal-body').querySelectorAll('input:checked')].map(i => i.value);
-    if (!picked.length) throw new Error('keep at least one column');
-    setCols(picked);
+    if (!chosen.length) throw new Error('keep at least one column');
+    setCols(chosen);
   }, 'Apply');
 }
 
