@@ -102,8 +102,14 @@ async function api(path, opts = {}) {
   busy(1);
   let r;
   try { r = await fetch('/rest/v1' + path, o); }
-  catch (e) { busy(-1); throw new Error('the console cannot reach its own server: ' + e.message); }
+  catch (e) {
+    busy(-1); noteConnection(false);
+    throw new Error('the console cannot reach its own server: ' + e.message);
+  }
   busy(-1);
+  // 502 is the proxy saying hawkBit is not there; anything it answers at all
+  // means the server is back.
+  noteConnection(r.status !== 502);
   const text = await r.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch (_) { data = text; }
@@ -401,6 +407,7 @@ VIEWS.dash = {
       get('/rollouts?limit=1').catch(() => ({ total: 0 })),
     ]);
     S.counts = { targets: tg.total, ds: ds.total, sm: sm.total, ro: ro.total };
+    noteTargets(tg.content);
     drawNav();
 
     const over = tg.content.filter(t => t.pollStatus && t.pollStatus.overdue).length;
@@ -705,7 +712,10 @@ VIEWS.targets = {
 
     const q = [currentQuery(), fiqlOf(fields.filter(f => f.key), st)].filter(Boolean).join(';');
     let data;
-    try { data = await get(pagedPath('/targets', st, q, 'controllerId:ASC')); }
+    try {
+      data = await get(pagedPath('/targets', st, q, 'controllerId:ASC'));
+      if (!q) noteTargets(data.content);
+    }
     catch (e) {
       return root.replaceChildren(chips, h('div.empty', h('b', 'That filter was refused'), e.message));
     }
@@ -1230,7 +1240,20 @@ async function assignDialog(targetId, presetDs, explicitIds) {
       return o;
     });
     const r = await post(`/distributionsets/${sel.value}/assignedTargets`, body);
-    toast('Assigned', `${r.assigned} new, ${r.alreadyAssigned} already had it`, 'ok');
+    // Not from assignedActions: that list carries ids without saying which
+    // target each belongs to, and pairing them by position is a guess. Asking
+    // each target for its newest action is one request per device just
+    // assigned, and it is right.
+    const label = sel.selectedOptions[0].text.split(' · ').slice(0, 2).join(' ');
+    await Promise.all(ids.slice(0, 25).map(async id => {
+      try {
+        const a = await get(`/targets/${enc(id)}/actions?limit=1&sort=id:DESC`);
+        const act = (a.content || [])[0];
+        if (act && act.active) watchAction(act.id, id, label);
+      } catch (_) {}
+    }));
+    toast('Assigned', `${r.assigned} new, ${r.alreadyAssigned} already had it` +
+      (S.watched.size ? ' — you will be told how it ends' : ''), 'ok');
     render();
   }, 'Deploy');
 }
@@ -1865,6 +1888,82 @@ VIEWS.about = {
       list('Software module types', types[2])));
   },
 };
+
+/* ------------------------------------------------------- background notices */
+/* THE TOASTS WORTH HAVING ARE THE ONES YOU DID NOT ASK FOR.
+ *
+ * Everything else here already answers a click, and a message that only repeats
+ * what you just did is noise. What was missing is the other direction: things
+ * that happen while you are looking somewhere else.
+ *
+ * Three, and no more, because a console that cries wolf gets ignored:
+ *
+ *   1. an action THIS console started reaching its end. You deploy, you go
+ *      read something, and it tells you whether it landed. Only actions
+ *      started here are watched: polling the whole fleet's history every ten
+ *      seconds to find out would cost more than it is worth, and would report
+ *      things nobody in this tab did.
+ *   2. losing and regaining the server -- once per transition, not once per
+ *      request. With auto-refresh on, a server that goes away would otherwise
+ *      produce a failure every ten seconds.
+ *   3. a target registering for the first time. That is the factory-device
+ *      moment: it is the arrival you are waiting for and there is nothing else
+ *      on screen that announces it. */
+S.watched = new Map();      // actionId -> {target, label}
+S.offline = false;
+S.known = null;             // controllerIds seen so far, or null before the first list
+
+function watchAction(actionId, target, label) {
+  if (actionId) S.watched.set(String(actionId), { target, label });
+}
+
+async function noticesTick() {
+  if (!S.auth) return;
+
+  for (const [id, w] of [...S.watched]) {
+    let a;
+    try {
+      a = await get(`/targets/${enc(w.target)}/actions/${id}`);
+    } catch (_) { S.watched.delete(id); continue; }   // deleted, or no longer visible
+    if (a.active) continue;
+
+    // 'finished' only says it closed: a failed update closes too, and the
+    // verdict is in the last status entry.
+    let verdict = String(a.status || '').toLowerCase();
+    try {
+      const st = await get(`/targets/${enc(w.target)}/actions/${id}/status?limit=1&sort=id:DESC`);
+      const e = (st.content || [])[0];
+      if (e && ['error', 'canceled', 'cancel_rejected'].includes(String(e.type).toLowerCase())) {
+        verdict = String(e.type).toLowerCase();
+      }
+    } catch (_) {}
+    S.watched.delete(id);
+    const ok = verdict === 'finished';
+    toast(ok ? 'Deployment finished' : 'Deployment ' + verdict,
+      `${w.label} on ${w.target.slice(0, 16)}`, ok ? 'ok' : 'err', ok ? 8000 : 20000);
+  }
+}
+
+function noteConnection(ok) {
+  if (ok && S.offline) { S.offline = false; toast('Reconnected', 'hawkBit is answering again', 'ok'); }
+  else if (!ok && !S.offline) {
+    S.offline = true;
+    toast('Lost the server', 'hawkBit is not answering — the tables are the last good copy', 'err', 20000);
+  }
+}
+
+// Called with each fresh target listing: the first one only records what is
+// there, so opening the console does not announce the whole fleet.
+function noteTargets(list) {
+  const ids = list.map(t => t.controllerId);
+  if (S.known === null) { S.known = new Set(ids); return; }
+  const fresh = ids.filter(i => !S.known.has(i));
+  fresh.forEach(i => S.known.add(i));
+  if (fresh.length === 1) toast('New device', fresh[0], 'info', 12000);
+  else if (fresh.length > 1) toast('New devices', `${fresh.length} registered`, 'info', 12000);
+}
+
+setInterval(noticesTick, 10000);
 
 /* ------------------------------------------------------------ idle logout */
 /* The credentials live in this tab and nowhere else, so closing it is logging
