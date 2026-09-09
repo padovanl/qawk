@@ -466,7 +466,9 @@ function toggle(on, onChange, opts = {}) {
   const el = h('label.switch' + (opts.disabled ? '.off' : ''), { title: opts.title || '' },
     input, h('span.track', h('span.knob')),
     opts.label ? h('span.swl', opts.label) : null);
+  el.input = input;
   input.addEventListener('change', async () => {
+    if (!onChange) return;          // a plain field: read el.input.checked later
     el.classList.add('busy');
     try { await onChange(input.checked); }
     catch (e) { input.checked = !input.checked; fail(e); }
@@ -1433,7 +1435,7 @@ async function assignDialog(targetId, presetDs, explicitIds) {
     at.disabled = type.value !== 'timeforced';
     if (at.disabled) at.value = '';
   });
-  const confirmReq = h('input', { type: 'checkbox' });
+  const confirmReq = toggle(false, null, { label: 'require confirmation on the device' });
   // Picking who gets it is the part people do most, so it is a choice, not a
   // query language: one device, a model, everything, or FIQL when none of those
   // is enough.
@@ -1524,7 +1526,7 @@ async function assignDialog(targetId, presetDs, explicitIds) {
   modal(targetId ? 'Deploy to ' + targetId : 'Deploy', [
     h('label.f', 'Distribution set', sel), h('label.f', 'Mode', type),
     h('label.f', 'Force time', at), dtQuick(at), atHint,
-    h('label.f', h('span.flex', confirmReq, 'require confirmation on the device'), h('span')),
+    confirmReq,
     h('label.f', 'Send it to', mode), row, count,
     h('div.flex', h('button.btn.sm', { onclick: runPreflight }, icon('check', 14), 'check the devices first'),
       h('span.faint', 'a delta only applies to the version it was built from')),
@@ -1545,7 +1547,7 @@ async function assignDialog(targetId, presetDs, explicitIds) {
       const o = { id, type: type.value };
       const ft = dtMs(at);
       if (ft) o.forcetime = ft;
-      if (confirmReq.checked) o.confirmationRequired = true;
+      if (confirmReq.input.checked) o.confirmationRequired = true;
       return o;
     });
     const r = await post(`/distributionsets/${sel.value}/assignedTargets`, body);
@@ -1789,11 +1791,11 @@ async function newSmDialog() {
   const desc = h('input', { type: 'text' });
   const vendor = h('input', { type: 'text', value: 'QubicaAMF' });
   const type = h('select', types.content.map(t => h('option', { value: t.key }, `${t.name} (${t.key})`)));
-  const encrypt = h('input', { type: 'checkbox' });
+  const encrypt = toggle(false, null, { label: 'enable artifact encryption' });
   modal('New software module', [
     h('label.f', 'Name', name), h('label.f', 'Version', ver),
     h('label.f', 'Description', desc), h('label.f', 'Vendor', vendor), h('label.f', 'Type', type),
-    h('label.f', h('span.flex', encrypt, 'enable artifact encryption'), h('span')),
+    encrypt,
     h('p.faint', { style: 'margin:0;font-size:12px' },
       'os for a system update, application for an app: the type is what tells hawkBit which it is, ' +
       'and an app given the os type would be treated as a slot change.'),
@@ -1802,7 +1804,7 @@ async function newSmDialog() {
     const b = { name: name.value.trim(), version: ver.value.trim(), type: type.value,
                 vendor: vendor.value.trim() };
     if (desc.value.trim()) b.description = desc.value.trim();
-    if (encrypt.checked) b.encrypted = true;
+    if (encrypt.input.checked) b.encrypted = true;
     await post('/softwaremodules', [b]);
     toast('Created', '', 'ok'); render();
   }, 'Create');
