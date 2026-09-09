@@ -10,7 +10,14 @@
 export class El {
   constructor(name = 'div') {
     this.nodeName = name; this.nodeType = 1;
-    this.children = []; this.style = {}; this.dataset = {}; this.options = [];
+    this.children = []; this.dataset = {}; this.options = [];
+    // custom properties are set through style.setProperty, not as fields
+    const vars = {};
+    this.style = {
+      setProperty: (k, v) => { vars[k] = v; },
+      getPropertyValue: k => vars[k] ?? '',
+      removeProperty: k => { delete vars[k]; },
+    };
     this.hidden = false; this.value = ''; this.disabled = false; this.title = '';
     // the console checks this before touching a node it built a frame ago
     this.isConnected = true;

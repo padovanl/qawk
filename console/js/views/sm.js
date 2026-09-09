@@ -1,5 +1,5 @@
 import { S, del, get, post, upload, waiting } from '../api.js';
-import { closeDrawer, drawer, fail, modal, toast } from '../chrome.js';
+import { ask, closeDrawer, drawer, fail, modal, toast } from '../chrome.js';
 import { M_COLS, baseCell, cols, columnsDialog, fieldsFor, headsFor, metaCache } from '../columns.js';
 import { $, h, icon } from '../dom.js';
 import { fileField, toggle } from '../inputs.js';
@@ -73,7 +73,7 @@ async function openSm(m) {
               cells: [h('span.mono', a.providedFilename), h('span.nowrap', bytes(a.size)),
                 h('span.mono.faint', ((a.hashes && a.hashes.sha256) || '').slice(0, 16) + '…'),
                 h('button.btn.sm.danger', { title: 'delete', onclick: async () => {
-                    if (!confirm('Delete ' + a.providedFilename + '?')) return;
+                    if (!await ask('Delete artifact', a.providedFilename, { danger: true })) return;
                     try { await del(`/softwaremodules/${m.id}/artifacts/${a.id}`); draw(); }
                     catch (e) { fail(e); } } }, 'delete')],
             })))
@@ -106,7 +106,7 @@ async function openSm(m) {
           'upload-swu.sh makes are made here, before anything is sent.'))),
 
       h('button.btn.danger', { onclick: async () => {
-          if (!confirm(`Delete module ${m.name} ${m.version}?`)) return;
+          if (!await ask('Delete module', `${m.name} ${m.version}`, { danger: true })) return;
           try { await del('/softwaremodules/' + m.id); toast('Deleted', '', 'ok'); closeDrawer(); render(); }
           catch (e) { fail(e); } } }, icon('trash', 13), 'delete module')));
   };

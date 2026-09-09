@@ -1,7 +1,7 @@
 import { del, distributionSets, fiql, get, post, waiting } from '../api.js';
 import { start } from '../auth.js';
 import { ACT_ICON, TARGET_PILL, pill } from '../badges.js';
-import { drawer, fail, modal, toast } from '../chrome.js';
+import { ask, drawer, fail, modal, toast } from '../chrome.js';
 import { $, h, icon, skeleton } from '../dom.js';
 import { dtInput, dtMs, dtQuick, numInput } from '../inputs.js';
 import { VIEWS, render } from '../router.js';
@@ -44,7 +44,8 @@ VIEWS.ro = {
               st === 'running' ? actBtn('pause', () => post(`/rollouts/${r.id}/pause`)) : null,
               st === 'paused' ? actBtn('resume', () => post(`/rollouts/${r.id}/resume`)) : null,
               actBtn('delete', async () => {
-                if (!confirm(`Delete rollout ${r.name}? Running actions are cancelled.`)) throw new Error('cancelled by you');
+                if (!await ask('Delete rollout', `${r.name}\n\nAny action it started and is still running gets cancelled.`,
+                               { danger: true })) throw new Error('cancelled by you');
                 return del('/rollouts/' + r.id);
               })),
           ],

@@ -1,5 +1,5 @@
 import { S, distributionSets, enc, fiql, get, limited, post } from '../api.js';
-import { fail, modal, toast } from '../chrome.js';
+import { ask, fail, modal, toast } from '../chrome.js';
 import { $, h, icon } from '../dom.js';
 import { dtInput, dtMs, dtQuick, toggle } from '../inputs.js';
 import { watchAction } from '../notices.js';
@@ -211,11 +211,15 @@ async function assignDialog(targetId, presetDs, explicitIds) {
       'accepts. forced is re-offered at every poll until the action closes.'),
   ], async () => {
     const ids = await resolveIds();
-    if (ids.length > 1 && !confirm(`Deploy to ${ids.length} devices?`)) return false;
+    if (ids.length > 1 && !await ask('Deploy to the whole selection',
+        `${ids.length} devices will be told to install this set.`,
+        { okLabel: 'Deploy' })) return false;
     // If the check has been run and found trouble, say so once more here: the
     // panel is easy to scroll past, an assignment is not easy to take back.
     if (lastPlan && !lastPlan.ok &&
-        !confirm('The check says this delta will fail on some of these devices.\n\nAssign it anyway?')) {
+        !await ask('The check says this will fail',
+                   'This delta needs a base that some of these devices do not have.\n\nAssigning it anyway means those devices will fail the update.',
+                   { okLabel: 'Assign anyway', danger: true })) {
       return false;
     }
     const body = ids.map(id => {

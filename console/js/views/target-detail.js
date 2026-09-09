@@ -1,6 +1,6 @@
 import { S, del, enc, get, post } from '../api.js';
 import { ACTION_PILL, pill } from '../badges.js';
-import { closeDrawer, drawer, fail, toast } from '../chrome.js';
+import { ask, closeDrawer, drawer, fail, toast } from '../chrome.js';
 import { loadAssignedInstalled } from '../columns.js';
 import { $, h, icon } from '../dom.js';
 import { toggle } from '../inputs.js';
@@ -60,7 +60,7 @@ async function openTarget(id) {
         h('button.btn.sm.danger', { onclick: () => cancelLatest(id, false) }, 'cancel action'),
         h('button.btn.sm.danger', { onclick: () => cancelLatest(id, true) }, 'force cancel'),
         h('button.btn.sm.danger', { onclick: async () => {
-            if (!confirm(`Delete target ${id}?`)) return;
+            if (!await ask('Delete target', `${id}\n\nIts history goes with it.`, { danger: true })) return;
             try { await del('/targets/' + enc(id)); toast('Deleted', id, 'ok'); closeDrawer(); render(); }
             catch (e) { fail(e); }
           } }, 'delete')),

@@ -1,6 +1,6 @@
 import { S, del, get, post } from '../api.js';
 import { typePill } from '../badges.js';
-import { closeDrawer, drawer, fail, modal, toast } from '../chrome.js';
+import { ask, closeDrawer, drawer, fail, modal, toast } from '../chrome.js';
 import { D_COLS, cols, columnsDialog, fieldsFor, headsFor } from '../columns.js';
 import { $, h, icon } from '../dom.js';
 import { VIEWS, drawNav, render } from '../router.js';
@@ -62,7 +62,9 @@ async function openDs(x) {
       h('div.wrap',
         h('button.btn.primary', { onclick: () => assignDialog(null, x.id) }, icon('deploy', 14), 'deploy this set'),
         h('button.btn.danger', { onclick: async () => {
-            if (!confirm(`Delete ${x.name} ${x.version}?\n\nhawkBit only marks it deleted: the name and version stay reserved for good.`)) return;
+            if (!await ask('Delete distribution set',
+              `${x.name} ${x.version}\n\nhawkBit only marks it deleted: this name and version stay reserved for good.`,
+              { danger: true })) return;
             try { await del('/distributionsets/' + x.id); toast('Deleted', '', 'ok'); closeDrawer(); render(); }
             catch (e) { fail(e); } } }, 'delete'))));
   };

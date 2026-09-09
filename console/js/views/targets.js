@@ -1,5 +1,5 @@
 import { S, del, enc, get, post, waiting } from '../api.js';
-import { modal, toast } from '../chrome.js';
+import { ask, modal, toast } from '../chrome.js';
 import { T_COLS, attrCache, attrsOf, cols, columnsDialog, headsFor } from '../columns.js';
 import { $, h, icon } from '../dom.js';
 import { noteTargets } from '../notices.js';
@@ -53,7 +53,9 @@ function bulkBar() {
 }
 
 async function bulkCancel(ids) {
-  if (!confirm(`Cancel the running action on ${ids.length} device(s)?`)) return;
+  if (!await ask('Cancel running actions',
+      `Whatever is under way on ${ids.length} device(s) will be told to stop.`,
+      { okLabel: 'Cancel actions', cancelLabel: 'Leave them' })) return;
   let done = 0, none = 0, bad = 0;
   for (const id of ids) {
     try {

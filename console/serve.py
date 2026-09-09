@@ -48,7 +48,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # server states which build it is serving and the console watches for a change.
 def build_stamp():
     hsh = hashlib.sha256()
-    names = ["index.html", "style.css"]
+    names = ["index.html", "style.css", "fonts.css"]
     for root, _, files in os.walk(os.path.join(HERE, "js")):
         names += [os.path.relpath(os.path.join(root, f), HERE)
                   for f in files if f.endswith(".js")]

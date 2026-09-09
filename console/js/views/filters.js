@@ -1,5 +1,5 @@
 import { S, del, distributionSets, fiql, get, post, put } from '../api.js';
-import { fail, modal, toast } from '../chrome.js';
+import { ask, fail, modal, toast } from '../chrome.js';
 import { $, h, icon } from '../dom.js';
 import { VIEWS, go, render } from '../router.js';
 import { tableOf } from '../table.js';
@@ -27,7 +27,7 @@ VIEWS.filters = {
                 h('button.btn.sm', { onclick: () => autoAssignDialog(f) }, 'auto-assign'),
                 h('button.btn.sm', { onclick: () => saveFilterDialog(f.query, f) }, 'edit'),
                 h('button.btn.sm.danger', { onclick: async () => {
-                    if (!confirm('Delete filter ' + f.name + '?')) return;
+                    if (!await ask('Delete filter', f.name, { danger: true })) return;
                     try { await del('/targetfilters/' + f.id); render(); } catch (e) { fail(e); } } }, 'delete'))],
           })))
         : h('div.empty', h('b', 'No filters'), 'Create one to auto-assign a release to new devices.')));

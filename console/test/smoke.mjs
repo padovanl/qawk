@@ -101,15 +101,25 @@ const { colourPicker, fileField } = await import(JS + 'inputs.js');
 const cp = colourPicker('#12a594');
 ok('il colore parte dal valore dato', cp.value === '#12a594', cp.value);
 const sw = cp.children[0].children;
-ok('la tavolozza ha dieci colori piu custom', sw.length === 12, String(sw.length));
+ok('la tavolozza ha dieci colori piu il custom', sw.length === 11, String(sw.length));
 sw[3].handlers.click({ preventDefault() {} });          // h() aggancia con addEventListener
 ok('scegliere una tessera cambia il valore', cp.value === '#46a758', cp.value);
 ok('la tessera scelta si evidenzia', sw[3].classList.contains('on') && !sw[0].classList.contains('on'));
-const hexIn = cp.children[1].children[0].children[1];
-hexIn.value = '#ff0000'; hexIn.oninput();
+ok('nessun input nativo di colore nel controllo',
+   !JSON.stringify(cp, (k, v) => (k === 'handlers' ? undefined : v)).includes('"color"'));
+
+const hexIn = cp.find('hexbox').children[1];
+hexIn.value = 'ff0000'; hexIn.oninput();
 ok('lesadecimale valido viene accettato', cp.value === '#ff0000', cp.value);
 hexIn.value = 'nonsense'; hexIn.oninput();
 ok('lesadecimale non valido viene ignorato', cp.value === '#ff0000', cp.value);
+hexIn.onblur();     // uscendo dal campo si ripristina il valore buono
+ok('il campo si ripulisce da un valore non valido', hexIn.value === 'ff0000', hexIn.value);
+ok('il campo non mostra un doppio cancelletto', !hexIn.value.startsWith('#'), hexIn.value);
+const panel = cp.find('cpick-panel');
+ok('il pannello custom parte chiuso', panel.classList.contains('hidden'));
+sw[10].handlers.click({ preventDefault() {} });
+ok('il custom apre il pannello nostro', !panel.classList.contains('hidden'));
 
 const fz = fileField({ multiple: true });
 ok('la zona di rilascio espone il suo input', fz.input && fz.input.nodeName === 'input');

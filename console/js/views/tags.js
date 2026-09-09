@@ -1,5 +1,5 @@
 import { del, get, post } from '../api.js';
-import { fail, modal, toast } from '../chrome.js';
+import { ask, fail, modal, toast } from '../chrome.js';
 import { $, h, icon } from '../dom.js';
 import { colourPicker } from '../inputs.js';
 import { VIEWS, render } from '../router.js';
@@ -20,7 +20,7 @@ VIEWS.tags = {
               h('span.mono.faint', t.colour || '—')),
             h('span.faint', t.description || '—'),
             h('button.btn.sm.danger', { onclick: async () => {
-                if (!confirm('Delete tag ' + t.name + '?')) return;
+                if (!await ask('Delete tag', t.name, { danger: true })) return;
                 try { await del(`/${kind}/${t.id}`); render(); } catch (e) { fail(e); } } }, 'delete')],
         })))
       : h('div.empty', 'none');
@@ -32,7 +32,7 @@ VIEWS.tags = {
 
 async function newTagDialog(after) {
   const name = h('input', { type: 'text' });
-  const colour = colourPicker('#12a594');
+  const colour = colourPicker('#12a594', { nameEl: name });
   const desc = h('input', { type: 'text' });
   const kind = h('select', h('option', { value: 'targettags' }, 'target tag'),
     h('option', { value: 'distributionsettags' }, 'distribution set tag'));

@@ -23,8 +23,8 @@
   --warn:      #d29922;
   --err:       #f05d5d;
   --info:      #58a6ff;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 /* Only in automatic mode: with a theme chosen by hand, [data-theme] is set and
@@ -44,6 +44,11 @@ html, body { height: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--fg);
   font: 13px/1.5 var(--sans);
+  /* Inter's defaults leave the digits proportional and the punctuation loose
+     at this size: figures line up in columns, and contextual alternates give
+     a plainer 'l' and 'a'. */
+  font-feature-settings: "tnum" 1, "cv05" 1, "cv08" 1, "ss03" 1;
+  -webkit-font-smoothing: antialiased;
   -webkit-font-smoothing: antialiased;
 }
 a { color: var(--accent-2); text-decoration: none; }
@@ -471,11 +476,14 @@ tr.busy td:first-child::before {
    What actually causes trouble is motion that loops or travels; a 240 ms layout
    transition does not. So the loops stop and the transitions stay. */
 @media (prefers-reduced-motion: reduce) {
-  .spin, .btn.loading::after, .pill.live::before, .pill.pulse::before,
-  .bars i.run, .skel i, #progress.on::after, .toast {
+  /* The decorative loops go: a shimmering skeleton, a sweeping bar, a pulsing
+     dot say nothing that the page does not already say in words.
+     A spinner is not decoration -- it is the difference between "working" and
+     "stuck", and a ring that does not turn states the second one. It keeps
+     turning. */
+  .pill.pulse::before, .bars i.run, .skel i, #progress.on::after, .toast {
     animation: none !important;
   }
-  .pill.live::before { border-top-color: transparent; }
 }
 
 /* ------------------------------------------------------------- accordion */
@@ -653,32 +661,65 @@ input[type=datetime-local]:disabled { opacity: .4; }
 /* ------------------------------------------------------ colour + files */
 /* Two controls the platform draws in its own language, replaced by ours. */
 .hidden-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-.cpick { display: flex; flex-direction: column; gap: 9px; }
+.cpick { display: flex; flex-direction: column; gap: 10px; }
 .cpick-row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .swatch {
-  width: 24px; height: 24px; flex: 0 0 24px; padding: 0; cursor: pointer;
-  border-radius: 7px; border: 1px solid color-mix(in srgb, var(--sw) 55%, transparent);
-  background: var(--sw);
+  position: relative; width: 26px; height: 26px; flex: 0 0 26px; padding: 0; cursor: pointer;
+  border-radius: 8px; border: 1px solid color-mix(in srgb, var(--sw) 60%, transparent);
+  background: var(--sw); color: #fff;
   transition: transform .12s, box-shadow .12s;
 }
+.swatch .ico { opacity: 0; transition: opacity .1s; filter: drop-shadow(0 1px 1px rgba(0,0,0,.4)); }
 .swatch:hover { transform: translateY(-1px); }
-.swatch.on {
-  box-shadow: 0 0 0 2px var(--bg-2), 0 0 0 4px var(--sw);
-}
+.swatch.on { box-shadow: 0 0 0 2px var(--bg-2), 0 0 0 4px var(--sw); }
+.swatch.on .ico { opacity: 1; }
 .swatch.custom {
   display: grid; place-items: center; color: var(--fg-dim);
-  background: var(--bg-3); border-color: var(--line);
+  background: var(--bg-3); border-color: var(--line); border-style: dashed;
 }
-.swatch.custom:hover { color: var(--accent-2); border-color: var(--accent); }
-.hexbox { flex: 0 0 118px; height: var(--ctl); font-family: var(--mono); }
-.hexbox .hash { color: var(--fg-faint); }
-.hexbox input { flex: 1; min-width: 0; height: auto; padding: 0; border: 0;
-                background: transparent; font-family: var(--mono); font-size: 12px; }
+.swatch.custom .ico { opacity: 1; filter: none; }
+.swatch.custom:hover, .swatch.custom.on { color: var(--accent-2); border-color: var(--accent); border-style: solid; }
+
+/* The custom panel: a hue strip and a saturation/brightness square, so no
+   part of choosing a colour ever leaves the page. */
+.cpick-panel { display: flex; flex-direction: column; gap: 9px; }
+.sv {
+  position: relative; height: 104px; border-radius: 9px; cursor: crosshair;
+  border: 1px solid var(--line); overflow: hidden; touch-action: none;
+}
+.sv i { position: absolute; inset: 0; border-radius: inherit; }
+.sv-sat { background: linear-gradient(to right, #fff, transparent); }
+.sv-val { background: linear-gradient(to top, #000, transparent); }
+.hue {
+  position: relative; height: 14px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--line); touch-action: none;
+  background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+}
+.sv .dot, .hue .dot {
+  position: absolute; width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5);
+  transform: translate(-50%, -50%); pointer-events: none;
+}
+.hue .dot { top: 50%; }
+
+.hexbox { flex: 0 0 122px; height: var(--ctl); font-family: var(--mono); }
+.hexbox .hash { color: var(--fg-faint); font-family: var(--mono); }
+.hexbox input {
+  flex: 1; min-width: 0; height: auto; padding: 0; border: 0; background: transparent;
+  font-family: var(--mono); font-size: 12px; text-transform: lowercase;
+}
 .hexbox input:focus { outline: none; box-shadow: none; }
-.swatch-pill {
-  border: 1px solid currentColor; font-weight: 600;
+/* The preview is the tag itself, with the name being typed in it. */
+.tag-preview {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 24px; padding: 0 11px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  color: var(--sw); border: 1px solid color-mix(in srgb, var(--sw) 55%, transparent);
+  background: color-mix(in srgb, var(--sw) 15%, transparent);
 }
-.swatch-pill::before { content: 'preview'; }
+.tag-preview::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--sw);
+}
 .swatch-dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px;
               background: var(--sw); }
 
@@ -1032,3 +1073,28 @@ dl.kv.attrs dt {
   max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 dl.kv.attrs dd { overflow-wrap: anywhere; }
+
+/* ------------------------------------------------------ confirm dialog */
+/* window.confirm draws the browser's own box, with the hostname in it, in the
+   operating system's theme. This is the same shape as our modal. */
+dialog.ask {
+  width: min(430px, calc(100vw - 32px)); padding: 0; border: 0;
+  border-radius: 14px; color: var(--fg); background: var(--bg-2);
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 60px -14px rgba(0,0,0,.55);
+  animation: liftin .18s cubic-bezier(.2,.8,.3,1);
+}
+dialog.ask::backdrop { background: rgba(0,0,0,.5); }
+.ask-head { display: flex; align-items: center; gap: 11px; padding: 17px 20px 0; }
+.ask-head h3 { margin: 0; font-size: 15px; }
+.ask-ico {
+  display: grid; place-items: center; width: 32px; height: 32px; flex: 0 0 32px;
+  border-radius: 9px; color: var(--info);
+  background: color-mix(in srgb, var(--info) 15%, transparent);
+}
+.ask-ico.danger { color: var(--err); background: color-mix(in srgb, var(--err) 15%, transparent); }
+dialog.ask .dc { padding: 11px 20px 4px; color: var(--fg-dim); font-size: 13px; }
+dialog.ask .dc p { margin: 0 0 6px; line-height: 1.5; }
+dialog.ask .dc p:first-child { color: var(--fg); font-family: var(--mono); font-size: 12.5px;
+                               word-break: break-word; }
+dialog.ask .da { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px 18px; }
