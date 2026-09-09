@@ -1195,13 +1195,28 @@ dialog.ask .da { display: flex; gap: 8px; justify-content: flex-end; padding: 14
 }
 .legend-wrap.open { grid-template-rows: 1fr; opacity: 1; margin-top: 10px; }
 .legend-wrap > .legend { overflow: hidden; min-height: 0; }
+/* CARDS, NOT ROWS. Laid out as pill + text on one line, the pills are all
+   different widths -- "in sync" against "waiting for confirmation" -- so every
+   description started at a different place and the left edge was ragged.
+   Forcing a common pill width does not help either: the widest one is three
+   times the narrowest, so it either clips or pushes all the text far right.
+   Each entry is its own small card instead: the pill sits above its sentence,
+   widths stop mattering, and the group reads as a grid. */
 .legend {
-  padding: 11px 13px; border-radius: 10px;
+  padding: 14px; border-radius: 12px;
   background: var(--bg-2); border: 1px solid var(--line);
-  display: grid; gap: 7px;
+  display: grid; gap: 8px 12px; align-items: stretch;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
 }
-.legend-row { display: flex; align-items: baseline; gap: 10px; font-size: 12px; color: var(--fg-dim); }
-.legend-row .pill { flex: 0 0 auto; min-width: 96px; justify-content: center; }
+.legend-row {
+  display: grid; gap: 5px; align-content: start;
+  padding: 9px 11px; border-radius: 9px;
+  background: var(--bg); border: 1px solid var(--line);
+  transition: border-color .12s, background .12s;
+}
+.legend-row:hover { border-color: var(--line-2); }
+.legend-row .pill { justify-self: start; }
+.legend-row span { font-size: 12px; line-height: 1.5; color: var(--fg-dim); }
 
 /* Compact form, for a toolbar: the field alone. */
 .fq.compact { gap: 0; }
@@ -1227,6 +1242,14 @@ pre.cmd {
   background: var(--bg); border: 1px solid var(--line);
   font-family: var(--mono); font-size: 12px; color: var(--fg-dim);
 }
-.legend-h { font-size: 10px; letter-spacing: .5px; text-transform: uppercase;
-            color: var(--fg-faint); margin-top: 4px; }
+/* A heading spans the whole grid, so each group starts on its own line. */
+.legend-h {
+  grid-column: 1 / -1;
+  display: flex; align-items: center; gap: 9px;
+  font-size: 10px; letter-spacing: .6px; text-transform: uppercase;
+  color: var(--fg-faint); margin: 8px 0 1px;
+}
+.legend-h::after {
+  content: ''; flex: 1; height: 1px; background: var(--line);
+}
 .legend-h:first-child { margin-top: 0; }

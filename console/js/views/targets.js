@@ -17,6 +17,13 @@ const T_STATUS = ['', 'in_sync', 'pending', 'error', 'registered', 'unknown'];
 /* hawkBit's five words, in the order a device passes through them. The wording
    is deliberately about what the SERVER knows, because that is all these say:
    none of them is a report from the device about itself. */
+/* A pill exactly as the Status column draws it when it has something to add. */
+const mark = (word, suffix) => {
+  const p = pill(word, 'mute');
+  p.append(h('span.faint', { style: 'margin-left:5px' }, suffix));
+  return p;
+};
+
 const T_LEGEND = [
   ['registered', 'the device has introduced itself and has never been given anything'],
   ['pending',    'an update is assigned and not finished — the column shows which phase'],
@@ -163,11 +170,13 @@ VIEWS.targets = {
         h('div.legend-h', 'Inside "pending" — read from what the device reported'),
         PHASE_WORDS.map(([k, cls, what]) => h('div.legend-row',
           pill(k, cls), h('span', what))),
-        h('div.legend-h', 'Marks'),
-        h('div.legend-row', pill('in_sync', 'mute'),
-          h('span', '· never installed — nothing outstanding, but this server has never installed anything here')),
-        h('div.legend-row', pill('pending', 'mute'),
-          h('span', '· just closed — the action finished between two reads; it settles at the next refresh'))));
+        // The marks are shown as the column really draws them, suffix and all,
+        // rather than described: recognising one at a glance is the point.
+        h('div.legend-h', 'Marks the column can add'),
+        h('div.legend-row', mark('in_sync', '\u00b7 never installed'),
+          h('span', 'nothing outstanding, but this server has never installed anything here')),
+        h('div.legend-row', mark('pending', '\u00b7 just closed'),
+          h('span', 'the action finished between two reads; it settles at the next refresh'))));
     const legendBtn = h('button.btn.sm.ghost', {
       onclick: () => {
         const open = legend.classList.toggle('open');
