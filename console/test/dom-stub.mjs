@@ -30,6 +30,9 @@ export class El {
     };
     this.handlers = {};
   }
+  // the console asks for childNodes as well as children
+  get childNodes() { return this.children; }
+  get firstChild() { return this.children[0] || null; }
   get className() { return [...this._cls].join(' '); }
   set className(v) { this._cls = new Set(String(v).split(' ').filter(Boolean)); }
   get textContent() {
@@ -55,6 +58,12 @@ export class El {
   blur() {} select() {} scrollIntoView() {} showModal() {} close() {}
   setSelectionRange(a) { this.caret = a; }
   getBoundingClientRect() { return { top: 0, left: 0, width: 0, height: 0 }; }
+  /* test helper: every descendant carrying a class */
+  findAll(cls, out = []) {
+    if (this._cls.has(cls)) out.push(this);
+    for (const c of this.children) if (c.findAll) c.findAll(cls, out);
+    return out;
+  }
   /* test helper: first descendant carrying a class */
   find(cls) {
     if (this._cls.has(cls)) return this;

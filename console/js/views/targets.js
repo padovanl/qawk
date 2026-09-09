@@ -1,4 +1,5 @@
 import { S, del, enc, get, post, waiting } from '../api.js';
+import { TARGET_PILL, pill } from '../badges.js';
 import { ask, modal, toast } from '../chrome.js';
 import { T_COLS, attrCache, attrsOf, cols, columnsDialog, headsFor } from '../columns.js';
 import { $, h, icon } from '../dom.js';
@@ -12,6 +13,16 @@ import { openTarget } from './target-detail.js';
 
 /* ------- targets ---------------------------------------------------- */
 const T_STATUS = ['', 'in_sync', 'pending', 'error', 'registered', 'unknown'];
+/* hawkBit's five words, in the order a device passes through them. The wording
+   is deliberately about what the SERVER knows, because that is all these say:
+   none of them is a report from the device about itself. */
+const T_LEGEND = [
+  ['registered', 'the device has introduced itself and has never been given anything'],
+  ['pending',    'an update is assigned and not finished — downloading, installing, or waiting for a reboot'],
+  ['in_sync',    'nothing outstanding. NOT the same as up to date: a device that was never given anything is in sync too'],
+  ['error',      'the last update failed. The device is running whatever it ran before'],
+  ['unknown',    'hawkBit has no state for it — usually a target created through the API that has never polled'],
+];
 
 /* BULK SELECTION.
  *
@@ -126,11 +137,31 @@ VIEWS.targets = {
       icon('rollout', 14), 'roll out this filter'),
   ],
   async render(root) {
+    // What the five words actually mean. hawkBit's own names are not
+    // self-explanatory -- 'in_sync' means "nothing outstanding", not "up to
+    // date", and 'unknown' is not a fault -- and getting that wrong during a
+    // rollout is expensive. The legend folds away, and stays folded.
+    const legendOpen = localStorage.getItem('hb-legend') === '1';
+    const legend = h('div.legend' + (legendOpen ? '' : '.hidden'),
+      T_LEGEND.map(([k, what]) => h('div.legend-row',
+        pill(k, TARGET_PILL[k] || 'mute'), h('span', what))));
+    const legendBtn = h('button.btn.sm.ghost', {
+      onclick: () => {
+        legend.classList.toggle('hidden');
+        const open = !legend.classList.contains('hidden');
+        try { localStorage.setItem('hb-legend', open ? '1' : '0'); } catch (_) {}
+        legendBtn.replaceChildren(icon('info', 13), open ? 'hide meanings' : 'what do these mean?');
+      },
+    }, icon('info', 13), legendOpen ? 'hide meanings' : 'what do these mean?');
+
     const chips = h('div', { style: 'margin-bottom:12px' },
-      h('div.seg', T_STATUS.map(x => h('button', {
-        class: S.status === x ? 'on' : '',
-        onclick: () => { S.status = x; render(); },
-      }, x === '' ? 'all' : x.replace(/_/g, ' ')))));
+      h('div.flex',
+        h('div.seg', T_STATUS.map(x => h('button', {
+          class: S.status === x ? 'on' : '',
+          onclick: () => { S.status = x; render(); },
+        }, x === '' ? 'all' : x.replace(/_/g, ' ')))),
+        legendBtn),
+      legend);
 
     const st = pg('targets');
     const fields = cols().map(id => id.startsWith('attr:')

@@ -1177,3 +1177,14 @@ dialog.ask .da { display: flex; gap: 8px; justify-content: flex-end; padding: 14
   max-height: 190px; overflow-y: auto;
 }
 .compat-list li { margin: 2px 0; }
+
+/* ------------------------------------------------------------ state legend */
+/* Five words that are not self-explanatory, explained where they are used
+   rather than in a document nobody has open during a rollout. */
+.legend {
+  margin-top: 10px; padding: 11px 13px; border-radius: 10px;
+  background: var(--bg-2); border: 1px solid var(--line);
+  display: grid; gap: 7px;
+}
+.legend-row { display: flex; align-items: baseline; gap: 10px; font-size: 12px; color: var(--fg-dim); }
+.legend-row .pill { flex: 0 0 auto; min-width: 96px; justify-content: center; }
