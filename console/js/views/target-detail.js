@@ -156,7 +156,7 @@ function actionsPane(id, actions) {
     const chev = h('span.chev', '▸');
     const summary = h('span.faint.sum', '');
     const head = h('div.ahead',
-      chev, h('span.mono', '#' + a.id), actionPill(a),
+      chev, h('span.mono', '#' + a.id), actionPill(a, id),
       a.active ? h('span.pill.live', 'active') : null,
       h('span.faint', a.type || ''), summary,
       h('span.faint.nowrap.when', when(a.lastModifiedAt || a.createdAt)));

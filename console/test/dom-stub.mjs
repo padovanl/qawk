@@ -44,10 +44,15 @@ export class El {
   removeAttribute() {}
   addEventListener(k, f) { this.handlers[k] = f; }
   removeEventListener() {}
-  append(...k) { this.children.push(...k); }
-  appendChild(k) { this.children.push(k); return k; }
-  insertBefore(k) { this.children.push(k); return k; }
-  replaceChildren(...k) { this.children = k; }
+  // The real DOM turns a bare string into a text node; the stub has to do the
+  // same or a legitimate replaceChildren('finished') reads as empty.
+  static _node(k) {
+    return (k && typeof k === 'object') ? k : { nodeType: 3, textContent: String(k) };
+  }
+  append(...k) { this.children.push(...k.map(El._node)); }
+  appendChild(k) { this.children.push(El._node(k)); return k; }
+  insertBefore(k) { this.children.push(El._node(k)); return k; }
+  replaceChildren(...k) { this.children = k.map(El._node); }
   remove() {}
   querySelector() { return new El(); }
   querySelectorAll() { return []; }

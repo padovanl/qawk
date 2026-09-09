@@ -67,7 +67,7 @@ VIEWS.dash = {
           ? tableOf(['Target', 'Action', 'Status', 'Type', 'When'], recent.map(a => ({
               onclick: () => openTarget(a._t),
               cells: [h('span.mono', a._t.slice(0, 16)), h('span.mono', '#' + a.id),
-                      actionPill(a), h('span.dim', a.type || '—'),
+                      actionPill(a, a._t), h('span.dim', a.type || '—'),
                       h('span.faint.nowrap', when(a.lastModifiedAt || a.createdAt))],
             })))
           : h('div.empty', 'nothing has been deployed yet'))));

@@ -83,5 +83,33 @@ console.log(`  console: ${BASE}\n`);
   ok('il contatore dei target corrisponde al server', text.includes(String(tg.total)), `server=${tg.total}`);
 }
 
+/* ---- an action's outcome, not its last poll ---------------------------- */
+/* hawkBit's action.status is the LAST entry, so a deployment that finished and
+   was polled again reads "retrieved" for good. The dashboard's whole job is to
+   answer "did it work", so it asks the status history and shows the outcome. */
+{
+  const { get } = await mod('api.js');
+  const { root } = await renderView('dash');
+  await settle(6000);
+  const acts = await get('/targets?limit=1');
+  const dev = acts.content[0] && acts.content[0].controllerId;
+  const last = dev && (await get(`/targets/${dev}/actions?limit=1&sort=id:DESC`)).content[0];
+  if (last) {
+    const hist = await get(`/targets/${dev}/actions/${last.id}/status?limit=50&sort=id:DESC`);
+    const term = (hist.content || []).find(x =>
+      ['finished', 'error', 'canceled', 'cancel_rejected'].includes(String(x.type).toLowerCase()));
+    const shown = root.findAll('pill').map(p => p.textContent.trim());
+    if (last.active === false && !['finished', 'error', 'canceled'].includes(last.status) && term) {
+      ok(`lultima azione mostra lesito (${term.type}), non "${last.status}"`,
+         shown.some(t => t.includes(String(term.type).toLowerCase())), shown.join(' | '));
+      ok('e non mostra piu lo stato intermedio come se fosse in corso',
+         !shown.some(t => t === last.status), shown.join(' | '));
+    } else {
+      ok(`lultima azione mostra il suo stato (${last.status})`,
+         shown.some(t => t.includes(last.status)), shown.join(' | '));
+    }
+  }
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);

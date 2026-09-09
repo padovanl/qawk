@@ -1,4 +1,5 @@
 import { start } from './auth.js';
+import { enc, get, limited } from './api.js';
 import { h, icon } from './dom.js';
 import { download } from './util.js';
 
@@ -51,14 +52,38 @@ const ACT_ICON = { start: 'play', pause: 'pause', resume: 'play',
  * last word was not an outcome says as much rather than looking stuck.
  */
 const TERMINAL = new Set(['finished', 'error', 'canceled', 'cancel_rejected']);
-function actionPill(a) {
+
+function actionPill(a, targetId) {
   const st = String(a.status || '').toLowerCase();
   if (a.active !== false) return pill(st, ACTION_PILL[st]);
   if (TERMINAL.has(st)) return pill(st, ACTION_PILL[st]);
+
   const p = pill(st, 'mute');
   p.title = `the action is closed; "${st}" is only the last thing the device `
           + 'reported about it, which can arrive after the closing feedback';
-  p.append(h('span', { style: 'opacity:.7;margin-left:5px' }, '\u00b7 closed'));
+  p.append(h('span.faint', { style: 'margin-left:5px' }, '\u00b7 closed'));
+
+  /* HOW IT ENDED IS NOT IN THE ACTION. There is no detailStatus and no result
+     field on this hawkBit: the outcome only exists as an entry in the status
+     history. So for a closed action whose last word was not an outcome, ask --
+     one request, through the same concurrency gate as everything else -- and
+     say what it actually was. */
+  if (targetId) {
+    limited(() => get(`/targets/${enc(targetId)}/actions/${a.id}/status`
+                      + '?limit=50&sort=id:DESC'))
+      .then(r => {
+        const hit = (r.content || [])
+          .find(x => TERMINAL.has(String(x.type).toLowerCase()));
+        if (!hit) return;
+        const real = String(hit.type).toLowerCase();
+        p.className = 'pill ' + (ACTION_PILL[real] || 'mute');
+        p.replaceChildren(real);
+        p.title = `the device reported "${real}". hawkBit still shows "${st}" `
+                + 'because it keeps the LAST status entry, and the device polled '
+                + 'again after closing the action';
+      })
+      .catch(() => { /* leave the honest "closed": we simply could not ask */ });
+  }
   return p;
 }
 
