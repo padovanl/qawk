@@ -3,6 +3,7 @@ import { TARGET_PILL, pill } from '../badges.js';
 import { ask, modal, toast } from '../chrome.js';
 import { T_COLS, attrCache, attrsOf, cols, columnsDialog, headsFor } from '../columns.js';
 import { $, h, icon } from '../dom.js';
+import { fiqlEditor } from '../fiql.js';
 import { noteTargets } from '../notices.js';
 import { VIEWS, debounceRender, drawNav, render } from '../router.js';
 import { exportCsv, filterRow, fiqlOf, pagedPath, pager, pg, tableOf } from '../table.js';
@@ -119,12 +120,17 @@ async function bulkTag(ids) {
 VIEWS.targets = {
   title: 'Targets',
   bar: () => [
-    h('div.search',
-      h('input', {
-        type: 'text', value: S.q,
-        placeholder: 'name, id, or FIQL — attribute.device_type==neo-intel',
-        oninput: e => { S.q = e.target.value; debounceRender(); },
-      }), h('kbd', '/')),
+    // The toolbar box takes free text OR a FIQL query, so it is the editor in
+    // its compact form: completions and a verdict, without the legend and the
+    // status line there is no room for up here.
+    (() => {
+      const ed = fiqlEditor({
+        entity: 'targets', value: S.q, compact: true,
+        placeholder: 'name, id, or a query — attribute.device_type==neo-intel',
+        onChange: v => { S.q = v; debounceRender(); },
+      });
+      return h('div.search.search-fq', ed, h('kbd', '/'));
+    })(),
     h('div.vsep'),
     h('button.btn.sm', { onclick: () => columnsDialog('targets') }, icon('columns', 14), 'columns'),
     h('button.btn.sm', { onclick: () => exportCsv('targets.csv') }, icon('save', 14), 'export'),

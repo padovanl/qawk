@@ -312,7 +312,9 @@ function fiqlEditor(opts = {}) {
   });
   const status = h('div.fq-status');
   const list = h('div.fq-list.hidden');
-  const box = h('div.fq', h('div.fq-field', icon('filter', 14), inp), list, status);
+  const box = h('div.fq' + (opts.compact ? '.compact' : ''),
+    h('div.fq-field', icon('filter', 14), inp),
+    list, opts.compact ? null : status);
   let items = [], sel = -1, timer = null;
 
   Object.defineProperty(box, 'value', {
@@ -326,7 +328,11 @@ function fiqlEditor(opts = {}) {
     box.classList.toggle('bad', !r.ok);
     box.classList.toggle('warn', !!r.ok && !!r.warn);
     box.classList.toggle('good', !!r.ok && !r.warn && !r.empty && !!inp.value.trim());
-    if (!r.ok) {
+    if (opts.compact) {
+      // no room for a sentence in a toolbar: the field's own colour says it,
+      // and the reason is on hover
+      box.title = r.ok ? (r.warn || '') : r.msg;
+    } else if (!r.ok) {
       status.replaceChildren(h('span.fq-bad', icon('x', 12), r.msg));
     } else if (r.empty) {
       status.replaceChildren(h('span.faint', 'empty matches every ' + entity.replace(/s$/, '')));
@@ -340,6 +346,25 @@ function fiqlEditor(opts = {}) {
   }
 
   function close() { list.classList.add('hidden'); sel = -1; }
+
+  /* THE LIST IS ANCHORED TO THE VIEWPORT, not to the field.
+     Inside a <dialog> an absolutely positioned list is laid out in the dialog's
+     own scrolling box: it stretches it, pushes the buttons off the bottom, or
+     gets clipped -- which is what made this unusable in the Save filter and
+     Create rollout dialogs. Fixed positioning takes it out of that box; the
+     coordinates are recomputed every time it opens, and it flips above the
+     field when there is more room up there. */
+  function place() {
+    const r = box.querySelector('.fq-field').getBoundingClientRect();
+    const below = window.innerHeight - r.bottom - 12;
+    const above = r.top - 12;
+    const up = below < 180 && above > below;
+    list.style.left = r.left + 'px';
+    list.style.width = r.width + 'px';
+    list.style.maxHeight = Math.max(120, Math.min(260, up ? above : below)) + 'px';
+    if (up) { list.style.top = ''; list.style.bottom = (window.innerHeight - r.top + 6) + 'px'; }
+    else { list.style.bottom = ''; list.style.top = (r.bottom + 6) + 'px'; }
+  }
   function accept(it) {
     const caret = inp.selectionStart;
     const before = inp.value.slice(0, caret);
@@ -364,6 +389,7 @@ function fiqlEditor(opts = {}) {
     } catch (_) { items = []; }
     sel = items.length ? 0 : -1;
     draw();
+    if (items.length) place();
   }
 
   inp.oninput = () => { verdict(); clearTimeout(timer); timer = setTimeout(show, 90); };
@@ -382,7 +408,7 @@ function fiqlEditor(opts = {}) {
   };
 
   // a row of the operators, because knowing they exist is most of the problem
-  if (opts.legend !== false) {
+  if (opts.legend !== false && !opts.compact) {
     box.append(h('div.fq-legend',
       ...JOIN.concat(OPS).map(o => h('button.chip', {
         type: 'button', title: o.d,

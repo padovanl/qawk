@@ -1,6 +1,7 @@
 import { S, distributionSets, enc, fiql, get, limited, post } from '../api.js';
 import { ask, fail, modal, toast } from '../chrome.js';
 import { $, h, icon } from '../dom.js';
+import { fiqlEditor } from '../fiql.js';
 import { dtInput, dtMs, dtQuick, toggle } from '../inputs.js';
 import { watchAction } from '../notices.js';
 import { render } from '../router.js';
@@ -123,7 +124,14 @@ async function assignDialog(targetId, presetDs, explicitIds) {
     h('option', { value: 'fiql' }, 'by query (FIQL)'));
   const one = h('input', { type: 'text', value: targetId || '', placeholder: 'controllerId' });
   const typeSel = h('select', h('option', { value: '' }, 'loading…'));
-  const fq = h('input', { type: 'text', placeholder: 'attribute.slot==B' });
+  // The same editor as the filter and rollout dialogs: aiming a release at the
+  // wrong machines is the expensive mistake here, so the field knows the
+  // fields, completes the device attributes from the fleet, and says when the
+  // query does not parse before anything is assigned.
+  const fq = fiqlEditor({
+    entity: 'targets', placeholder: 'attribute.device_type==neo-intel',
+    onChange: () => { if (mode.value === 'fiql') recount(); },
+  });
   const count = h('span.faint', '');
   const row = h('div');
 

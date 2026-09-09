@@ -1129,9 +1129,12 @@ dialog.ask .da { display: flex; gap: 8px; justify-content: flex-end; padding: 14
 .fq-count { font-size: 12px; display: flex; align-items: baseline; gap: 5px; }
 .fq-count b { font-size: 15px; font-family: var(--mono); }
 
-/* the completions, anchored under the field */
+/* The completions are anchored to the VIEWPORT, not to the field: inside a
+   dialog an absolutely positioned list is laid out in the dialog's scrolling
+   box, where it stretches it or gets clipped. Coordinates come from
+   place() in fiql.js. */
 .fq-list {
-  position: absolute; top: 42px; left: 0; right: 0; z-index: 30;
+  position: fixed; z-index: 200;
   max-height: 260px; overflow-y: auto;
   background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 10px;
   box-shadow: 0 16px 40px -12px rgba(0,0,0,.5);
@@ -1188,3 +1191,11 @@ dialog.ask .da { display: flex; gap: 8px; justify-content: flex-end; padding: 14
 }
 .legend-row { display: flex; align-items: baseline; gap: 10px; font-size: 12px; color: var(--fg-dim); }
 .legend-row .pill { flex: 0 0 auto; min-width: 96px; justify-content: center; }
+
+/* Compact form, for a toolbar: the field alone. */
+.fq.compact { gap: 0; }
+.fq.compact .fq-field { height: var(--ctl); border-radius: var(--r); }
+.fq.compact .fq-in { font-size: 12px; }
+/* The toolbar search holds the compact editor, which brings its own field. */
+.search-fq { padding: 0; border: 0; background: none; gap: 6px; }
+.search-fq .fq { flex: 1; min-width: 0; }
