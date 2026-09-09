@@ -3,6 +3,7 @@ import { start } from '../auth.js';
 import { ACT_ICON, TARGET_PILL, pill } from '../badges.js';
 import { ask, drawer, fail, modal, toast } from '../chrome.js';
 import { $, h, icon, skeleton } from '../dom.js';
+import { fiqlEditor } from '../fiql.js';
 import { dtInput, dtMs, dtQuick, numInput } from '../inputs.js';
 import { VIEWS, render } from '../router.js';
 import { filterRow, fiqlOf, pagedPath, pager, pg, tableOf } from '../table.js';
@@ -137,7 +138,29 @@ async function newRolloutDialog(presetQuery) {
   const desc = h('input', { type: 'text' });
   const ds = h('select', sets.content.filter(d => d.complete)
     .map(d => h('option', { value: d.id }, `${d.name} ${d.version} · ${d.type}`)));
-  const q = h('input', { type: 'text', value: presetQuery || 'attribute.device_type==neo-intel' });
+  const preview = h('div.fq-count', h('span.faint', '—'));
+  const check = async () => {
+    const v = q.value.trim();
+    if (!v) { preview.replaceChildren(h('span.faint', 'a rollout needs a query to aim at')); return; }
+    preview.replaceChildren(h('span.faint', h('span.spin'), ' counting…'));
+    try {
+      const r = await get('/targets?limit=1&q=' + fiql(v));
+      preview.replaceChildren(h('b', String(r.total)),
+        h('span.faint', ` target${r.total === 1 ? '' : 's'} would be rolled out to`));
+    } catch (e) {
+      preview.replaceChildren(h('span.fq-bad', 'hawkBit refused this query: ' + e.message));
+    }
+  };
+
+  let qTimer = null;
+  const q = fiqlEditor({
+    entity: 'targets', value: presetQuery || '',
+    onChange: (_, verdict) => {
+      clearTimeout(qTimer);
+      if (!verdict.ok) { preview.replaceChildren(h('span.faint', 'fix the query to see the count')); return; }
+      qTimer = setTimeout(check, 350);
+    },
+  });
   const groupsBox = numInput(3, 1, 50), groups = groupsBox.input;
   const errThBox = numInput(10, 0, 100, 5), errTh = errThBox.input;
   const okThBox = numInput(100, 0, 100, 5), okTh = okThBox.input;
@@ -155,12 +178,7 @@ async function newRolloutDialog(presetQuery) {
     startAt.disabled = startType.value !== 'scheduled';
     if (startAt.disabled) startAt.value = '';
   });
-  const preview = h('span.faint', '—');
-  const check = async () => {
-    try { preview.textContent = `${(await get('/targets?limit=1&q=' + fiql(q.value.trim()))).total} target(s) match`; }
-    catch (e) { preview.textContent = 'invalid query: ' + e.message; }
-  };
-  q.addEventListener('change', check); q.addEventListener('input', check); check();
+
 
   // Shortcut for the query almost every fleet rollout uses.
   const rollTypes = h('div.wrap');
@@ -171,7 +189,7 @@ async function newRolloutDialog(presetQuery) {
   modal('Create rollout', [
     h('label.f', 'Name', name), h('label.f', 'Description', desc),
     h('label.f', 'Distribution set', ds),
-    h('label.f', 'Target filter (FIQL)', q), preview, rollTypes,
+    h('label.f', 'Target filter', q), preview, rollTypes,
     h('label.f', 'Group count', groupsBox),
     h('label.f', 'Action type', actType),
     h('label.f', 'Start type', startType),

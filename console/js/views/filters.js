@@ -1,6 +1,7 @@
 import { S, del, distributionSets, fiql, get, post, put } from '../api.js';
 import { ask, fail, modal, toast } from '../chrome.js';
 import { $, h, icon } from '../dom.js';
+import { check as fiqlCheck, fiqlEditor } from '../fiql.js';
 import { VIEWS, go, render } from '../router.js';
 import { tableOf } from '../table.js';
 
@@ -36,17 +37,40 @@ VIEWS.filters = {
 
 async function saveFilterDialog(query, existing) {
   const name = h('input', { type: 'text', value: existing ? existing.name : '' });
-  const q = h('input', { type: 'text', value: (existing ? existing.query : query) || 'attribute.device_type==neo-intel' });
-  const preview = h('span.faint', '—');
-  const check = async () => {
-    try { preview.textContent = `${(await get('/targets?limit=1&q=' + fiql(q.value.trim()))).total} target(s) match right now`; }
-    catch (e) { preview.textContent = 'invalid: ' + e.message; }
+  const preview = h('div.fq-count', h('span.faint', '—'));
+  let timer = null;
+  // The count is what tells you the query means what you think. It is only
+  // worth asking for once the parser is happy, and not on every keystroke.
+  const count = async () => {
+    const v = q.value.trim();
+    if (!v) { preview.replaceChildren(h('span.faint', 'every target matches')); return; }
+    preview.replaceChildren(h('span.faint', h('span.spin'), ' counting…'));
+    try {
+      const r = await get('/targets?limit=1&q=' + fiql(v));
+      preview.replaceChildren(h('b', String(r.total)),
+        h('span.faint', ` target${r.total === 1 ? '' : 's'} match right now`));
+    } catch (e) {
+      preview.replaceChildren(h('span.fq-bad', 'hawkBit refused this query: ' + e.message));
+    }
   };
-  q.addEventListener('change', check); check();
+  const q = fiqlEditor({
+    entity: 'targets',
+    value: (existing ? existing.query : query) || '',
+    onChange: (_, verdict) => {
+      clearTimeout(timer);
+      if (!verdict.ok) { preview.replaceChildren(h('span.faint', 'fix the query to see the count')); return; }
+      timer = setTimeout(count, 350);
+    },
+  });
+  count();
   modal(existing ? 'Update filter' : 'Save filter as', [
-    h('label.f', 'Name', name), h('label.f', 'Query (FIQL)', q), preview,
+    h('label.f', 'Name', name),
+    h('label.f', 'Query', q),
+    preview,
   ], async () => {
     if (!name.value.trim()) throw new Error('a name is required');
+    const verdict = fiqlCheck(q.value, 'targets');
+    if (!verdict.ok) throw new Error(verdict.msg);
     const b = { name: name.value.trim(), query: q.value.trim() };
     if (existing) await put('/targetfilters/' + existing.id, b);
     else await post('/targetfilters', b);

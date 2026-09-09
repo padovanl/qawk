@@ -1098,3 +1098,59 @@ dialog.ask .dc p { margin: 0 0 6px; line-height: 1.5; }
 dialog.ask .dc p:first-child { color: var(--fg); font-family: var(--mono); font-size: 12.5px;
                                word-break: break-word; }
 dialog.ask .da { display: flex; gap: 8px; justify-content: flex-end; padding: 14px 20px 18px; }
+
+/* ------------------------------------------------------------ fiql editor */
+/* A query language typed into a bare box is a guessing game: hawkBit answers
+   an invalid field with a 400 and no hint as to which one. This says what it
+   thinks of the query while it is being written, and offers what can come
+   next. */
+.fq { position: relative; display: flex; flex-direction: column; gap: 7px; }
+.fq-field {
+  display: flex; align-items: center; gap: 8px;
+  height: 36px; padding: 0 11px; border-radius: 9px;
+  background: var(--bg); border: 1px solid var(--line);
+  transition: border-color .13s, box-shadow .13s;
+}
+.fq-field .ico { opacity: .4; flex: 0 0 auto; }
+.fq-field:focus-within { border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+.fq.bad .fq-field { border-color: color-mix(in srgb, var(--err) 65%, transparent); }
+.fq.bad .fq-field:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--err) 16%, transparent); }
+.fq.good .fq-field .ico { opacity: 1; color: var(--ok); }
+.fq-in {
+  flex: 1; min-width: 0; height: auto; padding: 0; border: 0; background: transparent;
+  font-family: var(--mono); font-size: 12.5px; color: var(--fg);
+}
+.fq-in:focus { outline: none; box-shadow: none; }
+.fq-status { font-size: 12px; min-height: 16px; }
+.fq-ok, .fq-bad { display: inline-flex; align-items: center; gap: 5px; }
+.fq-ok { color: var(--ok); }
+.fq-bad { color: var(--err); }
+.fq-count { font-size: 12px; display: flex; align-items: baseline; gap: 5px; }
+.fq-count b { font-size: 15px; font-family: var(--mono); }
+
+/* the completions, anchored under the field */
+.fq-list {
+  position: absolute; top: 42px; left: 0; right: 0; z-index: 30;
+  max-height: 260px; overflow-y: auto;
+  background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 10px;
+  box-shadow: 0 16px 40px -12px rgba(0,0,0,.5);
+  padding: 4px;
+}
+.fq-item {
+  display: flex; align-items: baseline; gap: 9px; padding: 6px 9px;
+  border-radius: 7px; cursor: pointer; font-size: 12px;
+}
+.fq-item .t { font-family: var(--mono); color: var(--fg); }
+.fq-item .hh { flex: 1; color: var(--fg-faint); font-size: 11.5px;
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fq-item .k { margin-left: auto; font-size: 10px; letter-spacing: .4px;
+              text-transform: uppercase; color: var(--fg-faint); }
+.fq-item.on, .fq-item:hover { background: var(--bg-3); }
+.fq-item.on .t { color: var(--accent-2); }
+
+.fq-legend { display: flex; flex-wrap: wrap; gap: 5px; }
+.fq-legend .chip { font-family: var(--mono); height: 21px; padding: 0 8px; font-size: 11px; }
+.fq-warn { display: inline-flex; align-items: flex-start; gap: 5px; color: var(--warn); }
+.fq.warn .fq-field { border-color: color-mix(in srgb, var(--warn) 55%, transparent); }
+.fq.warn .fq-field .ico { opacity: 1; color: var(--warn); }

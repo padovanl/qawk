@@ -128,5 +128,52 @@ fz.input.files = [{ name: 'hello-1.1.3.swu', size: 622000000 }];
 fz.input.onchange();
 ok('mostra il file scelto', fz.classList.contains('has') && fz.textContent.includes('hello-1.1.3.swu'));
 
+/* --- 6. the FIQL parser ------------------------------------------------ */
+const { check, tokenize, contextAt } = await import(JS + 'fiql.js');
+const good = [
+  'name==*neo*', 'name!=x', 'id=gt=0', 'updatestatus==in_sync',
+  'updatestatus=in=(in_sync,error)', 'updatestatus=out=(error)',
+  'updatestatus==in_sync;name==*e*', 'updatestatus==in_sync,updatestatus==error',
+  '(updatestatus==in_sync,updatestatus==error);name==*e*',
+  'attribute.device_type==neo-intel', 'lastcontrollerrequestat=gt=1700000000000',
+  'installedds.name==hello-full', 'name=="with spaces"', '',
+  'name=gt=x',              // hawkBit confronta anche le stringhe: verificato sul server
+];
+const bad = [
+  ['nonesuch==x', 'campo inesistente'],
+  ['updatestatus==nonsense', 'valore fuori enum'],
+  ['name', 'manca operatore'],
+  ['name==', 'manca valore'],
+  ['(name==a', 'parentesi aperta'],
+  ['name==a;', 'finisce con ;'],
+  ['name==a b==c', 'due condizioni senza giunzione'],
+  ['attribute.==x', 'attributo senza chiave'],
+  ['name=="unterminated', 'virgoletta aperta'],
+];
+let pOk = 0;
+for (const q of good) if (check(q, 'targets').ok) pOk++;
+   else console.log('       ^ rifiutata a torto:', JSON.stringify(q), '->', check(q, 'targets').msg);
+ok('accetta le query valide', pOk === good.length, `${pOk}/${good.length}`);
+let nOk = 0;
+for (const [q, why] of bad) {
+  const r = check(q, 'targets');
+  if (!r.ok) nOk++; else console.log('       ^ accettata a torto:', JSON.stringify(q), '(' + why + ')');
+}
+ok('respinge le query rotte', nOk === bad.length, `${nOk}/${bad.length}`);
+const w = check('id==abc', 'targets');
+ok('un id non numerico avverte ma non blocca', w.ok && !!w.warn, w.warn || '(nessun avviso)');
+ok('lerrore indica la posizione', check('name==a;nonesuch==b', 'targets').at === 8,
+   String(check('name==a;nonesuch==b', 'targets').at));
+ok('lerrore suggerisce il campo vicino', /did you mean name/.test(check('nam==a', 'targets').msg || ''),
+   check('nam==a', 'targets').msg);
+ok('il tokenizer tiene le virgolette', tokenize('name=="a;b"').length === 3);
+ok('a inizio riga si completano i campi', contextAt('', 0).want === 'field');
+// mentre il campo si sta ancora scrivendo si completano i campi; l'operatore
+// arriva quando il campo e' chiuso
+ok('mentre si scrive il campo si completano i campi', contextAt('name', 4).want === 'field');
+ok('a campo chiuso si completa loperatore', contextAt('name ', 5).want === 'op');
+ok('dopo un operatore si completa il valore', contextAt('updatestatus==', 14).want === 'value');
+ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 'join');
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);
