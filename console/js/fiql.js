@@ -306,12 +306,19 @@ async function suggestions(text, caret, entity) {
  * whatever the caller wants to say about the result (usually a live count). */
 function fiqlEditor(opts = {}) {
   const entity = opts.entity || 'targets';
+  // Rebuilt on every render, so remember who was typing and where.
+  const key = opts.key || (opts.entity + (opts.compact ? ':compact' : ''));
+  const live = document.activeElement;
+  const keep = !!(live && live.dataset && live.dataset.fq === key);
+  const caret = keep ? live.selectionStart : null;
+
   const inp = h('input.fq-in', {
     type: 'text', value: opts.value || '', spellcheck: 'false',
     autocomplete: 'off', placeholder: opts.placeholder || 'e.g. attribute.device_type==neo-intel',
   });
   const status = h('div.fq-status');
   const list = h('div.fq-list.hidden');
+  inp.dataset.fq = key;
   const box = h('div.fq' + (opts.compact ? '.compact' : ''),
     h('div.fq-field', icon('filter', 14), inp),
     list, opts.compact ? null : status);
@@ -323,7 +330,12 @@ function fiqlEditor(opts = {}) {
   });
   box.input = inp;
 
-  function verdict() {
+  /* silent: the verdict computed while the field is being BUILT must not call
+     onChange. In the Targets toolbar that callback re-renders the view, which
+     rebuilds this field, which computes its verdict again -- a render loop
+     every 220ms that made the page unusable. onChange means "someone typed",
+     and nobody has typed at construction time. */
+  function verdict(silent) {
     const r = check(inp.value, entity);
     box.classList.toggle('bad', !r.ok);
     box.classList.toggle('warn', !!r.ok && !!r.warn);
@@ -341,7 +353,7 @@ function fiqlEditor(opts = {}) {
     } else {
       status.replaceChildren(h('span.fq-ok', icon('check', 12), 'valid'));
     }
-    if (opts.onChange) opts.onChange(inp.value, r);
+    if (!silent && opts.onChange) opts.onChange(inp.value, r);
     return r;
   }
 
@@ -421,7 +433,12 @@ function fiqlEditor(opts = {}) {
         },
       }, o.o))));
   }
-  verdict();
+  verdict(true);
+  if (keep) requestAnimationFrame(() => {
+    if (!inp.isConnected) return;
+    inp.focus();
+    try { inp.setSelectionRange(caret, caret); } catch (_) {}
+  });
   return box;
 }
 

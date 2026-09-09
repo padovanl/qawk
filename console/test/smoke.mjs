@@ -175,5 +175,24 @@ ok('a campo chiuso si completa loperatore', contextAt('name ', 5).want === 'op')
 ok('dopo un operatore si completa il valore', contextAt('updatestatus==', 14).want === 'value');
 ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 'join');
 
+/* --- 7. the query editor must not report a change nobody made ---------- */
+/* This is a regression test for a render loop: the Targets toolbar passes an
+   onChange that re-renders the view, so an editor that fires onChange while it
+   is being built rebuilds itself forever -- the page glitched at 220ms and was
+   unusable. */
+{
+  const { fiqlEditor } = await import(JS + 'fiql.js');
+  let fired = 0;
+  const ed = fiqlEditor({ entity: 'targets', value: 'name==*neo*', compact: true,
+                          onChange: () => fired++ });
+  ok('costruire leditor non chiama onChange', fired === 0, `chiamate: ${fired}`);
+  ok('leditor porta comunque il valore iniziale', ed.value === 'name==*neo*', ed.value);
+  // ...but typing must
+  const inp = ed.find('fq-in') || ed.children[0].children[1];
+  inp.value = 'name==*x*';
+  inp.oninput();
+  ok('scrivere invece lo chiama', fired === 1, `chiamate: ${fired}`);
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);

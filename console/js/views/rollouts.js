@@ -161,6 +161,7 @@ async function newRolloutDialog(presetQuery) {
       qTimer = setTimeout(check, 350);
     },
   });
+  check();     // the editor no longer fires onChange while it is being built
   const groupsBox = numInput(3, 1, 50), groups = groupsBox.input;
   const errThBox = numInput(10, 0, 100, 5), errTh = errThBox.input;
   const okThBox = numInput(100, 0, 100, 5), okTh = okThBox.input;
