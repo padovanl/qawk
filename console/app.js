@@ -469,9 +469,12 @@ const M_COLS = {
               deltaBase(m.id).then(v => {
                 if (!v) { c.textContent = '—'; c.title = 'not a delta package'; return; }
                 if (v === 'the other slot') {
-                  c.className = 'faint nowrap'; c.textContent = 'any';
-                  c.title = 'compares against the slot in use: it works from any version, ' +
-                            'only the saving changes';
+                  c.className = 'faint nowrap'; c.textContent = 'no base needed';
+                  c.title = 'It rebuilds the image chunk by chunk against whatever is in the ' +
+                            'other slot, so it installs correctly from any version. What ' +
+                            'changes is the saving: the further apart the two images are, the ' +
+                            'more is downloaded, and from something very different it can move ' +
+                            'MORE than the full package would.';
                 } else {
                   c.className = 'pill amber'; c.textContent = 'needs ' + v;
                   c.title = 'fails unless the device is already on ' + v;
@@ -1222,7 +1225,7 @@ const baseCell = id => {
   deltaBase(id).then(v => {
     c.textContent = !v ? 'not a delta'
       : v === 'the other slot'
-        ? 'any version — compares against the slot in use, only the saving changes'
+        ? 'none — rebuilt against whatever is in the other slot; only the saving varies'
         : `only from ${v} — it fails on a device running anything else`;
   });
   return c;
@@ -1654,7 +1657,15 @@ VIEWS.cfg = {
       h('option', { value: v, selected: v === refreshMs() }, l)));
     refresh.onchange = e => { setRefreshMs(Number(e.target.value)); toast('Saved', 'refresh ' + e.target.selectedOptions[0].text, 'ok'); };
 
+    const swatches = h('div.themes', THEMES.map(([v, l]) => {
+      const chip = h('button.theme' + (v === theme() ? '.on' : ''),
+        { 'data-t': v === 'auto' ? '' : v, title: l, onclick: () => { applyTheme(v); render(); } },
+        h('span.sw', h('i.a'), h('i.b'), h('i.c')), h('span.tn', l));
+      return chip;
+    }));
+
     root.replaceChildren(h('div.stack',
+      h('div.panel', h('h3', 'Theme'), h('div.body', swatches)),
       h('div.panel', h('h3', 'This console'), h('div.body.flex',
         h('div', { style: 'flex:0 0 320px' }, h('div.mono', 'auto-refresh'),
           h('div.faint', { style: 'font-size:11px' },
@@ -1696,6 +1707,31 @@ VIEWS.about = {
   },
 };
 
+/* ---------------------------------------------------------------- themes */
+/* Every theme is a palette in style.css, nothing more: the rest of the sheet is
+ * derived from those variables with color-mix, so adding one is adding twelve
+ * colours and never a special case. 'auto' sets no attribute and lets the
+ * prefers-color-scheme media query decide. */
+const THEMES = [
+  ['auto', 'auto (system)'], ['dark', 'dark'], ['light', 'light'],
+  ['midnight', 'midnight'], ['ocean', 'ocean'], ['forest', 'forest'],
+  ['nord', 'nord'], ['dracula', 'dracula'], ['gruvbox', 'gruvbox'],
+  ['solarized-dark', 'solarized dark'], ['solarized-light', 'solarized light'],
+  ['amber', 'amber'], ['mono', 'mono'], ['paper', 'paper'],
+];
+function theme() {
+  const v = localStorage.getItem('hb-theme');
+  return THEMES.some(([k]) => k === v) ? v : 'auto';
+}
+function applyTheme(v) {
+  if (v === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = v;
+  try { localStorage.setItem('hb-theme', v); } catch (_) {}
+  const sel = $('#theme');
+  if (sel) sel.value = v;
+}
+applyTheme(theme());
+
 /* ---------------------------------------------------------------- shell */
 const NAV = [
   { id: 'dash', label: 'Dashboard', ico: 'dash' },
@@ -1721,9 +1757,9 @@ function setCollapsed(v) {
 
 function drawNav() {
   $('#nav').replaceChildren(...NAV.map(n => n.sep
-    ? h('div.sep', n.sep)
+    ? h('div.sep', h('span.lbl', n.sep))
     : h('button', { class: S.view === n.id ? 'on' : '', title: n.label, onclick: () => go(n.id) },
-        icon(n.ico), n.label,
+        icon(n.ico), h('span.lbl', n.label),
         n.count && S.counts[n.count] !== undefined
           ? h('span.ct', { title: S.counts[n.count] + ' total' }, compact(S.counts[n.count]))
           : null)));
@@ -1918,7 +1954,10 @@ $('#login-form').addEventListener('submit', async e => {
 });
 
 $('#refresh').replaceChildren(icon('refresh', 14), 'refresh');
-$('#logout').replaceChildren(icon('exit', 14), 'exit');
+$('#logout').replaceChildren(icon('exit', 14), h('span.lbl', 'exit'));
+$('#theme').replaceChildren(...THEMES.map(([v, l]) =>
+  h('option', { value: v, selected: v === theme() }, l)));
+$('#theme').onchange = e => applyTheme(e.target.value);
 $('#navtoggle').onclick = () => setCollapsed(!$('#app').classList.contains('collapsed'));
 setCollapsed(localStorage.getItem('hb-nav') === '1');
 $('#refresh').onclick = render;
