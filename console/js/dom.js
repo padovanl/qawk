@@ -1,0 +1,86 @@
+/* ------------------------------------------------------------------ utils */
+const $ = (s, r = document) => r.querySelector(s);
+
+function h(tag, attrs, ...kids) {
+  const [name, ...cls] = tag.split('.');
+  const e = document.createElement(name || 'div');
+  if (cls.length) e.className = cls.join(' ');
+  if (attrs && (attrs.nodeType || typeof attrs !== 'object' || Array.isArray(attrs))) {
+    kids.unshift(attrs);
+  } else if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === 'class') e.className += ' ' + v;
+      else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+      else if (k === 'value') e.value = v;
+      else if (k === 'checked' || k === 'disabled' || k === 'selected') e[k] = !!v;
+      else e.setAttribute(k, v);
+    }
+  }
+  for (const k of kids.flat(9)) {
+    if (k === null || k === undefined || k === false) continue;
+    e.append(k.nodeType ? k : document.createTextNode(String(k)));
+  }
+  return e;
+}
+
+/* ---------------------------------------------------------------- icons */
+/* Inline SVG, stroked in currentColor: no icon font, no sprite sheet, nothing
+ * to fetch. They are there to make a row scannable, not decorative -- one
+ * stroke weight, one size, no fills. */
+const ICONS = {
+  dash:    'M3 3h7v7H3zM14 3h7v4h-7zM14 11h7v10h-7zM3 14h7v7H3z',
+  target:  'M3 5h18v11H3zM8 20h8M12 16v4',
+  filter:  'M3 5h18l-7 8v6l-4 2v-8z',
+  tag:     'M3 12V4h8l9 9-8 8-9-9zM7.5 7.5h.01',
+  rollout: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17l9 5 9-5',
+  package: 'M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8',
+  module:  'M9 3h6v3h3v6h3v6h-6v-3H9v-3H6V9H3V3z',
+  cfg:     'M4 6h16M4 12h16M4 18h16M9 4v4M15 10v4M7 16v4',
+  info:    'M12 3a9 9 0 100 18 9 9 0 000-18zM12 11v6M12 7.5h.01',
+  chip:    'M7 7h10v10H7zM4 10h3M4 14h3M17 10h3M17 14h3M10 4v3M14 4v3M10 17v3M14 17v3',
+  box:     'M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8',
+  plus:    'M12 5v14M5 12h14',
+  columns: 'M3 4h18v16H3zM9 4v16M15 4v16',
+  deploy:  'M12 19V5M12 5l-6 6M12 5l6 6',
+  refresh: 'M20 11a8 8 0 10-2.3 5.7M20 5v6h-6',
+  user:    'M4 21v-1.6A5.4 5.4 0 019.4 14h5.2a5.4 5.4 0 015.4 5.4V21M12 3.2a4.1 4.1 0 100 8.2 4.1 4.1 0 000-8.2',
+  lock:    'M5 10.8h14v10.4H5zM8.2 10.8V7a3.8 3.8 0 017.6 0v3.8',
+  eye:     'M2.2 12S6 5.8 12 5.8 21.8 12 21.8 12 18 18.2 12 18.2 2.2 12 2.2 12zM12 9.2a2.8 2.8 0 100 5.6 2.8 2.8 0 000-5.6',
+  eyeoff:  'M3 3l18 18M10 10a2.8 2.8 0 004 4M6.6 6.7C3.8 8.4 2.2 12 2.2 12s3.8 6.2 9.8 6.2c1.8 0 3.4-.5 4.7-1.3M20 15c1.2-1.4 1.8-3 1.8-3S18 5.8 12 5.8c-.7 0-1.3.1-1.9.2',
+  exit:    'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h9',
+  save:    'M5 4h11l3 3v13H5zM8 4v5h7M8 14h8v6H8z',
+  left:    'M14 6l-6 6 6 6',
+  right:   'M10 6l6 6-6 6',
+  trash:   'M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6',
+  check:   'M4 12l5 5L20 6',
+  x:       'M6 6l12 12M18 6L6 18',
+  upload:  'M12 19V7M12 7l-5 5M12 7l5 5M5 21h14',
+  play:    'M7 5l12 7-12 7z',
+  pause:   'M8 5h3v14H8zM13 5h3v14h-3z',
+  next:    'M6 5l9 7-9 7zM17 5h2v14h-2z',
+  edit:    'M4 20h4l10-10-4-4L4 16zM14 6l4 4',
+  add:     'M12 5v14M5 12h14',
+};
+function icon(name, size = 15) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', size); svg.setAttribute('height', size);
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.7');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.classList.add('ico');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', ICONS[name] || ICONS.info);
+  svg.append(path);
+  return svg;
+}
+
+const skeleton = (n = 7) => h('div.skel', Array.from({ length: n }, () => h('i')));
+
+export {
+  $, h, icon, skeleton,
+};

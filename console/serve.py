@@ -48,9 +48,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # server states which build it is serving and the console watches for a change.
 def build_stamp():
     hsh = hashlib.sha256()
-    for name in ("index.html", "app.js", "style.css"):
+    names = ["index.html", "style.css"]
+    for root, _, files in os.walk(os.path.join(HERE, "js")):
+        names += [os.path.relpath(os.path.join(root, f), HERE)
+                  for f in files if f.endswith(".js")]
+    for name in sorted(names):
         try:
             with open(os.path.join(HERE, name), "rb") as fh:
+                hsh.update(name.encode())
                 hsh.update(fh.read())
         except OSError:
             pass
