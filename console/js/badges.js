@@ -106,8 +106,9 @@ function actionPill(a, targetId) {
    in the first place. */
 const PHASE_WORDS = [
   ['assigned',    'live', 'created; the device has not polled yet'],
-  ['downloading', 'live', 'fetching the package, or the chunks it is missing'],
-  ['installing',  'live', 'writing the payload'],
+  ['downloading', 'live', 'fetching the package AND writing it — SWUpdate reports '
+                        + 'nothing in between, so the two cannot be separated'],
+
   ['installed',   'ok',   'an application update is done: it needs no reboot and the '
                         + 'action closes itself within a moment'],
   ['waiting for reboot', 'warn',
@@ -118,8 +119,8 @@ const PHASE_WORDS = [
   ['error',       'err',  'the device reported a failure while the action is still open — '
                         + 'usually it is retrying, or about to give up'],
 ];
-/* A combined set is installed one part at a time, so "downloading" and
-   "installing" gain a "(part 2)" while the second one is under way. */
+/* A combined set is installed one part at a time, so "downloading" gains a
+   "(part 2)" while the second one is under way. */
 const PHASE_NOTE = 'a set that carries both a system and an application is '
                  + 'installed in two parts, one after the other — the phase says which';
 
@@ -154,7 +155,7 @@ const PHASE_NOTE = 'a set that carries both a system and an application is '
    the deployment says "All Chunks Installed", nothing after it counts -- a
    poll arriving later used to drag the row back to "downloading" and leave it
    there through the reboot. */
-const IN_ASSIGNED = 1, IN_DOWNLOAD = 2, IN_INSTALL = 3;
+const IN_ASSIGNED = 1, IN_DOWNLOAD = 2;
 
 function phaseFrom(entries, kind) {
   if (!entries || !entries.length) return null;
@@ -178,11 +179,17 @@ function phaseFrom(entries, kind) {
     // seen. It marks the start of a part.
     if (t === 'running' && /Installing Update Chunk/i.test(m)) { cur = IN_DOWNLOAD; continue; }
     if (t === 'download') { cur = IN_DOWNLOAD; continue; }
-    // These are SWUpdate's own, and they only appear once the bytes are in and
-    // it is writing them: "Installation in progress", then the post-install.
-    if (t === 'running' && /Installation in progress|Update successful|SWUPDATE successful|post-update/i.test(m)) {
-      cur = IN_INSTALL; continue;
-    }
+    // THERE IS NO "INSTALLING" TO SHOW, and pretending otherwise was worse
+    // than not offering it. SWUpdate reports nothing between asking for the
+    // first artifact and finishing the write: measured on two real updates,
+    // the download entry lands at 01:37:18 and "Update successful", "Installed
+    // Chunk" and "All Chunks Installed" all arrive together at 01:37:29. The
+    // eleven seconds in between -- the transfer AND the write -- are silent,
+    // and hawkBit exposes no progress counter to fill them (a status entry
+    // carries a type, messages and a timestamp, nothing else).
+    //
+    // So the transfer phase covers both, and its tooltip says so. Splitting it
+    // would mean guessing which half of the silence we were in.
     if (t === 'retrieved') { cur = Math.max(cur, IN_DOWNLOAD); continue; }
     if (t === 'running' && /Assignment initiated/i.test(m)) cur = Math.max(cur, IN_ASSIGNED);
   }
@@ -214,15 +221,14 @@ function phaseFrom(entries, kind) {
   const part = done > 0 ? ` (part ${done + 1})` : '';
   const why  = done > 0 ? 'a set carrying both a system and an application is installed '
                         + 'in parts, one after the other' : null;
-  if (cur === IN_INSTALL)
-    return { label: 'installing' + part, cls: 'live',
-             why: why || 'the bytes are in and it is writing them' };
+
   if (cur === IN_DOWNLOAD)
     return { label: 'downloading' + part, cls: 'live',
-             why: why || 'fetching the package. SWUpdate says nothing between the last '
-                       + 'byte and the start of writing, so this covers both' };
+             why: (why ? why + '. ' : '')
+                + 'fetching AND writing: SWUpdate reports nothing between asking for the '
+                + 'first artifact and finishing, so these cannot be told apart' };
   if (cur === IN_ASSIGNED) return { label: 'assigned', cls: 'live', why: 'the device has not polled yet' };
-  if (done > 0)            return { label: 'installing' + part,  cls: 'live', why };
+  if (done > 0) return { label: 'downloading' + part, cls: 'live', why };
   return null;
 }
 

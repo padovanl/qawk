@@ -3,9 +3,20 @@ import { $, h, icon } from './dom.js';
 
 /* --------------------------------------------------------------- chrome */
 function toast(title, msg, kind = 'info', ms = 6000) {
-  const t = h('div.toast.' + kind, h('b', title), msg ? h('div.m', msg) : null);
+  /* A cross, because six seconds is either too long for something you have
+     already read or too short for something you have not. The timer also stops
+     while the pointer is over it: a failure worth reading is exactly the one
+     that slides away as you reach for it. */
+  const t = h('div.toast.' + kind,
+    h('button.toast-x', { title: 'dismiss', onclick: () => t.remove() }, '\u00d7'),
+    h('b', title), msg ? h('div.m', msg) : null);
   $('#toasts').append(t);
-  setTimeout(() => t.remove(), ms);
+  let timer = ms ? setTimeout(() => t.remove(), ms) : null;
+  if (timer) {
+    t.addEventListener('pointerenter', () => { clearTimeout(timer); timer = null; });
+    t.addEventListener('pointerleave', () => { timer = setTimeout(() => t.remove(), 1800); });
+  }
+  return t;
 }
 const fail = e => toast('Failed', e.message || String(e), 'err', 12000);
 

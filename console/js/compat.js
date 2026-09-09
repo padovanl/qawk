@@ -32,6 +32,8 @@ const DOC = '/v3/api-docs/Management%20API';
    the source, and kept honest by a test that re-derives it (see
    test/compat.mjs, which fails if the code calls something not listed here). */
 const NEEDED = {
+  // the console watches every deployment, not only its own
+  '/rest/v1/actions': ['get'],
   '/rest/v1/targets': ['get', 'post'],
   '/rest/v1/targets/{targetId}': ['get', 'delete'],
   '/rest/v1/targets/{targetId}/actions': ['get'],

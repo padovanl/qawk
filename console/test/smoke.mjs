@@ -241,7 +241,12 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   // hawkBit notes "Installing Update Chunk Artifacts" and the downloads follow,
   // so at that point the device really is downloading
   ok('primo chunk: sta scaricando', lab(dl1) === 'downloading', lab(dl1));
-  ok('installazione vera dopo i download', lab(inst1) === 'installing', lab(inst1));
+  // THERE IS NO SEPARATE "INSTALLING" TO SEE. Measured on two real updates:
+  // the download entry lands, then eleven seconds of silence, then "Update
+  // successful", "Installed Chunk" and "All Chunks Installed" all arrive in
+  // the same second. The transfer and the write cannot be told apart, so one
+  // label covers both rather than guessing.
+  ok('durante il silenzio resta una fase sola', lab(inst1) === 'downloading', lab(inst1));
   ok('e senza "(part N)" quando ce n e una sola', !/part/.test(lab(dl1)), lab(dl1));
   // "Update successful" arrives after EVERY chunk, so it cannot mean the end
   ok('dopo il primo chunk non dice ancora riavvio', lab(chunk1) !== 'waiting for reboot', lab(chunk1));
@@ -285,6 +290,18 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   // and the Targets legend is built from that same list
   const tsrc = await readFile(JS + 'views/targets.js', 'utf8');
   ok('la legenda dei target usa quella lista', tsrc.includes('PHASE_WORDS'));
+}
+
+/* --- 11. a toast can be dismissed ------------------------------------- */
+{
+  const { toast } = await import(JS + 'chrome.js');
+  const t = toast('Deployed', 'to one device', 'ok');
+  const x = t.find('toast-x');
+  ok('il toast ha la croce', !!x);
+  let removed = false;
+  t.remove = () => { removed = true; };
+  if (x) x.handlers.click();
+  ok('la croce lo chiude', removed);
 }
 
 console.log(`\n  ${pass} ok, ${failed} falliti`);

@@ -69,7 +69,53 @@ function noteTargets(list) {
   else if (fresh.length > 1) toast('New devices', `${fresh.length} registered`, 'info', 12000);
 }
 
+/* EVERY deployment, not only the ones started from this tab.
+ *
+ * S.watched above follows what this browser assigned. During a rollout, or
+ * when someone else is driving, the interesting things happen elsewhere --
+ * and a console that says nothing while the fleet moves is not much of a
+ * console. This watches the server's own action list.
+ *
+ * The first pass only records what is already there: announcing a deployment
+ * that started before the page was opened would be noise, and on a busy server
+ * it would be a wall of it. */
+S.actionsSeen = null;          // id -> active, or null before the first look
+
+async function deploymentsTick() {
+  if (!S.auth) return;
+  let list;
+  try {
+    list = await get('/actions?limit=25&sort=id:DESC');
+  } catch (_) { return; }
+
+  const now = new Map((list.content || []).map(a => [a.id, a]));
+  if (S.actionsSeen === null) {
+    S.actionsSeen = new Map([...now].map(([id, a]) => [id, a.active]));
+    return;
+  }
+
+  for (const [id, a] of now) {
+    const before = S.actionsSeen.get(id);
+    if (before === undefined) {
+      if (a.active) toast('Deployment started', `#${id} · ${a.type || 'update'}`, 'info', 6000);
+    } else if (before === true && a.active === false) {
+      // 'finished' only means it closed; a failure closes too, and the verdict
+      // is the last thing the device said.
+      const bad = ['error', 'canceled', 'cancel_rejected'].includes(String(a.status).toLowerCase());
+      toast(bad ? 'Deployment ' + a.status : 'Deployment finished',
+            `#${id}`, bad ? 'err' : 'ok', bad ? 20000 : 7000);
+    }
+    S.actionsSeen.set(id, a.active);
+  }
+  // keep the map from growing for ever on a long-lived tab
+  if (S.actionsSeen.size > 400) {
+    S.actionsSeen = new Map([...S.actionsSeen].slice(-200));
+  }
+}
+
 setInterval(noticesTick, 10000);
+deploymentsTick();
+setInterval(deploymentsTick, 8000);
 
 /* A tab opened before the last rebuild goes on running the JavaScript it
    already holds: no-store stops the cache, it does not reload a live page.

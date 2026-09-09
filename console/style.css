@@ -334,7 +334,17 @@ dl.kv dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: bre
 }
 .toast.err { border-left-color: var(--err); }
 .toast.ok { border-left-color: var(--ok); }
+.toast { position: relative; padding-right: 30px; }
 .toast b { display: block; margin-bottom: 2px; }
+.toast-x {
+  position: absolute; top: 6px; right: 6px;
+  width: 20px; height: 20px; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--fg-faint); cursor: pointer;
+  font-size: 15px; line-height: 1;
+  opacity: .55; transition: opacity .12s, background .12s, color .12s;
+}
+.toast:hover .toast-x { opacity: 1; }
+.toast-x:hover { background: var(--bg-3); color: var(--fg); }
 .toast .btn { margin-top: 8px; }
 .toast .m { font-size: 12px; color: var(--fg-dim); white-space: pre-wrap; }
 
