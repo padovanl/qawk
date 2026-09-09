@@ -13,22 +13,38 @@
 
 <!-- login ------------------------------------------------------------ -->
 <section id="login">
+  <div class="login-glow" aria-hidden="true"></div>
   <form id="login-form">
     <div class="login-head">
-      <img src="logo.png" alt="QubicaAMF" class="logo-big">
+      <div class="logo-tile"><img src="logo.png" alt="QubicaAMF" class="logo-big"></div>
       <h1>hawkBit console</h1>
-      <p>QubicaAMF · OTA</p>
+      <p class="sub">QubicaAMF · over-the-air updates</p>
     </div>
+
     <label class="f">User
-      <input type="text" id="u" autocomplete="username" value="admin" required>
+      <div class="fld"><span class="fi" id="i-user"></span>
+        <input type="text" id="u" autocomplete="username" value="admin"
+               placeholder="admin" required></div>
     </label>
     <label class="f">Password
-      <input type="password" id="p" autocomplete="current-password" required>
+      <div class="fld"><span class="fi" id="i-lock"></span>
+        <input type="password" id="p" autocomplete="current-password"
+               placeholder="••••••••" required>
+        <button type="button" class="reveal" id="reveal" title="show password"
+                aria-label="show password"></button></div>
     </label>
-    <button class="btn primary" type="submit">Sign in</button>
-    <p id="login-err" class="hidden" style="color:var(--err)"></p>
-    <p>Credentials are held in this tab only and sent straight to hawkBit.
-       Nothing is stored on the server side.</p>
+
+    <button class="btn primary lg" id="signin" type="submit">Sign in</button>
+    <p id="login-err" class="hidden banner-err"></p>
+
+    <div class="login-foot">
+      <p>Credentials are held in this tab only and sent straight to hawkBit.
+         Nothing is stored on the server side.</p>
+      <label class="flex" title="colour theme">
+        <span class="lbl">theme</span>
+        <select id="theme-login"></select>
+      </label>
+    </div>
   </form>
 </section>
 

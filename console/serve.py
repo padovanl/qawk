@@ -32,6 +32,7 @@ Standard library only, on purpose: this repository already depends on python3
 everywhere, and a console for a bench tool should not bring a toolchain with it.
 """
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -41,6 +42,22 @@ import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+# A tab that was opened before the last rebuild keeps running the JavaScript it
+# already has: no-store stops the cache, it does not reload a live page. So the
+# server states which build it is serving and the console watches for a change.
+def build_stamp():
+    hsh = hashlib.sha256()
+    for name in ("index.html", "app.js", "style.css"):
+        try:
+            with open(os.path.join(HERE, name), "rb") as fh:
+                hsh.update(fh.read())
+        except OSError:
+            pass
+    return hsh.hexdigest()[:12]
+
+
+BUILD = build_stamp()
 
 # Hop-by-hop headers belong to one connection and must not be forwarded; passing
 # Transfer-Encoding on in particular produces a body the browser cannot decode.
@@ -65,6 +82,14 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith("/rest/"):
             return self.proxy("GET")
+        if self.path == "/_build":
+            payload = json.dumps({"build": BUILD}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+            return
         if self.path == "/":
             self.path = "/index.html"
         return super().do_GET()

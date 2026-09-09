@@ -425,6 +425,10 @@ const ICONS = {
   columns: 'M3 4h18v16H3zM9 4v16M15 4v16',
   deploy:  'M12 19V5M12 5l-6 6M12 5l6 6',
   refresh: 'M20 11a8 8 0 10-2.3 5.7M20 5v6h-6',
+  user:    'M4 21v-1.6A5.4 5.4 0 019.4 14h5.2a5.4 5.4 0 015.4 5.4V21M12 3.2a4.1 4.1 0 100 8.2 4.1 4.1 0 000-8.2',
+  lock:    'M5 10.8h14v10.4H5zM8.2 10.8V7a3.8 3.8 0 017.6 0v3.8',
+  eye:     'M2.2 12S6 5.8 12 5.8 21.8 12 21.8 12 18 18.2 12 18.2 2.2 12 2.2 12zM12 9.2a2.8 2.8 0 100 5.6 2.8 2.8 0 000-5.6',
+  eyeoff:  'M3 3l18 18M10 10a2.8 2.8 0 004 4M6.6 6.7C3.8 8.4 2.2 12 2.2 12s3.8 6.2 9.8 6.2c1.8 0 3.4-.5 4.7-1.3M20 15c1.2-1.4 1.8-3 1.8-3S18 5.8 12 5.8c-.7 0-1.3.1-1.9.2',
   exit:    'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h9',
   save:    'M5 4h11l3 3v13H5zM8 4v5h7M8 14h8v6H8z',
   left:    'M14 6l-6 6 6 6',
@@ -2341,6 +2345,29 @@ function noteTargets(list) {
 
 setInterval(noticesTick, 10000);
 
+/* A tab opened before the last rebuild goes on running the JavaScript it
+   already holds: no-store stops the cache, it does not reload a live page.
+   The server says which build it is serving, so a stale tab can say so itself
+   instead of letting someone chase a fix that has already shipped. */
+let BUILD = null, buildAnnounced = false;
+async function buildTick() {
+  try {
+    const r = await fetch('_build', { cache: 'no-store' });
+    if (!r.ok) return;
+    const { build } = await r.json();
+    if (!BUILD) { BUILD = build; return; }
+    if (build === BUILD || buildAnnounced) return;
+    buildAnnounced = true;
+    $('#toasts').append(h('div.toast.info.sticky',
+      h('b', 'Console updated'),
+      h('div.m', 'This tab is still running the previous build.'),
+      h('button.btn.sm.primary', { onclick: () => location.reload() },
+        icon('refresh', 13), 'reload')));
+  } catch (_) { /* the page is static: a hiccup here is not worth a noise */ }
+}
+buildTick();
+setInterval(buildTick, 15000);
+
 /* ------------------------------------------------------------ idle logout */
 /* The credentials live in this tab and nowhere else, so closing it is logging
  * out -- but a console left open on a bench is a console anyone walking past
@@ -2673,9 +2700,26 @@ async function start() {
   drawNav(); refreshCounts(); await render(); tick();
 }
 
+/* Sign-in dressing: the field icons, a reveal for the password, and a theme
+   picker here too -- the choice should not have to wait until you are in. */
+$('#i-user').append(icon('user', 15));
+$('#i-lock').append(icon('lock', 15));
+$('#reveal').append(icon('eye', 15));
+$('#reveal').onclick = () => {
+  const p = $('#p'), shown = p.type === 'text';
+  p.type = shown ? 'password' : 'text';
+  $('#reveal').replaceChildren(icon(shown ? 'eye' : 'eyeoff', 15));
+  $('#reveal').title = shown ? 'show password' : 'hide password';
+  p.focus();
+};
+
 $('#login-form').addEventListener('submit', async e => {
   e.preventDefault();
+  const btn = $('#signin');
+  if (btn.disabled) return;                       // no double submit on a slow server
   S.auth = btoa($('#u').value + ':' + $('#p').value); S.user = $('#u').value;
+  btn.disabled = true;
+  btn.replaceChildren(h('span.spin'), 'signing in…');
   try {
     await get('/targets?limit=1');
     sessionStorage.setItem('hb-auth', S.auth); sessionStorage.setItem('hb-user', S.user);
@@ -2683,16 +2727,33 @@ $('#login-form').addEventListener('submit', async e => {
     start();
   } catch (err) {
     S.auth = '';
-    $('#login-err').textContent = err.message;
-    $('#login-err').classList.remove('hidden');
+    // 401 is the ordinary case and deserves plain words; anything else is the
+    // server or the network, and the raw message is the useful thing.
+    const bad = /401|unauthor/i.test(err.message || '');
+    const box = $('#login-err');
+    box.replaceChildren(icon('info', 14),
+      h('span', bad ? 'Wrong user or password.' : err.message));
+    box.classList.remove('hidden');
+    box.classList.remove('banner-err'); void box.offsetWidth;   // replay the shake
+    box.classList.add('banner-err');
+    $('#p').focus(); $('#p').select();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign in';
   }
 });
 
 $('#refresh').replaceChildren(icon('refresh', 14), 'refresh');
 $('#logout').replaceChildren(icon('exit', 14), h('span.lbl', 'exit'));
-$('#theme').replaceChildren(...THEMES.map(([v, l]) =>
-  h('option', { value: v, selected: v === theme() }, l)));
-$('#theme').onchange = e => applyTheme(e.target.value);
+for (const id of ['#theme', '#theme-login']) {
+  $(id).replaceChildren(...THEMES.map(([v, l]) =>
+    h('option', { value: v, selected: v === theme() }, l)));
+  $(id).onchange = e => {
+    applyTheme(e.target.value);
+    // Two pickers for one setting: keep the other honest.
+    for (const o of ['#theme', '#theme-login']) $(o).value = e.target.value;
+  };
+}
 $('#navtoggle').onclick = () => setCollapsed(!$('#app').classList.contains('collapsed'));
 setCollapsed(localStorage.getItem('hb-nav') === '1');
 $('#refresh').onclick = render;

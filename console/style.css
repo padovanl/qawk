@@ -133,6 +133,11 @@ header.bar .grow { flex: 1; }
   background: var(--accent); border-color: var(--accent);
   color: #04211f; font-weight: 600;
 }
+/* The spinner defaults to the accent colour, which is exactly the colour a
+   primary button is filled with. */
+.btn.primary .spin { border-color: color-mix(in srgb, currentColor 35%, transparent);
+                     border-top-color: currentColor; }
+.btn:disabled { opacity: .65; cursor: default; }
 .btn.primary:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); color: #04211f; }
 .btn.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--err) 16%, transparent); color: var(--err); }
 .btn.ghost { color: var(--fg-faint); }
@@ -326,6 +331,7 @@ dl.kv dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: bre
 .toast.err { border-left-color: var(--err); }
 .toast.ok { border-left-color: var(--ok); }
 .toast b { display: block; margin-bottom: 2px; }
+.toast .btn { margin-top: 8px; }
 .toast .m { font-size: 12px; color: var(--fg-dim); white-space: pre-wrap; }
 
 dialog {
@@ -338,10 +344,87 @@ dialog .dc { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 dialog .da { padding: 12px 16px; border-top: 1px solid var(--line);
              display: flex; gap: 8px; justify-content: flex-end; }
 
-#login { display: grid; place-items: center; height: 100vh; }
-#login form { width: 330px; display: flex; flex-direction: column; gap: 12px; }
-#login h1 { margin: 0 0 4px; font-size: 18px; }
+/* The sign-in page is the one screen with nothing to do on it, so it is the
+   one that can afford some air: a card floating on a wash of the theme's own
+   accent, which means it follows every theme instead of being painted once. */
+#login { position: relative; display: grid; place-items: center;
+         min-height: 100vh; padding: 24px; overflow: hidden; }
+.login-glow { position: absolute; inset: -20% -10% auto -10%; height: 70vh; pointer-events: none;
+  background:
+    radial-gradient(46% 60% at 22% 20%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 70%),
+    radial-gradient(40% 55% at 82% 8%, color-mix(in srgb, var(--accent-2) 20%, transparent), transparent 70%);
+  filter: blur(6px);
+}
+#login form {
+  position: relative; width: 352px; display: flex; flex-direction: column; gap: 13px;
+  padding: 30px 28px 22px; border-radius: 16px;
+  background: var(--bg-2); border: 1px solid var(--line);
+  box-shadow: 0 18px 50px -12px rgba(0, 0, 0, .45), 0 2px 6px rgba(0, 0, 0, .18);
+  animation: liftin .28s cubic-bezier(.2, .8, .3, 1);
+}
+@keyframes liftin { from { opacity: 0; transform: translateY(10px); } }
+#login h1 { margin: 0; font-size: 19px; letter-spacing: -.2px; }
 #login p { margin: 0; color: var(--fg-faint); font-size: 12px; }
+#login .sub { letter-spacing: .3px; }
+#login label.f { gap: 6px; }
+
+/* The logo sits in a tile so it reads as a mark rather than a stray picture. */
+.logo-tile {
+  display: grid; place-items: center; width: 76px; height: 76px; border-radius: 20px;
+  background: var(--bg-3); border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 7%, transparent);
+}
+.logo-tile .logo-big { width: 52px; height: auto; margin: 0; }
+
+/* One field shape, shared with the column filters: icon, input, optional
+   trailing button, and an accent ring when it has the caret. */
+.fld {
+  display: flex; align-items: center; gap: 8px;
+  height: 38px; padding: 0 10px; border-radius: 10px;
+  background: var(--bg); border: 1px solid var(--line);
+  transition: border-color .13s, box-shadow .13s, background .13s;
+}
+.fld:hover { border-color: var(--line-2); }
+.fld:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.fld .ico { opacity: .42; flex: 0 0 auto; transition: opacity .13s, color .13s; }
+.fld:focus-within .ico { opacity: 1; color: var(--accent-2); }
+.fld input {
+  flex: 1; min-width: 0; height: auto; padding: 0; font-size: 13px;
+  background: transparent; border: 0; border-radius: 0; color: var(--fg);
+}
+.fld input:focus { outline: none; box-shadow: none; }
+.fld .reveal {
+  display: grid; place-items: center; border: 0; background: transparent;
+  cursor: pointer; color: var(--fg-faint); padding: 4px; border-radius: 6px;
+}
+.fld .reveal:hover { color: var(--fg); background: var(--bg-3); }
+
+#login .btn.lg {
+  height: 40px; font-size: 13px; font-weight: 600; border-radius: 10px;
+  justify-content: center; margin-top: 3px;
+}
+/* A failed sign-in is the one message here, so it gets a shape of its own
+   rather than a line of red text under the button. */
+.banner-err {
+  display: flex; gap: 8px; align-items: flex-start; padding: 9px 11px; border-radius: 9px;
+  background: color-mix(in srgb, var(--err) 13%, var(--bg-2));
+  border: 1px solid color-mix(in srgb, var(--err) 40%, transparent);
+  color: var(--err) !important; font-size: 12px !important;
+  animation: shake .3s;
+}
+@keyframes shake {
+  25% { transform: translateX(-4px); } 75% { transform: translateX(4px); }
+}
+.login-foot {
+  display: flex; align-items: flex-end; gap: 12px;
+  margin-top: 4px; padding-top: 13px; border-top: 1px solid var(--line);
+}
+.login-foot p { flex: 1; line-height: 1.45; }
+.login-foot select { height: 26px; font-size: 11px; }
+@media (max-width: 420px) { #login form { width: 100%; padding: 24px 18px 18px; } }
 
 .spin { display: inline-block; width: 12px; height: 12px; border-radius: 50%;
         border: 2px solid var(--line-2); border-top-color: var(--accent);
@@ -637,8 +720,9 @@ nav button.on .ico { color: var(--accent-2); }
 .brand-t { display: flex; flex-direction: column; line-height: 1.15; }
 .brand-t b { font-size: 13px; }
 .brand-t span { font-size: 10px; color: var(--fg-faint); letter-spacing: .4px; text-transform: uppercase; }
-.login-head { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
-.logo-big { width: 96px; height: auto; margin-bottom: 4px; }
+.login-head { display: flex; flex-direction: column; align-items: center; gap: 9px;
+              text-align: center; margin-bottom: 6px; }
+.logo-big { width: 96px; height: auto; }
 nav button .ct { font-variant-numeric: tabular-nums; }
 
 /* -------------------------------------------------------- collapsed sidebar */
