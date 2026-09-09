@@ -170,8 +170,19 @@ function phaseFrom(entries, kind) {
     if (complete) continue;                       // the deployment is over
     if (t === 'running' && /All Chunks Installed/i.test(m)) { complete = true; continue; }
     if (t === 'running' && /Installed Chunk/i.test(m)) { done++; cur = 0; continue; }
-    if (t === 'running' && /Installing Update Chunk/i.test(m)) { cur = IN_INSTALL; continue; }
+    // ORDER MATTERS, AND IT IS NOT THE ORDER OF THE WORDS. hawkBit's
+    // "Installing Update Chunk Artifacts" is the ANNOUNCEMENT that a part has
+    // started -- the downloads follow it. Treating it as "installing" meant the
+    // pill said installing for a fraction of a second and then went back to
+    // downloading for the whole transfer, so "installing" was effectively never
+    // seen. It marks the start of a part.
+    if (t === 'running' && /Installing Update Chunk/i.test(m)) { cur = IN_DOWNLOAD; continue; }
     if (t === 'download') { cur = IN_DOWNLOAD; continue; }
+    // These are SWUpdate's own, and they only appear once the bytes are in and
+    // it is writing them: "Installation in progress", then the post-install.
+    if (t === 'running' && /Installation in progress|Update successful|SWUPDATE successful|post-update/i.test(m)) {
+      cur = IN_INSTALL; continue;
+    }
     if (t === 'retrieved') { cur = Math.max(cur, IN_DOWNLOAD); continue; }
     if (t === 'running' && /Assignment initiated/i.test(m)) cur = Math.max(cur, IN_ASSIGNED);
   }
@@ -203,8 +214,13 @@ function phaseFrom(entries, kind) {
   const part = done > 0 ? ` (part ${done + 1})` : '';
   const why  = done > 0 ? 'a set carrying both a system and an application is installed '
                         + 'in parts, one after the other' : null;
-  if (cur === IN_INSTALL)  return { label: 'installing' + part,  cls: 'live', why: why || 'writing the payload' };
-  if (cur === IN_DOWNLOAD) return { label: 'downloading' + part, cls: 'live', why: why || 'fetching the package' };
+  if (cur === IN_INSTALL)
+    return { label: 'installing' + part, cls: 'live',
+             why: why || 'the bytes are in and it is writing them' };
+  if (cur === IN_DOWNLOAD)
+    return { label: 'downloading' + part, cls: 'live',
+             why: why || 'fetching the package. SWUpdate says nothing between the last '
+                       + 'byte and the start of writing, so this covers both' };
   if (cur === IN_ASSIGNED) return { label: 'assigned', cls: 'live', why: 'the device has not polled yet' };
   if (done > 0)            return { label: 'installing' + part,  cls: 'live', why };
   return null;

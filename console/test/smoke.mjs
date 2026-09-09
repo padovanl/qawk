@@ -225,7 +225,10 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   const retrieved = assigned.concat(E(194, 'retrieved', 'Target retrieved update action'));
   const dl1       = retrieved.concat(E(195, 'running', 'Installing Update Chunk Artifacts.'),
                                      E(196, 'download', 'Target downloads /DEFAULT/...'));
-  const chunk1    = dl1.concat(E(198, 'running', '[server_install_update] : Update successful'),
+  // "Installing Update Chunk Artifacts" is hawkBit ANNOUNCING the part; the
+  // real install is SWUpdate's own message, once the bytes are in
+  const inst1     = dl1.concat(E(197, 'running', '[lua_handlers_init] Installation in progress'));
+  const chunk1    = inst1.concat(E(198, 'running', '[server_install_update] : Update successful'),
                                E(199, 'running', 'Installed Chunk.'));
   const dl2       = chunk1.concat(E(200, 'running', 'Installing Update Chunk Artifacts.'),
                                   E(201, 'download', 'Target downloads /DEFAULT/...'));
@@ -238,6 +241,7 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   // hawkBit notes "Installing Update Chunk Artifacts" and the downloads follow,
   // so at that point the device really is downloading
   ok('primo chunk: sta scaricando', lab(dl1) === 'downloading', lab(dl1));
+  ok('installazione vera dopo i download', lab(inst1) === 'installing', lab(inst1));
   ok('e senza "(part N)" quando ce n e una sola', !/part/.test(lab(dl1)), lab(dl1));
   // "Update successful" arrives after EVERY chunk, so it cannot mean the end
   ok('dopo il primo chunk non dice ancora riavvio', lab(chunk1) !== 'waiting for reboot', lab(chunk1));
