@@ -1,5 +1,5 @@
 import { enc, get } from '../api.js';
-import { ACTION_PILL, TARGET_PILL, pill, typePill } from '../badges.js';
+import { ACTION_PILL, PHASE_WORDS, TARGET_PILL, pill, typePill } from '../badges.js';
 import { modal } from '../chrome.js';
 import { $, h, icon } from '../dom.js';
 import { EXPECTED_VERSION, inspect } from '../compat.js';
@@ -161,13 +161,6 @@ const ACTION_WORDS = [
   ['canceled', 'someone stopped it'],
   ['wait_for_confirmation', 'it needs a human to allow it on the device'],
 ];
-const PHASE_WORDS = [
-  ['assigned', 'created; the device has not polled yet'],
-  ['downloading', 'fetching the package or its missing chunks'],
-  ['installing', 'writing the payload'],
-  ['waiting for reboot', 'all written to the spare slot; it becomes active at the next boot'],
-];
-
 function statesTab(root) {
   const t = (rows, map) => tableOf(['word', 'what it means'], rows.map(([k, w]) => ({
     cells: [pill(k, map[k] || 'mute'), w],
@@ -184,8 +177,8 @@ function statesTab(root) {
         h('code', 'retrieved'), ', so a perfect update can read that for good. ',
         'The console asks the status history and shows the real outcome.')),
     panel('Inside "pending"',
-      t(PHASE_WORDS, { assigned: 'live', downloading: 'live', installing: 'live',
-                       'waiting for reboot': 'warn' }),
+      tableOf(['word', 'what it means'], PHASE_WORDS.map(([k, cls, w]) => ({
+        cells: [pill(k, cls), w] }))),
       p('There is no field for this: a status entry carries a type, messages ',
         'and a timestamp, and no progress counter. The phase is ', h('b', 'read'),
         ' out of what SWUpdate said, not reported as such.'))));

@@ -1,5 +1,5 @@
 import { S, del, enc, get, post, waiting } from '../api.js';
-import { TARGET_PILL, pill } from '../badges.js';
+import { PHASE_WORDS, TARGET_PILL, pill } from '../badges.js';
 import { ask, modal, toast } from '../chrome.js';
 import { T_COLS, attrCache, attrsOf, cols, columnsDialog, headsFor } from '../columns.js';
 import { $, h, icon } from '../dom.js';
@@ -19,7 +19,7 @@ const T_STATUS = ['', 'in_sync', 'pending', 'error', 'registered', 'unknown'];
    none of them is a report from the device about itself. */
 const T_LEGEND = [
   ['registered', 'the device has introduced itself and has never been given anything'],
-  ['pending',    'an update is assigned and not finished — downloading, installing, or waiting for a reboot'],
+  ['pending',    'an update is assigned and not finished — the column shows which phase'],
   ['in_sync',    'nothing outstanding. NOT the same as up to date: a device that was never given anything is in sync too'],
   ['error',      'the last update failed. The device is running whatever it ran before'],
   ['unknown',    'hawkBit has no state for it — usually a target created through the API that has never polled'],
@@ -153,8 +153,21 @@ VIEWS.targets = {
     // 0fr to 1fr. That animates the real height without anyone having to know
     // what it is.
     const legend = h('div.legend-wrap' + (legendOpen ? '.open' : ''),
-      h('div.legend', T_LEGEND.map(([k, what]) => h('div.legend-row',
-        pill(k, TARGET_PILL[k] || 'mute'), h('span', what)))));
+      h('div.legend',
+        h('div.legend-h', 'What hawkBit calls it'),
+        T_LEGEND.map(([k, what]) => h('div.legend-row',
+          pill(k, TARGET_PILL[k] || 'mute'), h('span', what))),
+        // The column rarely says "pending" any more: it says which phase. Those
+        // words have to be explained where they are read, and they come from
+        // the one list in badges.js so the two cannot drift.
+        h('div.legend-h', 'Inside "pending" — read from what the device reported'),
+        PHASE_WORDS.map(([k, cls, what]) => h('div.legend-row',
+          pill(k, cls), h('span', what))),
+        h('div.legend-h', 'Marks'),
+        h('div.legend-row', pill('in_sync', 'mute'),
+          h('span', '· never installed — nothing outstanding, but this server has never installed anything here')),
+        h('div.legend-row', pill('pending', 'mute'),
+          h('span', '· just closed — the action finished between two reads; it settles at the next refresh'))));
     const legendBtn = h('button.btn.sm.ghost', {
       onclick: () => {
         const open = legend.classList.toggle('open');

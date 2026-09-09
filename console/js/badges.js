@@ -99,6 +99,25 @@ function actionPill(a, targetId) {
  * words, and they say exactly where it is. So the phase below is DERIVED from
  * the newest entries of the active action -- read, not reported.
  */
+/* The phases, in the order a device passes through them. ONE list: the legend
+   on the Targets page and the About page both read it, and a test checks that
+   every label phaseFrom() can produce is described here -- otherwise the
+   column shows a word the legend does not explain, which is how this drifted
+   in the first place. */
+const PHASE_WORDS = [
+  ['assigned',    'live', 'created; the device has not polled yet'],
+  ['downloading', 'live', 'fetching the package, or the chunks it is missing'],
+  ['installing',  'live', 'writing the payload'],
+  ['waiting for reboot', 'warn',
+   'all written to the spare slot; it becomes active at the next boot'],
+  ['waiting for confirmation', 'warn pulse',
+   'the update needs a human to allow it on the device'],
+  ['cancelling',  'live', 'someone stopped it and the device is being told'],
+  ['error',       'err',  'the device reported a failure while the action is still open — '
+                        + 'usually it is retrying, or about to give up'],
+  ['running',     'live', 'under way, with nothing more specific said yet'],
+];
+
 function phaseFrom(entries) {          // newest first
   for (const e of entries) {
     const t = String(e.type || '').toLowerCase();
@@ -167,5 +186,6 @@ function explainPending(p, targetId) {
 }
 
 export {
-  ACTION_PILL, ACT_ICON, TARGET_PILL, actionPill, explainPending, phaseFrom, pill, typePill,
+  ACTION_PILL, ACT_ICON, PHASE_WORDS, TARGET_PILL, actionPill, explainPending,
+  phaseFrom, pill, typePill,
 };

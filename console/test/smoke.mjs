@@ -241,5 +241,26 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   ok('senza voci utili non inventa nulla', phaseFrom([]) === null);
 }
 
+/* --- 10. the legend explains every word the column can show ------------ */
+/* Derived from the source, not from the cases above: a phase nobody thought to
+   test would still have to be described. This is how the legend fell behind
+   the column in the first place. */
+{
+  const { PHASE_WORDS } = await import(JS + 'badges.js');
+  const src = await readFile(JS + 'badges.js', 'utf8');
+  const fn = src.slice(src.indexOf('function phaseFrom'), src.indexOf('function explainPending'));
+  const produced = [...fn.matchAll(/label:\s*'([^']+)'/g)].map(m => m[1]);
+  const described = new Set(PHASE_WORDS.map(([k]) => k));
+  const missing = produced.filter(l => !described.has(l));
+  ok('ogni fase prodotta e descritta nella legenda', missing.length === 0,
+     missing.join(', ') || `${produced.length} fasi`);
+  const dead = [...described].filter(k => !produced.includes(k));
+  ok('la legenda non descrive fasi che non esistono', dead.length === 0, dead.join(', '));
+
+  // and the Targets legend is built from that same list
+  const tsrc = await readFile(JS + 'views/targets.js', 'utf8');
+  ok('la legenda dei target usa quella lista', tsrc.includes('PHASE_WORDS'));
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);

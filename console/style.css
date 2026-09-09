@@ -1227,3 +1227,6 @@ pre.cmd {
   background: var(--bg); border: 1px solid var(--line);
   font-family: var(--mono); font-size: 12px; color: var(--fg-dim);
 }
+.legend-h { font-size: 10px; letter-spacing: .5px; text-transform: uppercase;
+            color: var(--fg-faint); margin-top: 4px; }
+.legend-h:first-child { margin-top: 0; }
