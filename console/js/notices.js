@@ -113,9 +113,52 @@ async function deploymentsTick() {
   }
 }
 
+/* THE CATALOGUE FILLING UP, from wherever it is being filled.
+ *
+ * Most of what lands on this server is put there by a script -- the upload
+ * tools, load-demo-catalogue.sh -- not by anyone clicking in this tab. A
+ * console that only reports its own clicks says nothing at exactly the moment
+ * a demonstration is being set up in front of you.
+ *
+ * As with deployments, the first look only records what is already there:
+ * opening the page must not announce the whole catalogue. */
+S.catalogueSeen = null;        // { sm:Set, ds:Set } or null before the first look
+
+async function cataloguesTick() {
+  if (!S.auth) return;
+  let sm, ds;
+  try {
+    [sm, ds] = await Promise.all([
+      get('/softwaremodules?limit=50&sort=id:DESC'),
+      get('/distributionsets?limit=50&sort=id:DESC'),
+    ]);
+  } catch (_) { return; }
+
+  const ids = r => new Set((r.content || []).map(x => x.id));
+  if (S.catalogueSeen === null) {
+    S.catalogueSeen = { sm: ids(sm), ds: ids(ds) };
+    return;
+  }
+
+  for (const m of (sm.content || [])) {
+    if (S.catalogueSeen.sm.has(m.id)) continue;
+    S.catalogueSeen.sm.add(m.id);
+    toast('Software module uploaded', `${m.name} ${m.version} · ${m.type}`, 'ok', 7000);
+  }
+  for (const d of (ds.content || [])) {
+    if (S.catalogueSeen.ds.has(d.id)) continue;
+    S.catalogueSeen.ds.add(d.id);
+    toast('Distribution set created',
+          `${d.name} ${d.version} · ${d.type}${d.complete ? '' : ' — INCOMPLETE'}`,
+          d.complete ? 'ok' : 'warn', d.complete ? 7000 : 15000);
+  }
+}
+
 setInterval(noticesTick, 10000);
 deploymentsTick();
 setInterval(deploymentsTick, 8000);
+cataloguesTick();
+setInterval(cataloguesTick, 8000);
 
 /* A tab opened before the last rebuild goes on running the JavaScript it
    already holds: no-store stops the cache, it does not reload a live page.

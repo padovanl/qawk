@@ -135,7 +135,7 @@ async function newSmDialog() {
     if (desc.value.trim()) b.description = desc.value.trim();
     if (encrypt.input.checked) b.encrypted = true;
     await post('/softwaremodules', [b]);
-    toast('Created', '', 'ok'); render();
+    toast('Module created', `${b.name} ${b.version} · ${b.type}`, 'ok'); render();
   }, 'Create');
 }
 
