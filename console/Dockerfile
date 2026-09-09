@@ -11,7 +11,7 @@
 FROM python:3-alpine
 
 WORKDIR /app
-COPY serve.py index.html app.js style.css logo.png /app/
+COPY serve.py index.html app.js style.css logo.png favicon.png favicon.ico /app/
 
 # Not root. The console reads a handful of files and opens one socket; nothing
 # here needs more than that.

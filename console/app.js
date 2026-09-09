@@ -714,7 +714,17 @@ async function bulkTag(ids) {
 const T_COLS = {
   controllerId: { label: 'Controller', s: 'controllerId', cell: t => h('span.mono', t.controllerId) },
   name:         { label: 'Name', s: 'name', cell: t => h('span.dim', t.name !== t.controllerId ? t.name : '—') },
-  status:       { label: 'Status', s: 'updateStatus', cell: t => pill(t.updateStatus, TARGET_PILL[t.updateStatus]) },
+  status:       { label: 'Status', s: 'updateStatus', cell: t => {
+                    const p = pill(t.updateStatus, TARGET_PILL[t.updateStatus]);
+                    // in_sync on a device that has never installed anything is
+                    // hawkBit saying "nothing pending", which is not the same
+                    // as "up to date". Worth a mark rather than a false calm.
+                    if (t.updateStatus === 'in_sync' && !t.installedAt) {
+                      p.classList.remove('ok'); p.classList.add('mute');
+                      p.title = 'nothing pending — but this server has never installed anything here';
+                      p.append(h('span', { style: 'opacity:.7;margin-left:5px' }, '·  never installed'));
+                    }
+                    return p; } },
   ds:           { label: 'Assigned / installed', cell: t => {
                     const c = h('span.faint', '…'); loadAssignedInstalled(t.controllerId, c); return c; } },
   lastPoll:     { label: 'Last poll', s: 'lastControllerRequestAt', cell: t => h('span.faint.nowrap', ago(t.lastControllerRequestAt)) },
@@ -965,6 +975,14 @@ async function loadAssignedInstalled(id, cell) {
       get(`/targets/${enc(id)}/installedDS`).catch(() => null),
     ]));
     const name = d => d ? `${d.name} ${d.version}` : '—';
+    // NOTHING AT ALL is one state, not two empty ones. A target whose only
+    // action was cancelled has neither, and hawkBit still calls it in_sync --
+    // which means "nothing outstanding", not "running what it should".
+    if (!a && !i) {
+      cell.replaceChildren(h('span.faint', '—'));
+      cell.title = 'this server has never installed anything here';
+      return;
+    }
     const same = a && i && a.id === i.id;
     // Two long names on one line wrap into porridge. One line each, labelled,
     // clipped, with the whole thing in the tooltip -- and the second line only
@@ -2502,12 +2520,49 @@ function fiqlOf(fields, state) {
   }).filter(Boolean).join(';');
 }
 
+/* One shared timer: typing in a column must not fire a query per keystroke,
+   and the table is rebuilt underneath the box, so the caret has to be put
+   back where the person left it. */
+let filterTimer = null;
 function filterRow(fields, state, onChange) {
-  return h('tr.filters', fields.map(f => h('th',
-    f.key ? h('input', {
-      type: 'text', value: state.f[f.key] || '', placeholder: f.ph || '',
-      oninput: e => { state.f[f.key] = e.target.value; state.page = 0; onChange(); },
-    }) : null)));
+  return h('tr.filters', fields.map(f => {
+    if (!f.key) return h('th');
+    const key = f.key;
+    // Read this before the rebuild replaces the row: whoever is focused now
+    // is the box being typed in.
+    const live = document.activeElement;
+    const keep = !!(live && live.dataset && live.dataset.fk === key);
+    const caret = keep ? live.selectionStart : null;
+
+    const run = now => {
+      clearTimeout(filterTimer);
+      if (now) onChange(); else filterTimer = setTimeout(onChange, 250);
+    };
+    const inp = h('input', {
+      type: 'text', value: state.f[key] || '', placeholder: f.ph || 'filter',
+      oninput: e => { state.f[key] = e.target.value; state.page = 0; run(false); },
+      onkeydown: e => {
+        if (e.key === 'Enter') run(true);
+        if (e.key === 'Escape' && state.f[key]) {
+          state.f[key] = ''; e.target.value = ''; state.page = 0; run(true);
+        }
+      },
+    });
+    inp.dataset.fk = key;
+    // A cross only when there is something to clear: an always-on one is a
+    // second thing to ignore in every column.
+    const clear = h('button.fx', { title: 'clear (esc)', onclick: () => {
+      state.f[key] = ''; state.page = 0; run(true);
+    } }, '\u00d7');
+    const box = h('div.fbox', icon('filter', 12), inp, clear);
+    if (state.f[key]) box.classList.add('has');
+    if (keep) requestAnimationFrame(() => {
+      if (!inp.isConnected) return;
+      inp.focus();
+      try { inp.setSelectionRange(caret, caret); } catch (_) {}
+    });
+    return h('th', box);
+  }));
 }
 
 function pager(state, total, onChange) {
