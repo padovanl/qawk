@@ -1290,7 +1290,21 @@ pre.cmd {
   box-shadow: 0 28px 70px -18px rgba(0,0,0,.6);
   animation: liftin .28s cubic-bezier(.2,.8,.3,1);
 }
-.gate-logo { width: 58px; height: auto; margin-bottom: 16px; opacity: .95; }
+/* The logo breathes. It is the one thing on this card that says the console is
+   still alive and still asking -- a still logo over a frozen page reads as a
+   crash. Deliberately unmissable: the scale carries it, the glow follows. */
+.gate-logo {
+  width: 64px; height: auto; margin-bottom: 18px;
+  animation: breathe 2.6s ease-in-out infinite;
+  transform-origin: center;
+  filter: drop-shadow(0 0 0 color-mix(in srgb, var(--accent) 0%, transparent));
+}
+@keyframes breathe {
+  0%, 100% { transform: scale(1);     opacity: .82;
+             filter: drop-shadow(0 0 2px color-mix(in srgb, var(--accent) 25%, transparent)); }
+  50%      { transform: scale(1.14);  opacity: 1;
+             filter: drop-shadow(0 0 18px color-mix(in srgb, var(--accent) 65%, transparent)); }
+}
 .gate-card h2 { margin: 0 0 9px; font-size: 18px; letter-spacing: -.2px; }
 .gate-card p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--fg-dim); }
 /* A rough sense of "how far into a normal start", not a promise. */
