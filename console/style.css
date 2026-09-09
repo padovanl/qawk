@@ -1210,3 +1210,20 @@ dialog.ask .da { display: flex; gap: 8px; justify-content: flex-end; padding: 14
 /* The toolbar search holds the compact editor, which brings its own field. */
 .search-fq { padding: 0; border: 0; background: none; gap: 6px; }
 .search-fq .fq { flex: 1; min-width: 0; }
+
+/* ------------------------------------------------------------- about page */
+/* Reference material in sections rather than one wall of it: the choice of
+   section is remembered, so coming back lands where you left. */
+.about-tabs { flex-wrap: wrap; }
+.about-tabs button { display: inline-flex; align-items: center; gap: 6px; }
+.about-p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--fg-dim); max-width: 78ch; }
+.about-p code { font-family: var(--mono); font-size: 12px; padding: 1px 5px;
+                border-radius: 5px; background: var(--bg-3); color: var(--fg); }
+.about-p b { color: var(--fg); }
+.link { color: var(--accent-2); cursor: pointer; text-decoration: underline;
+        text-underline-offset: 2px; }
+pre.cmd {
+  margin: 0; padding: 9px 11px; border-radius: 8px; overflow-x: auto;
+  background: var(--bg); border: 1px solid var(--line);
+  font-family: var(--mono); font-size: 12px; color: var(--fg-dim);
+}

@@ -111,5 +111,23 @@ console.log(`  console: ${BASE}\n`);
   }
 }
 
+/* ---- the About page: sections, and facts read from the server ---------- */
+{
+  const { renderView: rv } = await import('./live-harness.mjs');
+  const { root, text } = await rv('about');
+  await settle(4000);
+  const tabs = root.find('about-tabs');
+  ok('About e a sezioni, non una pagina piatta', !!tabs && tabs.children.length === 6,
+     tabs ? `${tabs.children.length} sezioni` : 'nessuna');
+  ok('parte da "questo server"', text.includes('Which hawkBit this is'));
+  ok('dice per quale versione e scritta', text.includes('1.1.0'));
+  ok('riporta la verifica degli endpoint',
+     /matches|endpoints missing|cannot tell/.test(text), text.slice(0, 80));
+  const { get } = await mod('api.js');
+  const cfg = await get('/system/configs').catch(() => null);
+  const poll = cfg && cfg.pollingTime && String(cfg.pollingTime.value);
+  ok('mostra lintervallo di polling letto dal server', !poll || text.includes(poll), poll);
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);
