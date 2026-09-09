@@ -206,7 +206,8 @@ label.f input, label.f select, label.f textarea { color: var(--fg); }
 table.t { width: 100%; border-collapse: collapse; }
 table.t th {
   position: sticky; top: 0; z-index: 1; text-align: left; font-weight: 600;
-  font-size: 11px; letter-spacing: .4px; text-transform: uppercase; color: var(--fg-faint);
+  font-size: 11px; line-height: 16px; letter-spacing: .4px; text-transform: uppercase;
+  color: var(--fg-faint);
   padding: 8px 10px; background: var(--bg); border-bottom: 1px solid var(--line);
 }
 table.t td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -444,8 +445,8 @@ tr.busy td:first-child::before {
    draws an edge when you are near it, and colours itself when it is holding
    something -- so a short table is never unexplained. */
 tr.filters th {
-  position: sticky; top: 30px; z-index: 1;
-  padding: 0 8px 8px; background: var(--bg); border-bottom: 1px solid var(--line);
+  position: sticky; top: 33px; z-index: 1;
+  padding: 7px 8px 8px; background: var(--bg); border-bottom: 1px solid var(--line);
 }
 .fbox {
   display: flex; align-items: center; gap: 5px;

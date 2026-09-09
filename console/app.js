@@ -594,8 +594,15 @@ VIEWS.dash = {
     drawNav();
 
     const over = tg.content.filter(t => t.pollStatus && t.pollStatus.overdue).length;
+    // The targets table refuses to call a device that has never installed
+    // anything "in sync"; counting it green here would contradict that on the
+    // same screen. It gets a bucket of its own.
     const byStatus = {};
-    tg.content.forEach(t => { byStatus[t.updateStatus] = (byStatus[t.updateStatus] || 0) + 1; });
+    let virgin = 0;
+    tg.content.forEach(t => {
+      if (t.updateStatus === 'in_sync' && !t.installedAt) { virgin++; return; }
+      byStatus[t.updateStatus] = (byStatus[t.updateStatus] || 0) + 1;
+    });
 
     // hawkBit has no fleet-wide action feed, so this asks the most recently
     // seen targets for their latest one.
@@ -613,10 +620,15 @@ VIEWS.dash = {
         card('Distribution sets', ds.total), card('Software modules', sm.total),
         card('Rollouts', ro.total)),
       h('div.panel', h('h3', 'Fleet status'), h('div.body.wrap',
-        Object.keys(byStatus).length
+        Object.keys(byStatus).length || virgin
           ? Object.entries(byStatus).map(([k, v]) =>
               h('button.btn.sm', { onclick: () => { S.status = k; go('targets'); } },
                 h('span.pill.' + (TARGET_PILL[k] || 'mute'), `${k.replace(/_/g, ' ')} · ${v}`)))
+            .concat(virgin ? [h('button.btn.sm', {
+                title: 'in sync as far as hawkBit is concerned: nothing pending, '
+                     + 'but this server has never installed anything on them',
+                onclick: () => { S.status = 'in_sync'; go('targets'); } },
+              h('span.pill.mute', `never installed \u00b7 ${virgin}`))] : [])
           : h('span.faint', 'no targets registered yet'))),
       h('div.panel', h('h3', tg.total > SAMPLE
           ? `Latest action · ${SAMPLE} most recently seen of ${tg.total}`
