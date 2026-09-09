@@ -174,14 +174,13 @@ header.bar .grow { flex: 1; }
 }
 .seg button .n { opacity: .65; margin-left: 5px; font-family: var(--mono); font-size: 11px; }
 
-input[type=text], input[type=password], input[type=number], input[type=color], select, textarea {
+input[type=text], input[type=password], input[type=number], select, textarea {
   height: var(--ctl);
   background: var(--bg); border: 1px solid var(--line); border-radius: var(--r);
   padding: 0 10px; min-width: 0;
   transition: border-color .13s, box-shadow .13s;
 }
 textarea { height: auto; padding: 8px 10px; }
-input[type=color] { padding: 2px; width: 46px; }
 input:hover, select:hover { border-color: var(--line-2); }
 input:focus, select:focus, textarea:focus {
   outline: none; border-color: var(--accent);
@@ -650,6 +649,57 @@ input[type=datetime-local]:disabled { opacity: .4; }
    are what the field is actually for. */
 .when-quick { display: flex; flex-wrap: wrap; gap: 6px; }
 .when-quick .chip { height: 22px; padding: 0 9px; font-size: 12px; }
+
+/* ------------------------------------------------------ colour + files */
+/* Two controls the platform draws in its own language, replaced by ours. */
+.hidden-native { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.cpick { display: flex; flex-direction: column; gap: 9px; }
+.cpick-row { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.swatch {
+  width: 24px; height: 24px; flex: 0 0 24px; padding: 0; cursor: pointer;
+  border-radius: 7px; border: 1px solid color-mix(in srgb, var(--sw) 55%, transparent);
+  background: var(--sw);
+  transition: transform .12s, box-shadow .12s;
+}
+.swatch:hover { transform: translateY(-1px); }
+.swatch.on {
+  box-shadow: 0 0 0 2px var(--bg-2), 0 0 0 4px var(--sw);
+}
+.swatch.custom {
+  display: grid; place-items: center; color: var(--fg-dim);
+  background: var(--bg-3); border-color: var(--line);
+}
+.swatch.custom:hover { color: var(--accent-2); border-color: var(--accent); }
+.hexbox { flex: 0 0 118px; height: var(--ctl); font-family: var(--mono); }
+.hexbox .hash { color: var(--fg-faint); }
+.hexbox input { flex: 1; min-width: 0; height: auto; padding: 0; border: 0;
+                background: transparent; font-family: var(--mono); font-size: 12px; }
+.hexbox input:focus { outline: none; box-shadow: none; }
+.swatch-pill {
+  border: 1px solid currentColor; font-weight: 600;
+}
+.swatch-pill::before { content: 'preview'; }
+.swatch-dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+              background: var(--sw); }
+
+.fz {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  padding: 18px 14px; cursor: pointer; text-align: center;
+  border: 1px dashed var(--line-2); border-radius: 11px;
+  background: var(--bg); color: var(--fg-dim);
+  transition: border-color .13s, background .13s, color .13s;
+}
+.fz:hover { border-color: var(--accent); color: var(--fg); }
+.fz .ico { opacity: .5; }
+.fz:hover .ico, .fz.over .ico, .fz.has .ico { opacity: 1; color: var(--accent-2); }
+.fz.over { border-color: var(--accent); border-style: solid;
+           background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+.fz.has { border-style: solid; border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.fz-t { font-size: 12px; }
+.fz-list { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.fz-f { display: flex; gap: 10px; justify-content: center; font-size: 12px; }
+.fz-f .n { font-family: var(--mono); color: var(--fg); word-break: break-all; }
+.fz-f .s { color: var(--fg-faint); white-space: nowrap; }
 
 /* ------------------------------------------------- native widget cleanup */
 /* The browser's own spinner is a light box with two grey chevrons in it. It

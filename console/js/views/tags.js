@@ -1,6 +1,7 @@
 import { del, get, post } from '../api.js';
 import { fail, modal, toast } from '../chrome.js';
 import { $, h, icon } from '../dom.js';
+import { colourPicker } from '../inputs.js';
 import { VIEWS, render } from '../router.js';
 import { tableOf } from '../table.js';
 
@@ -15,7 +16,7 @@ VIEWS.tags = {
     const tbl = (rows, kind) => rows.length
       ? tableOf(['Id', 'Name', 'Colour', 'Description', ''], rows.map(t => ({
           cells: [h('span.mono', t.id), t.name,
-            h('span.flex', h('span', { style: `display:inline-block;width:12px;height:12px;border-radius:3px;background:${t.colour || '#555'}` }),
+            h('span.flex', h('span.swatch-dot', { style: `--sw:${t.colour || '#8b8f98'}` }),
               h('span.mono.faint', t.colour || '—')),
             h('span.faint', t.description || '—'),
             h('button.btn.sm.danger', { onclick: async () => {
@@ -31,7 +32,7 @@ VIEWS.tags = {
 
 async function newTagDialog(after) {
   const name = h('input', { type: 'text' });
-  const colour = h('input', { type: 'color', value: '#3ba9a1' });
+  const colour = colourPicker('#12a594');
   const desc = h('input', { type: 'text' });
   const kind = h('select', h('option', { value: 'targettags' }, 'target tag'),
     h('option', { value: 'distributionsettags' }, 'distribution set tag'));

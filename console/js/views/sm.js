@@ -2,7 +2,7 @@ import { S, del, get, post, upload, waiting } from '../api.js';
 import { closeDrawer, drawer, fail, modal, toast } from '../chrome.js';
 import { M_COLS, baseCell, cols, columnsDialog, fieldsFor, headsFor, metaCache } from '../columns.js';
 import { $, h, icon } from '../dom.js';
-import { toggle } from '../inputs.js';
+import { fileField, toggle } from '../inputs.js';
 import { VIEWS, drawNav, render } from '../router.js';
 import { validateUpload } from '../swu.js';
 import { exportCsv, filterRow, fiqlOf, pagedPath, pager, pg, tableOf } from '../table.js';
@@ -41,7 +41,8 @@ async function openSm(m) {
   const draw = async () => {
     const arts = await get(`/softwaremodules/${m.id}/artifacts`).catch(() => []);
     const list = Array.isArray(arts) ? arts : (arts.content || []);
-    const file = h('input', { type: 'file', multiple: true });
+    const drop = fileField({ multiple: true });
+    const file = drop.input;
     const checks = h('div.checks.hidden');
     const runChecks = async () => {
       const picked = [...file.files];
@@ -78,7 +79,7 @@ async function openSm(m) {
             })))
           : h('span.faint', 'nothing uploaded yet'))),
       h('div.panel', h('h3', 'Add artifacts'), h('div.body.stack',
-        file, checks, prog,
+        drop, checks, prog,
         h('div.wrap',
           h('button.btn', { onclick: () => runChecks() }, icon('check', 14), 'check'),
           h('button.btn.primary', { onclick: async e => {

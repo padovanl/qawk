@@ -96,5 +96,27 @@ const before = renders;
 box.find('fx').handlers.click();
 ok('la croce svuota subito', st.f.name === '' && renders > before);
 
+/* --- 5. the controls that replaced native widgets ---------------------- */
+const { colourPicker, fileField } = await import(JS + 'inputs.js');
+const cp = colourPicker('#12a594');
+ok('il colore parte dal valore dato', cp.value === '#12a594', cp.value);
+const sw = cp.children[0].children;
+ok('la tavolozza ha dieci colori piu custom', sw.length === 12, String(sw.length));
+sw[3].handlers.click({ preventDefault() {} });          // h() aggancia con addEventListener
+ok('scegliere una tessera cambia il valore', cp.value === '#46a758', cp.value);
+ok('la tessera scelta si evidenzia', sw[3].classList.contains('on') && !sw[0].classList.contains('on'));
+const hexIn = cp.children[1].children[0].children[1];
+hexIn.value = '#ff0000'; hexIn.oninput();
+ok('lesadecimale valido viene accettato', cp.value === '#ff0000', cp.value);
+hexIn.value = 'nonsense'; hexIn.oninput();
+ok('lesadecimale non valido viene ignorato', cp.value === '#ff0000', cp.value);
+
+const fz = fileField({ multiple: true });
+ok('la zona di rilascio espone il suo input', fz.input && fz.input.nodeName === 'input');
+ok('parte senza file', !fz.classList.contains('has'));
+fz.input.files = [{ name: 'hello-1.1.3.swu', size: 622000000 }];
+fz.input.onchange();
+ok('mostra il file scelto', fz.classList.contains('has') && fz.textContent.includes('hello-1.1.3.swu'));
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);

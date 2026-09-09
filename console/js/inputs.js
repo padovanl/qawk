@@ -1,6 +1,87 @@
 import { busy } from './api.js';
 import { fail } from './chrome.js';
-import { h } from './dom.js';
+import { h, icon } from './dom.js';
+import { bytes } from './util.js';
+
+/* A tag colour is picked from a palette, not from the operating system's
+ * colour dialog: the native input is a grey box that opens a window belonging
+ * to some other application, and the only colours that matter here are ones
+ * that stay legible as a small pill on thirteen themes. The native input is
+ * still there for anything else, behind "custom".
+ */
+const TAG_COLOURS = [
+  '#e5484d', '#e97b1f', '#e2b203', '#46a758', '#12a594',
+  '#3b9eff', '#6e56cf', '#d6409f', '#8b8f98', '#5b6673',
+];
+function colourPicker(value = '#12a594') {
+  let cur = value;
+  const box = h('div.cpick');
+  const preview = h('span.pill.swatch-pill');
+  const hex = h('input.hexin', { type: 'text', maxlength: 7, spellcheck: 'false' });
+  const native = h('input.hidden-native', { type: 'color', value, tabindex: '-1' });
+  const swatches = TAG_COLOURS.map(c => h('button.swatch', {
+    type: 'button', title: c, style: `--sw:${c}`, onclick: e => { e.preventDefault(); set(c); },
+  }));
+
+  function set(c, fromHex) {
+    cur = c;
+    if (!fromHex) hex.value = c;
+    native.value = c;
+    preview.style.color = c;
+    preview.style.borderColor = c;
+    preview.style.background = c + '22';
+    swatches.forEach((s, i) => s.classList.toggle('on', TAG_COLOURS[i].toLowerCase() === c.toLowerCase()));
+    box.value = c;
+  }
+  hex.oninput = () => {
+    const v = hex.value.trim();
+    if (/^#[0-9a-f]{6}$/i.test(v)) set(v, true);
+  };
+  native.oninput = () => set(native.value);
+
+  box.append(
+    h('div.cpick-row', swatches,
+      h('button.swatch.custom', { type: 'button', title: 'any other colour',
+        onclick: e => { e.preventDefault(); native.click(); } }, icon('edit', 12)),
+      native),
+    h('div.cpick-row',
+      h('span.fld.hexbox', h('span.hash', '#'), hex),
+      preview));
+  set(value);
+  return box;
+}
+
+/* The browser's file button is the one control that cannot be themed at all --
+ * it is drawn by the platform, in the platform's language. This is a drop area
+ * that also opens the picker, and it says what it is holding. */
+function fileField(opts = {}) {
+  const inp = h('input.hidden-native', { type: 'file', multiple: !!opts.multiple });
+  const list = h('div.fz-list');
+  const zone = h('label.fz', icon('upload', 18),
+    h('span.fz-t', opts.label || (opts.multiple ? 'Choose files, or drop them here'
+                                                : 'Choose a file, or drop it here')),
+    inp, list);
+  const show = () => {
+    const fs = [...(inp.files || [])];
+    zone.classList.toggle('has', fs.length > 0);
+    list.replaceChildren(...fs.map(f => h('span.fz-f',
+      h('span.n', f.name), h('span.s', bytes(f.size)))));
+  };
+  inp.onchange = show;
+  ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => {
+    e.preventDefault(); zone.classList.add('over');
+  }));
+  ['dragleave', 'drop'].forEach(ev => zone.addEventListener(ev, e => {
+    e.preventDefault(); zone.classList.remove('over');
+  }));
+  zone.addEventListener('drop', e => {
+    if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+    inp.files = e.dataTransfer.files;         // a DataTransfer's list is assignable
+    show();
+  });
+  zone.input = inp;
+  return zone;
+}
 
 /* Dates are picked, never typed. hawkBit speaks epoch milliseconds, which is
  * the right thing on the wire and the wrong thing to ask a person for. */
@@ -81,5 +162,5 @@ function toggle(on, onChange, opts = {}) {
 }
 
 export {
-  dtInput, dtMs, dtQuick, numInput, toggle,
+  colourPicker, fileField, dtInput, dtMs, dtQuick, numInput, toggle,
 };
