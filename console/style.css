@@ -380,9 +380,19 @@ tr.busy td:first-child::before {
 .toast { animation: slidein .18s ease-out; }
 @keyframes slidein { from { opacity: 0; transform: translateX(14px); } }
 
+/* REDUCED MOTION, but only where motion is decoration.
+   The blanket rule that used to be here killed every transition in the page --
+   including the sidebar collapsing and the drawer sliding -- on any machine
+   whose system asks for less animation, which on Windows is a common default.
+   The result was a console that looked like nothing worked.
+   What actually causes trouble is motion that loops or travels; a 240 ms layout
+   transition does not. So the loops stop and the transitions stay. */
 @media (prefers-reduced-motion: reduce) {
-  * { animation-duration: .001ms !important; animation-iteration-count: 1 !important;
-      transition-duration: .001ms !important; }
+  .spin, .btn.loading::after, .pill.live::before, .pill.pulse::before,
+  .bars i.run, .skel i, #progress.on::after, .toast {
+    animation: none !important;
+  }
+  .pill.live::before { border-top-color: transparent; }
 }
 
 /* ------------------------------------------------------------- accordion */

@@ -746,10 +746,10 @@ VIEWS.targets = {
         h('button.btn.sm.ghost', { onclick: e => { e.stopPropagation(); assignDialog(t.controllerId); } }, 'deploy'),
       ]),
     }));
-    root.replaceChildren(chips, bulkBar(),
+    root.replaceChildren(...[chips, bulkBar(),
       tableOf([SELECT_HEAD].concat(headsFor('targets', chosen)).concat(['']), rows,
         filterRow([{}].concat(fields), st, render)),
-      pager(st, data.total, render));
+      pager(st, data.total, render)].filter(Boolean));
   },
 };
 
@@ -1813,6 +1813,12 @@ VIEWS.cfg = {
 
     root.replaceChildren(h('div.stack',
       h('div.panel', h('h3', 'Theme'), h('div.body', swatches)),
+      matchMedia('(prefers-reduced-motion: reduce)').matches
+        ? h('div.panel', h('h3', 'Reduced motion'), h('div.body.faint',
+            'This browser is asking for less animation — your system has that setting on, ' +
+            'so the spinners and progress bars here are still. Layout transitions still run. ' +
+            'On Windows it is Settings → Accessibility → Visual effects → Animation effects.'))
+        : null,
       h('div.panel', h('h3', 'Sign out when idle'), h('div.body.flex',
         h('div', { style: 'flex:0 0 320px' }, h('div.mono', 'idle timeout'),
           h('div.faint', { style: 'font-size:11px' },
