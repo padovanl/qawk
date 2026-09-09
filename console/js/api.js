@@ -26,9 +26,13 @@ async function api(path, opts = {}) {
     o.headers['Content-Type'] = 'application/json;charset=UTF-8';
     delete o.json;
   }
+  // Everything the console asks for lives under /rest/v1, except hawkBit's own
+  // API description, which the compatibility check reads from /v3/api-docs.
+  const url = o.abs ? path : '/rest/v1' + path;
+  delete o.abs;
   busy(1);
   let r;
-  try { r = await fetch('/rest/v1' + path, o); }
+  try { r = await fetch(url, o); }
   catch (e) {
     busy(-1); noteConnection(false);
     throw new Error('the console cannot reach its own server: ' + e.message);
@@ -48,7 +52,7 @@ async function api(path, opts = {}) {
   }
   return data;
 }
-const get = p => api(p);
+const get = (p, opts) => api(p, opts);
 const post = (p, json) => api(p, { method: 'POST', json });
 const put = (p, json) => api(p, { method: 'PUT', json });
 const del = p => api(p, { method: 'DELETE' });

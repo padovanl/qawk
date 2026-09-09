@@ -1,4 +1,5 @@
 import { S, get } from './api.js';
+import { checkCompat } from './compat.js';
 import { $, h, icon } from './dom.js';
 import { VIEWS, drawNav, refreshCounts, render, tick } from './router.js';
 import { theme } from './theme.js';
@@ -16,6 +17,9 @@ async function start() {
   S.view = (location.hash || '#dash').slice(1);
   if (!VIEWS[S.view]) S.view = 'dash';
   drawNav(); refreshCounts(); await render(); tick();
+  // Asked once, in the background: it costs one request and must never hold
+  // up the first screen.
+  checkCompat();
 }
 
 /* Sign-in dressing: the field icons, a reveal for the password, and a theme

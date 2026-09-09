@@ -1154,3 +1154,26 @@ dialog.ask .da { display: flex; gap: 8px; justify-content: flex-end; padding: 14
 .fq-warn { display: inline-flex; align-items: flex-start; gap: 5px; color: var(--warn); }
 .fq.warn .fq-field { border-color: color-mix(in srgb, var(--warn) 55%, transparent); }
 .fq.warn .fq-field .ico { opacity: 1; color: var(--warn); }
+
+/* ------------------------------------------------------- compatibility bar */
+/* Not a toast: a toast goes away, and this is a standing condition. It sits
+   above the header so it is the first thing read, and can be put aside for
+   the session but returns at the next sign-in. */
+.compat {
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--warn) 16%, var(--bg));
+  color: var(--fg);
+}
+.compat.bad { background: color-mix(in srgb, var(--err) 17%, var(--bg)); }
+.compat-row { display: flex; align-items: center; gap: 11px; padding: 10px 16px; }
+.compat .ico { flex: 0 0 auto; color: var(--warn); }
+.compat.bad .ico { color: var(--err); }
+.compat-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.compat-t b { font-size: 13px; }
+.compat-t span { font-size: 12px; color: var(--fg-dim); }
+.compat-list {
+  margin: 0; padding: 0 16px 12px 46px; font-size: 12px;
+  font-family: var(--mono); color: var(--fg-dim);
+  max-height: 190px; overflow-y: auto;
+}
+.compat-list li { margin: 2px 0; }

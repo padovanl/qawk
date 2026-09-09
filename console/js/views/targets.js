@@ -48,8 +48,31 @@ function bulkBar() {
     h('button.btn.sm.primary', { onclick: () => assignDialog(null, null, ids) },
       icon('deploy', 14), 'deploy to these'),
     h('button.btn.sm', { onclick: () => bulkTag(ids) }, icon('tag', 14), 'tag'),
-    h('button.btn.sm.danger', { onclick: () => bulkCancel(ids) }, 'cancel actions'),
+    h('button.btn.sm.danger', { onclick: () => bulkCancel(ids) },
+      icon('x', 14), 'cancel actions'),
+    h('button.btn.sm.danger', { onclick: () => bulkDelete(ids) },
+      icon('trash', 14), n === 1 ? 'delete device' : `delete ${n} devices`),
     h('button.btn.sm.ghost', { onclick: () => { S.picked.clear(); render(); } }, 'clear'));
+}
+
+/* Deleting from the table rather than from each device's own page: the same
+   question asked once, and whatever went is dropped from the selection --
+   otherwise the bar keeps counting devices that no longer exist. */
+async function bulkDelete(ids) {
+  const many = ids.length > 1;
+  if (!await ask(many ? `Delete ${ids.length} devices` : 'Delete device',
+      (many ? ids.slice(0, 8).join('\n') + (ids.length > 8 ? `\n… and ${ids.length - 8} more` : '')
+            : ids[0])
+      + '\n\nTheir history goes with them. A device that polls again registers as new.',
+      { danger: true, okLabel: many ? `Delete ${ids.length}` : 'Delete' })) return;
+  let done = 0; const failed = [];
+  for (const id of ids) {
+    try { await del('/targets/' + enc(id)); S.picked.delete(id); done++; }
+    catch (e) { failed.push(`${id}: ${e.message}`); }
+  }
+  if (failed.length) toast('Deleted with trouble', `${done} gone, ${failed.length} refused\n` + failed[0], 'err', 12000);
+  else toast('Deleted', `${done} device${done === 1 ? '' : 's'}`, 'ok');
+  render();
 }
 
 async function bulkCancel(ids) {

@@ -80,12 +80,21 @@ class Handler(SimpleHTTPRequestHandler):
 
     # --- logging: one line per request, and nothing for static files ---------
     def log_message(self, fmt, *args):
-        if self.path.startswith("/rest/"):
+        if self.proxied():
             sys.stderr.write("%s %s\n" % (self.command, self.path))
 
     # --- routing ------------------------------------------------------------
+    # /rest is the management API. /v3/api-docs is hawkBit's own description of
+    # it, which the console reads once to check it is talking to the release it
+    # was written for -- hawkBit publishes its version nowhere else a browser
+    # can reach.
+    PROXIED = ("/rest/", "/v3/api-docs")
+
+    def proxied(self):
+        return self.path.startswith(self.PROXIED)
+
     def do_GET(self):
-        if self.path.startswith("/rest/"):
+        if self.proxied():
             return self.proxy("GET")
         if self.path == "/_build":
             payload = json.dumps({"build": BUILD}).encode()
@@ -110,8 +119,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     # --- the proxy ----------------------------------------------------------
     def proxy(self, method):
-        if not self.path.startswith("/rest/"):
-            self.send_error(404, "only /rest is proxied")
+        if not self.proxied():
+            self.send_error(404, "only /rest and /v3/api-docs are proxied")
             return
 
         length = int(self.headers.get("Content-Length") or 0)
@@ -150,7 +159,7 @@ class Handler(SimpleHTTPRequestHandler):
         # refresh to discover, and half of them get blamed on the code instead.
         # These files are a few kilobytes served over a LAN; there is nothing to
         # save by caching them.
-        if not self.path.startswith("/rest/"):
+        if not self.proxied():
             self.send_header("Cache-Control", "no-store, must-revalidate")
         super().end_headers()
 

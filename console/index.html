@@ -13,7 +13,7 @@
 <body>
 
 <!-- login ------------------------------------------------------------ -->
-<section id="login">
+<section id="login" class="hidden">
   <div class="login-glow" aria-hidden="true"></div>
   <form id="login-form">
     <div class="login-head">
@@ -110,6 +110,19 @@
   </div>
 </dialog>
 
+<script>
+  /* Which of the two screens to show is decided here, during parsing, and not
+     in the module tree: modules are deferred, so they run after the page has
+     painted -- which showed the sign-in card for a frame on every refresh of
+     an already signed-in session. Both start hidden, so a wrong one is never
+     shown; the worst case is a blank frame. */
+  try {
+    var signedIn = !!sessionStorage.getItem('hb-auth');
+    document.getElementById(signedIn ? 'app' : 'login').classList.remove('hidden');
+  } catch (e) {
+    document.getElementById('login').classList.remove('hidden');
+  }
+</script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

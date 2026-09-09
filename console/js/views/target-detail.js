@@ -1,4 +1,4 @@
-import { S, del, enc, get, post } from '../api.js';
+import { S, del, enc, get, post, put } from '../api.js';
 import { ACTION_PILL, pill } from '../badges.js';
 import { ask, closeDrawer, drawer, fail, toast } from '../chrome.js';
 import { loadAssignedInstalled } from '../columns.js';
@@ -61,7 +61,11 @@ async function openTarget(id) {
         h('button.btn.sm.danger', { onclick: () => cancelLatest(id, true) }, 'force cancel'),
         h('button.btn.sm.danger', { onclick: async () => {
             if (!await ask('Delete target', `${id}\n\nIts history goes with it.`, { danger: true })) return;
-            try { await del('/targets/' + enc(id)); toast('Deleted', id, 'ok'); closeDrawer(); render(); }
+            try {
+              await del('/targets/' + enc(id));
+              S.picked.delete(id);        // or the bulk bar counts a device that is gone
+              toast('Deleted', id, 'ok'); closeDrawer(); render();
+            }
             catch (e) { fail(e); }
           } }, 'delete')),
       tabs, pane);
@@ -226,7 +230,10 @@ function actionsPane(id, actions) {
 
 async function confirmAction(id, aid, decision) {
   try {
-    await post(`/targets/${enc(id)}/actions/${aid}/confirmation`, { confirmation: decision });
+    // PUT, not POST: hawkBit answers 405 to a POST here. Its sibling
+    // autoConfirm/activate is a POST, which is what made this easy to get
+    // wrong -- test/compat.mjs --live catches it against the server.
+    await put(`/targets/${enc(id)}/actions/${aid}/confirmation`, { confirmation: decision });
     toast('Action ' + decision, '#' + aid, 'ok'); openTarget(id);
   } catch (e) { fail(e); }
 }
