@@ -111,8 +111,15 @@ function debounceRender() { clearTimeout(debounceT); debounceT = setTimeout(rend
  * keyboard focus inside the table itself.
  *
  * Off is a first-class choice, and it is remembered. */
+/* 2s is for watching one device take an update, which is the whole reason
+   anyone stares at this page. It is affordable because a refresh no longer
+   re-fetches everything: the assigned/installed cell keeps what it showed and
+   corrects it, attributes are cached for a minute, and the whole thing pauses
+   while a pointer is over the table or a field has the caret. On a large fleet
+   leave it at 10s -- every visible row still costs the server a request. */
 const REFRESH_CHOICES = [
-  [0, 'off'], [5000, '5s'], [10000, '10s'], [30000, '30s'], [60000, '1m'], [300000, '5m'],
+  [0, 'off'], [2000, '2s'], [5000, '5s'], [10000, '10s'],
+  [30000, '30s'], [60000, '1m'], [300000, '5m'],
 ];
 function refreshMs() {
   const v = Number(localStorage.getItem('hb-refresh'));
