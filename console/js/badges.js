@@ -108,8 +108,10 @@ const PHASE_WORDS = [
   ['assigned',    'live', 'created; the device has not polled yet'],
   ['downloading', 'live', 'fetching the package, or the chunks it is missing'],
   ['installing',  'live', 'writing the payload'],
+  ['installed',   'ok',   'an application update is done: it needs no reboot and the '
+                        + 'action closes itself within a moment'],
   ['waiting for reboot', 'warn',
-   'all written to the spare slot; it becomes active at the next boot'],
+   'a system update is written to the spare slot and becomes active at the next boot'],
   ['waiting for confirmation', 'warn pulse',
    'the update needs a human to allow it on the device'],
   ['cancelling',  'live', 'someone stopped it and the device is being told'],
@@ -154,7 +156,7 @@ const PHASE_NOTE = 'a set that carries both a system and an application is '
    there through the reboot. */
 const IN_ASSIGNED = 1, IN_DOWNLOAD = 2, IN_INSTALL = 3;
 
-function phaseFrom(entries) {
+function phaseFrom(entries, kind) {
   if (!entries || !entries.length) return null;
   const chain = entries.slice().sort((a, b) => (a.id || 0) - (b.id || 0));
   let done = 0, cur = 0, complete = false, special = null;
@@ -181,9 +183,20 @@ function phaseFrom(entries) {
   if (special === 'error')
     return { label: 'error', cls: 'err',
              why: 'the device reported a failure while the action is still open' };
-  if (complete)
+  if (complete) {
+    // WHAT "DONE" MEANS DEPENDS ON WHAT WAS INSTALLED. An application update
+    // touches no slot and reboots nothing: it closes its own action within a
+    // second, so telling someone to expect a reboot is simply false -- and it
+    // was on screen during an application delta. Only a set carrying a system
+    // part waits for a boot.
+    if (kind === 'app')
+      return { label: 'installed', cls: 'ok',
+               why: 'an application needs no reboot; the action closes itself in a moment' };
     return { label: 'waiting for reboot', cls: 'warn',
-             why: 'everything is written to the spare slot; it becomes active at the next boot' };
+             why: kind === 'os_app'
+               ? 'both parts are written; the system half becomes active at the next boot'
+               : 'written to the spare slot; it becomes active at the next boot' };
+  }
 
   // "part N" only means something once a part has finished, which is exactly
   // when there is more than one.
@@ -205,9 +218,13 @@ async function phaseOf(targetId) {
     const a = (r.content || [])[0];
     if (!a) return null;
     if (a.active === false) return { closed: true };
-    const st = await limited(() => get(`/targets/${enc(targetId)}/actions/${a.id}/status`
-                                       + '?limit=40&sort=id:DESC'));
-    return phaseFrom(st.content || []);
+    // The action carries no distribution set, so the kind comes from what the
+    // device has been assigned. It decides whether "done" means a reboot.
+    const [st, ds] = await Promise.all([
+      limited(() => get(`/targets/${enc(targetId)}/actions/${a.id}/status?limit=40&sort=id:DESC`)),
+      limited(() => get(`/targets/${enc(targetId)}/assignedDS`)).catch(() => null),
+    ]);
+    return phaseFrom(st.content || [], ds && ds.type);
   } catch (_) { return null; }
 }
 

@@ -218,7 +218,8 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
 {
   const { phaseFrom } = await import(JS + 'badges.js');
   const E = (id, type, msg) => ({ id, type, messages: msg ? [msg] : [] });
-  const lab = e => (phaseFrom(e) || {}).label;
+  const lab  = e => (phaseFrom(e) || {}).label;
+  const lab2 = (e, kind) => (phaseFrom(e, kind) || {}).label;
 
   const assigned  = [E(193, 'running', "Assignment initiated by user 'admin'")];
   const retrieved = assigned.concat(E(194, 'retrieved', 'Target retrieved update action'));
@@ -242,7 +243,16 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   ok('dopo il primo chunk non dice ancora riavvio', lab(chunk1) !== 'waiting for reboot', lab(chunk1));
   ok('e dice che siamo alla seconda parte', /part 2/.test(lab(chunk1)), lab(chunk1));
   ok('seconda parte in download', /downloading \(part 2\)/.test(lab(dl2)), lab(dl2));
-  ok('solo All Chunks Installed vale come fine', lab(chunk2) === 'waiting for reboot', lab(chunk2));
+  // WHAT "DONE" MEANS DEPENDS ON THE KIND OF SET. An application reboots
+  // nothing; only a system part waits for a boot. "waiting for reboot" was on
+  // screen during an application delta, which is simply false.
+  ok('un set di sistema finisce in attesa di riavvio',
+     lab2(chunk2, 'os') === 'waiting for reboot', lab2(chunk2, 'os'));
+  ok('un combinato pure', lab2(chunk2, 'os_app') === 'waiting for reboot', lab2(chunk2, 'os_app'));
+  ok('unapp invece risulta installata e basta',
+     lab2(chunk2, 'app') === 'installed', lab2(chunk2, 'app'));
+  ok('senza sapere il tipo non promette un riavvio applicativo',
+     lab(chunk2) === 'waiting for reboot', lab(chunk2));
   // THE REGRESSION: a poll after the end used to drag it back to downloading
   ok('un poll dopo la fine non fa tornare indietro', lab(polled) === 'waiting for reboot', lab(polled));
 
