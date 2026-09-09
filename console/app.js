@@ -82,6 +82,7 @@ const S = {
   user: sessionStorage.getItem('hb-user') || '',
   view: 'dash', timer: null, busy: 0, counts: {}, sel: null,
   q: '', status: '',        // targets: free text / updateStatus chip
+  picked: new Set(),        // controllerIds ticked for a bulk action
   dsCache: null,
 };
 
@@ -197,6 +198,24 @@ const dtMs = el => {
   const t = new Date(v).getTime();
   return Number.isFinite(t) ? t : null;
 };
+
+/* Whatever is on screen, as a file. Reads the rendered table rather than the
+ * API so that what lands in the spreadsheet is what was being looked at --
+ * same columns, same order, same filter. */
+function exportCsv(name) {
+  const t = $('#view table.t');
+  if (!t) return toast('Nothing to export', '', 'info');
+  const esc = v => /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+  const rows = [];
+  const heads = [...t.querySelectorAll('thead tr:first-child th')]
+    .map(th => th.textContent.replace(/[▲▼]/g, '').trim());
+  rows.push(heads.map(esc).join(','));
+  t.querySelectorAll('tbody tr').forEach(tr => {
+    rows.push([...tr.children].map(td => esc(td.textContent.trim())).join(','));
+  });
+  download(name, rows.join('\n') + '\n');
+  toast('Exported', `${rows.length - 1} rows`, 'ok');
+}
 
 function download(name, text) {
   // The page is served locally, so a blob link just works: no sandbox, no
@@ -334,9 +353,28 @@ const typePill = t => h('span.pill.' + (TYPE_PILL[t] || 'mute'),
 
 const pill = (t, k) => h('span.pill.' + (k || 'mute'), String(t || '—').toLowerCase().replace(/_/g, ' '));
 
+/* Sortable headers. A head may be a plain string or {label, key, state}: with a
+ * key it becomes a button that asks the SERVER for the order, because sorting
+ * the fifty rows on screen would be sorting a page and calling it a fleet. */
+function headCell(x) {
+  if (x && x.nodeType) return h('th', x);
+  if (typeof x !== 'object' || !x || !x.key) return h('th', x && x.label !== undefined ? x.label : x);
+  const st = x.state;
+  const on = st.sortKey === x.key;
+  const dir = on && st.sortDir === 'ASC' ? '▲' : on && st.sortDir === 'DESC' ? '▼' : '';
+  return h('th.sortable', {
+    class: on ? 'on' : '', title: 'sort by ' + x.label,
+    onclick: () => {
+      if (st.sortKey === x.key) st.sortDir = st.sortDir === 'ASC' ? 'DESC' : 'ASC';
+      else { st.sortKey = x.key; st.sortDir = 'ASC'; }
+      st.page = 0; render();
+    },
+  }, x.label, h('span.arrow', dir));
+}
+
 function tableOf(heads, rows, filters) {
   return h('table.t',
-    h('thead', h('tr', heads.map(x => h('th', x))), filters || null),
+    h('thead', h('tr', heads.map(headCell)), filters || null),
     h('tbody', rows.map(r =>
       h('tr', { onclick: r.onclick, class: r.sel ? 'sel' : null }, r.cells.map(c => h('td', c))))));
 }
@@ -407,6 +445,73 @@ VIEWS.dash = {
 /* ------- targets ---------------------------------------------------- */
 const T_STATUS = ['', 'in_sync', 'pending', 'error', 'registered', 'unknown'];
 
+/* BULK SELECTION.
+ *
+ * One device at a time is fine on a bench and hopeless on a fleet: the whole
+ * point of a filter is to act on what it returned. Ticking rows and acting on
+ * the lot is the difference between a viewer and a console.
+ *
+ * The set holds controllerIds, not row indexes, so it survives a re-render, a
+ * sort and a page change -- and the bar says how many are held from pages you
+ * are no longer looking at. */
+let SELECT_HEAD = null;   // rebuilt on every render: it knows the current page
+
+function selectHead(ids) {
+  const box = h('input', { type: 'checkbox' });
+  const allOn = ids.length > 0 && ids.every(i => S.picked.has(i));
+  box.checked = allOn;
+  box.indeterminate = !allOn && ids.some(i => S.picked.has(i));
+  box.title = allOn ? 'clear this page' : 'select this page';
+  box.onclick = e => {
+    e.stopPropagation();
+    ids.forEach(i => allOn ? S.picked.delete(i) : S.picked.add(i));
+    render();
+  };
+  return box;
+}
+
+function bulkBar() {
+  const n = S.picked.size;
+  if (!n) return null;
+  const ids = [...S.picked];
+  return h('div.bulk',
+    h('b', n), h('span', n === 1 ? 'device selected' : 'devices selected'),
+    h('div.grow'),
+    h('button.btn.sm.primary', { onclick: () => assignDialog(null, null, ids) },
+      icon('deploy', 14), 'deploy to these'),
+    h('button.btn.sm', { onclick: () => bulkTag(ids) }, icon('tag', 14), 'tag'),
+    h('button.btn.sm.danger', { onclick: () => bulkCancel(ids) }, 'cancel actions'),
+    h('button.btn.sm.ghost', { onclick: () => { S.picked.clear(); render(); } }, 'clear'));
+}
+
+async function bulkCancel(ids) {
+  if (!confirm(`Cancel the running action on ${ids.length} device(s)?`)) return;
+  let done = 0, none = 0, bad = 0;
+  for (const id of ids) {
+    try {
+      const a = await get(`/targets/${enc(id)}/actions?limit=1&sort=id:DESC`);
+      const act = a.content[0];
+      if (!act || !act.active) { none++; continue; }
+      await del(`/targets/${enc(id)}/actions/${act.id}`);
+      done++;
+    } catch (_) { bad++; }
+  }
+  toast('Cancelled', `${done} cancelled, ${none} had nothing running` + (bad ? `, ${bad} failed` : ''),
+    bad ? 'err' : 'ok');
+  render();
+}
+
+async function bulkTag(ids) {
+  const tags = await get('/targettags?limit=100').catch(() => ({ content: [] }));
+  if (!tags.content.length) return toast('No tags yet', 'create one under Tags', 'info');
+  const sel = h('select', tags.content.map(t => h('option', { value: t.id }, t.name)));
+  modal(`Tag ${ids.length} device(s)`, [h('label.f', 'Tag', sel)], async () => {
+    await post(`/targettags/${sel.value}/assigned`, ids);
+    toast('Tagged', `${ids.length} device(s)`, 'ok');
+    render();
+  }, 'Apply');
+}
+
 /* COLUMNS ARE CHOSEN BY WHOEVER IS LOOKING.
  *
  * The fixed part is here; anything a device reports about itself becomes a
@@ -417,38 +522,38 @@ const T_STATUS = ['', 'in_sync', 'pending', 'error', 'registered', 'unknown'];
  * The choice is per browser (localStorage): two people watching the same fleet
  * usually want different columns. */
 const T_COLS = {
-  controllerId: { label: 'Controller', cell: t => h('span.mono', t.controllerId) },
-  name:         { label: 'Name', cell: t => h('span.dim', t.name !== t.controllerId ? t.name : '—') },
-  status:       { label: 'Status', cell: t => pill(t.updateStatus, TARGET_PILL[t.updateStatus]) },
+  controllerId: { label: 'Controller', s: 'controllerId', cell: t => h('span.mono', t.controllerId) },
+  name:         { label: 'Name', s: 'name', cell: t => h('span.dim', t.name !== t.controllerId ? t.name : '—') },
+  status:       { label: 'Status', s: 'updateStatus', cell: t => pill(t.updateStatus, TARGET_PILL[t.updateStatus]) },
   ds:           { label: 'Assigned / installed', cell: t => {
                     const c = h('span.faint', '…'); loadAssignedInstalled(t.controllerId, c); return c; } },
-  lastPoll:     { label: 'Last poll', cell: t => h('span.faint.nowrap', ago(t.lastControllerRequestAt)) },
+  lastPoll:     { label: 'Last poll', s: 'lastControllerRequestAt', cell: t => h('span.faint.nowrap', ago(t.lastControllerRequestAt)) },
   nextPoll:     { label: 'Next', cell: t => t.pollStatus && t.pollStatus.overdue
                     ? h('span.pill.warn.pulse', 'overdue')
                     : h('span.faint.nowrap', t.pollStatus ? ago(t.pollStatus.nextExpectedRequestAt) : '—') },
   ip:           { label: 'IP', cell: t => h('span.mono.faint', t.ipAddress || '—') },
   targetType:   { label: 'Type', cell: t => h('span.dim', (t.targetType && (t.targetType.name || t.targetType)) || '—') },
-  created:      { label: 'Registered', cell: t => h('span.faint.nowrap', when(t.createdAt)) },
+  created:      { label: 'Registered', s: 'createdAt', cell: t => h('span.faint.nowrap', when(t.createdAt)) },
   security:     { label: 'Token', cell: t => h('span.mono.faint', t.securityToken || '—') },
 };
 const T_COLS_DEFAULT = ['controllerId', 'name', 'status', 'ds', 'lastPoll', 'nextPoll', 'ip'];
 
 const D_COLS = {
-  id:      { label: 'Id', cell: x => h('span.mono', x.id) },
-  name:    { label: 'Name', cell: x => x.name, f: 'name' },
-  version: { label: 'Version', cell: x => h('span.mono', x.version), f: 'version' },
+  id:      { label: 'Id', s: 'id', cell: x => h('span.mono', x.id) },
+  name:    { label: 'Name', s: 'name', cell: x => x.name, f: 'name' },
+  version: { label: 'Version', s: 'version', cell: x => h('span.mono', x.version), f: 'version' },
   type:    { label: 'Type', cell: x => typePill(x.type), f: 'type' },
   // Not shown by default: on a healthy server it is 'yes' on every row, and a
   // column that never varies is width spent on nothing. Add it when you are
   // hunting for the set that will not assign -- then it has to say both things.
   complete:{ label: 'Complete', cell: x => x.complete ? h('span.pill.ok', 'complete') : h('span.pill.err', 'incomplete') },
   desc:    { label: 'Description', cell: x => h('span.faint', x.description || '—'), f: 'description' },
-  created: { label: 'Created', cell: x => h('span.faint.nowrap', { title: when(x.createdAt) }, ago(x.createdAt)) },
+  created: { label: 'Created', s: 'createdAt', cell: x => h('span.faint.nowrap', { title: when(x.createdAt) }, ago(x.createdAt)) },
 };
 const M_COLS = {
-  id:      { label: 'Id', cell: m => h('span.mono', m.id) },
-  name:    { label: 'Name', cell: m => m.name, f: 'name' },
-  version: { label: 'Version', cell: m => h('span.mono', m.version), f: 'version' },
+  id:      { label: 'Id', s: 'id', cell: m => h('span.mono', m.id) },
+  name:    { label: 'Name', s: 'name', cell: m => m.name, f: 'name' },
+  version: { label: 'Version', s: 'version', cell: m => h('span.mono', m.version), f: 'version' },
   type:    { label: 'Type', cell: m => typePill(m.type), f: 'type' },
   vendor:  { label: 'Vendor', cell: m => h('span.faint', m.vendor || '—'), f: 'vendor' },
   desc:    { label: 'Description', cell: m => h('span.faint', m.description || '—'), f: 'description' },
@@ -481,7 +586,7 @@ const M_COLS = {
                 }
               });
               return c; } },
-  created: { label: 'Created', cell: m => h('span.faint.nowrap', { title: when(m.createdAt) }, ago(m.createdAt)) },
+  created: { label: 'Created', s: 'createdAt', cell: m => h('span.faint.nowrap', { title: when(m.createdAt) }, ago(m.createdAt)) },
 };
 const COLSETS = {
   targets: { defs: T_COLS, def: T_COLS_DEFAULT, attrs: true },
@@ -491,6 +596,17 @@ const COLSETS = {
 
 // Filter fields follow the chosen columns, so a column you added is a column
 // you can search.
+// Column ids -> header descriptors, carrying the sort key when the server can
+// order by that field.
+function headsFor(view, chosen) {
+  const st = pg(view);
+  return chosen.map(id => {
+    const d = COLSETS[view].defs[id];
+    return d && d.s ? { label: colLabel(id, view), key: d.s, state: st }
+                    : colLabel(id, view);
+  });
+}
+
 function fieldsFor(view) {
   return cols(view).map(id => {
     const d = COLSETS[view].defs[id];
@@ -567,6 +683,7 @@ VIEWS.targets = {
       }), h('kbd', '/')),
     h('div.vsep'),
     h('button.btn.sm', { onclick: () => columnsDialog('targets') }, icon('columns', 14), 'columns'),
+    h('button.btn.sm', { onclick: () => exportCsv('targets.csv') }, icon('save', 14), 'export'),
     h('button.btn.sm', { onclick: registerTargetDialog }, icon('plus', 14), 'register'),
     h('button.btn.sm', { onclick: () => saveFilterDialog(currentQuery()) }, icon('save', 14), 'save filter'),
     h('button.btn.sm.primary', { onclick: () => assignDialog(null) }, icon('deploy', 14), 'deploy to…'),
@@ -593,8 +710,10 @@ VIEWS.targets = {
       return root.replaceChildren(chips, h('div.empty', h('b', 'That filter was refused'), e.message));
     }
     if (!data.content.length) {
+      SELECT_HEAD = selectHead([]);
       return root.replaceChildren(chips,
-        tableOf(cols().map(c => colLabel(c)).concat(['']), [], filterRow(fields, st, render)),
+        tableOf([SELECT_HEAD].concat(headsFor('targets', cols())).concat(['']), [],
+          filterRow([{}].concat(fields), st, render)),
         h('div.empty', h('b', q ? 'Nothing matches' : 'No targets yet'),
           q ? 'Try a substring, or FIQL such as attribute.device_type==neo-intel'
             : 'A device registers itself on its first poll.'));
@@ -603,22 +722,33 @@ VIEWS.targets = {
     attrCache.clear();
     waiting.length = 0;      // rows from the previous page are no longer wanted
     const chosen = cols();
+    const pageIds = data.content.map(t => t.controllerId);
+    SELECT_HEAD = selectHead(pageIds);
+
     const rows = data.content.map(t => ({
-      sel: S.sel === t.controllerId,
+      sel: S.sel === t.controllerId || S.picked.has(t.controllerId),
       onclick: () => openTarget(t.controllerId),
-      cells: chosen.map(id => {
+      cells: [h('input', {
+        type: 'checkbox', checked: S.picked.has(t.controllerId),
+        onclick: e => {
+          e.stopPropagation();
+          if (e.target.checked) S.picked.add(t.controllerId); else S.picked.delete(t.controllerId);
+          render();
+        },
+      })].concat(chosen.map(id => {
         if (id.startsWith('attr:')) {
           const key = id.slice(5), c = h('span.mono.faint', '…');
           attrsOf(t.controllerId).then(a => { c.textContent = (a && a[key]) || '—'; });
           return c;
         }
         return T_COLS[id] ? T_COLS[id].cell(t) : '—';
-      }).concat([
+      })).concat([
         h('button.btn.sm.ghost', { onclick: e => { e.stopPropagation(); assignDialog(t.controllerId); } }, 'deploy'),
       ]),
     }));
-    root.replaceChildren(chips,
-      tableOf(chosen.map(c => colLabel(c)).concat(['']), rows, filterRow(fields, st, render)),
+    root.replaceChildren(chips, bulkBar(),
+      tableOf([SELECT_HEAD].concat(headsFor('targets', chosen)).concat(['']), rows,
+        filterRow([{}].concat(fields), st, render)),
       pager(st, data.total, render));
   },
 };
@@ -989,7 +1119,7 @@ async function deviceTypes() {
   return [...out].sort();
 }
 
-async function assignDialog(targetId, presetDs) {
+async function assignDialog(targetId, presetDs, explicitIds) {
   let sets;
   try { sets = await distributionSets(true); } catch (e) { return fail(e); }
   if (!sets.content.length) return toast('Nothing to deploy', 'create a distribution set first', 'info');
@@ -1014,6 +1144,8 @@ async function assignDialog(targetId, presetDs) {
   // query language: one device, a model, everything, or FIQL when none of those
   // is enough.
   const mode = h('select',
+    explicitIds ? h('option', { value: 'picked', selected: true },
+      `the ${explicitIds.length} selected device(s)`) : null,
     h('option', { value: 'one', selected: !!targetId }, 'this device'),
     h('option', { value: 'type', selected: !targetId }, 'by device type'),
     h('option', { value: 'all' }, 'every registered device'),
@@ -1033,6 +1165,7 @@ async function assignDialog(targetId, presetDs) {
 
   const queryOf = () => {
     switch (mode.value) {
+      case 'picked': return '';
       case 'one':  return one.value.trim() ? `controllerid==${one.value.trim()}` : '';
       case 'type': return typeSel.value ? `attribute.device_type==${typeSel.value}` : '';
       case 'all':  return '';
@@ -1049,7 +1182,10 @@ async function assignDialog(targetId, presetDs) {
   }
   const paint = () => {
     row.replaceChildren(mode.value === 'one' ? one : mode.value === 'type' ? typeSel
-      : mode.value === 'fiql' ? fq : h('span.faint', 'no filter: everything registered'));
+      : mode.value === 'fiql' ? fq
+      : mode.value === 'picked' ? h('span.faint', explicitIds.join(', ').slice(0, 200))
+      : h('span.faint', 'no filter: everything registered'));
+    if (mode.value === 'picked') { count.textContent = `${explicitIds.length} device(s)`; return; }
     recount();
   };
   mode.addEventListener('change', paint);
@@ -1066,7 +1202,9 @@ async function assignDialog(targetId, presetDs) {
       'accepts. forced is re-offered at every poll until the action closes.'),
   ], async () => {
     let ids;
-    if (mode.value === 'one') {
+    if (mode.value === 'picked') {
+      ids = explicitIds;
+    } else if (mode.value === 'one') {
       if (!one.value.trim()) throw new Error('name a device');
       ids = [one.value.trim()];
     } else {
@@ -1102,6 +1240,7 @@ VIEWS.ds = {
   title: 'Distribution sets',
   bar: () => [
     h('button.btn.sm', { onclick: () => columnsDialog('ds') }, icon('columns', 14), 'columns'),
+    h('button.btn.sm', { onclick: () => exportCsv('distribution-sets.csv') }, icon('save', 14), 'export'),
     h('button.btn.sm.primary', { onclick: newDsDialog }, icon('plus', 14), 'new set'),
   ],
   async render(root) {
@@ -1112,7 +1251,7 @@ VIEWS.ds = {
     if (!d.content.length && !Object.values(st.f).some(Boolean)) return root.replaceChildren(h('div.empty',
       h('b', 'No distribution sets'), 'A set is what you assign to devices.'));
     root.replaceChildren(
-      tableOf(chosen.map(c => colLabel(c, 'ds')).concat(['']),
+      tableOf(headsFor('ds', chosen).concat(['']),
         d.content.map(x => ({
           onclick: () => openDs(x),
           cells: chosen.map(c => D_COLS[c].cell(x)).concat([
@@ -1200,6 +1339,7 @@ VIEWS.sm = {
   title: 'Software modules',
   bar: () => [
     h('button.btn.sm', { onclick: () => columnsDialog('sm') }, icon('columns', 14), 'columns'),
+    h('button.btn.sm', { onclick: () => exportCsv('software-modules.csv') }, icon('save', 14), 'export'),
     h('button.btn.sm.primary', { onclick: newSmDialog }, icon('plus', 14), 'new module'),
   ],
   async render(root) {
@@ -1211,7 +1351,7 @@ VIEWS.sm = {
     if (!d.content.length && !Object.values(st.f).some(Boolean)) return root.replaceChildren(h('div.empty',
       h('b', 'No modules'), 'A module holds the .swu, and for a delta its .zck as well.'));
     root.replaceChildren(
-      tableOf(chosen.map(c => colLabel(c, 'sm')).concat(['']),
+      tableOf(headsFor('sm', chosen).concat(['']),
         d.content.map(m => ({
           onclick: () => openSm(m),
           cells: chosen.map(c => M_COLS[c].cell(m)).concat([h('span')]),
@@ -1824,7 +1964,7 @@ function drawNav() {
 
 function go(id) {
   S.view = id;
-  if (id !== 'targets') { S.q = ''; S.status = ''; }
+  if (id !== 'targets') { S.q = ''; S.status = ''; S.picked.clear(); }
   location.hash = id;
   closeDrawer(); drawNav(); render();
 }
@@ -1833,6 +1973,9 @@ let renderToken = 0;
 async function render() {
   const v = VIEWS[S.view] || VIEWS.dash;
   $('#title').textContent = v.title;
+  // The tab says where you are: with three consoles open on three servers, the
+  // browser's tab strip is the only place that distinguishes them.
+  document.title = `${v.title} · hawkBit · QubicaAMF`;
   $('#bar-extra').replaceChildren(...(v.bar ? v.bar() : []));
   const mine = ++renderToken;
   const root = $('#view');
@@ -1921,6 +2064,7 @@ function pager(state, total, onChange) {
 // One place that builds a paged, filtered, sorted request.
 function pagedPath(base, state, q, sort) {
   let p = `${base}?limit=${state.size}&offset=${state.page * state.size}`;
+  if (state.sortKey) sort = `${state.sortKey}:${state.sortDir || 'ASC'}`;
   if (sort) p += '&sort=' + sort;
   if (q) p += '&q=' + fiql(q);
   return p;

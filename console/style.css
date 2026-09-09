@@ -51,11 +51,19 @@ a:hover { text-decoration: underline; }
 button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ---------------------------------------------------------------- layout */
-#app { display: grid; grid-template-columns: auto 1fr; height: 100vh; }
+/* FLEX, NOT GRID, and the reason is the animation.
+   As a grid item the sidebar sat in an 'auto' track, which sizes itself to the
+   item's min-content: with the labels still in the DOM that is far wider than
+   58px, so the width transition ran on the element while the track it lives in
+   did not follow, and the collapse looked instantaneous. A flex item with an
+   animated flex-basis and min-width:0 shrinks for real, in every browser. */
+#app { display: flex; height: 100vh; }
 
 #sidebar {
   background: var(--bg-2); border-right: 1px solid var(--line);
   display: flex; flex-direction: column; min-height: 0;
+  flex: 0 0 210px; min-width: 0; overflow: hidden;
+  transition: flex-basis .24s cubic-bezier(.4, 0, .2, 1);
 }
 .brand {
   padding: 14px 16px 12px; border-bottom: 1px solid var(--line);
@@ -85,7 +93,7 @@ nav .sep { margin: 8px 10px 4px; font-size: 10px; letter-spacing: .8px;
 }
 .side-foot .row { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
 
-#main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#main { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 
 header.bar {
   display: flex; align-items: center; gap: 10px;
@@ -608,11 +616,7 @@ nav button .ct { font-variant-numeric: tabular-nums; }
    and was silently doing nothing here. The grid follows with 'auto'.
    overflow:hidden matters too -- without it the footer spills out of the
    58px column while the transition is still running. */
-#sidebar {
-  width: 210px; overflow: hidden;
-  transition: width .22s cubic-bezier(.4, 0, .2, 1);
-}
-#app.collapsed #sidebar { width: 58px; }
+#app.collapsed #sidebar { flex-basis: 58px; }
 
 /* Labels fade and give up their width, so the icons settle instead of jumping. */
 .lbl {
@@ -794,3 +798,25 @@ tr .btn.ghost.danger:hover {
   background: var(--err); color: #fff;
   box-shadow: 0 2px 10px color-mix(in srgb, var(--err) 40%, transparent);
 }
+
+/* ------------------------------------------------------- sorting & bulk */
+th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+th.sortable:hover { color: var(--fg); }
+th.sortable.on { color: var(--accent-2); }
+th .arrow { margin-left: 5px; font-size: 9px; opacity: .8; }
+
+/* The bulk bar only exists while something is selected, and it says how many
+   in a way that survives paging: the count is of ids held, not of rows on
+   screen. */
+.bulk {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  padding: 8px 12px; border-radius: var(--r);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  animation: slidein .16s ease-out;
+}
+.bulk b { font-family: var(--mono); font-size: 15px; color: var(--accent-2); }
+.bulk .grow { flex: 1; }
+
+table.t td input[type=checkbox], table.t th input[type=checkbox] { margin: 0; vertical-align: middle; }
+table.t tbody tr.sel { background: color-mix(in srgb, var(--accent) 9%, var(--bg-2)); }
