@@ -1664,8 +1664,21 @@ VIEWS.cfg = {
       return chip;
     }));
 
+    const idle = h('select', IDLE_CHOICES.map(([v, l]) =>
+      h('option', { value: v, selected: v === idleMin() }, l)));
+    idle.onchange = e => {
+      setIdleMin(Number(e.target.value));
+      toast('Saved', 'sign out after ' + e.target.selectedOptions[0].text, 'ok');
+    };
+
     root.replaceChildren(h('div.stack',
       h('div.panel', h('h3', 'Theme'), h('div.body', swatches)),
+      h('div.panel', h('h3', 'Sign out when idle'), h('div.body.flex',
+        h('div', { style: 'flex:0 0 320px' }, h('div.mono', 'idle timeout'),
+          h('div.faint', { style: 'font-size:11px' },
+            'the tab forgets the credentials after this long with no mouse or ' +
+            'keyboard. Auto-refresh does not count as activity.')),
+        idle)),
       h('div.panel', h('h3', 'This console'), h('div.body.flex',
         h('div', { style: 'flex:0 0 320px' }, h('div.mono', 'auto-refresh'),
           h('div.faint', { style: 'font-size:11px' },
@@ -1706,6 +1719,50 @@ VIEWS.about = {
       list('Software module types', types[2])));
   },
 };
+
+/* ------------------------------------------------------------ idle logout */
+/* The credentials live in this tab and nowhere else, so closing it is logging
+ * out -- but a console left open on a bench is a console anyone walking past
+ * can deploy from. After a period with no mouse, key or touch, the tab forgets
+ * them by itself.
+ *
+ * It counts real interaction, not requests: auto-refresh keeps talking to the
+ * server on its own, and letting that count as presence would mean the timer
+ * never fires. */
+const IDLE_CHOICES = [
+  [0, 'never'], [5, '5 min'], [15, '15 min'], [30, '30 min'],
+  [60, '1 hour'], [240, '4 hours'],
+];
+function idleMin() {
+  const v = Number(localStorage.getItem('hb-idle'));
+  return IDLE_CHOICES.some(([n]) => n === v) ? v : 30;
+}
+function setIdleMin(v) {
+  try { localStorage.setItem('hb-idle', String(v)); } catch (_) {}
+  S.lastSeen = Date.now(); S.idleWarned = false;
+}
+S.lastSeen = Date.now();
+S.idleWarned = false;
+
+function idleTick() {
+  const mins = idleMin();
+  if (!mins || !S.auth) return;
+  const left = mins * 60000 - (Date.now() - S.lastSeen);
+  if (left <= 0) {
+    signOut();
+    toast('Signed out', `no activity for ${mins} minutes`, 'info', 15000);
+    return;
+  }
+  // One warning, a minute out, so a long read is not thrown away silently.
+  if (left <= 60000 && !S.idleWarned) {
+    S.idleWarned = true;
+    toast('About to sign out', 'a minute with no activity left — move the mouse to stay', 'err', 55000);
+  }
+}
+['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev =>
+  document.addEventListener(ev, () => { S.lastSeen = Date.now(); S.idleWarned = false; },
+    { passive: true, capture: true }));
+setInterval(idleTick, 10000);
 
 /* ---------------------------------------------------------------- themes */
 /* Every theme is a palette in style.css, nothing more: the rest of the sheet is

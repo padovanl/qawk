@@ -51,7 +51,7 @@ a:hover { text-decoration: underline; }
 button, input, select, textarea { font: inherit; color: inherit; }
 
 /* ---------------------------------------------------------------- layout */
-#app { display: grid; grid-template-columns: 210px 1fr; height: 100vh; }
+#app { display: grid; grid-template-columns: auto 1fr; height: 100vh; }
 
 #sidebar {
   background: var(--bg-2); border-right: 1px solid var(--line);
@@ -603,17 +603,18 @@ nav button.on .ico { color: var(--accent-2); }
 nav button .ct { font-variant-numeric: tabular-nums; }
 
 /* -------------------------------------------------------- collapsed sidebar */
-/* The grid keeps BOTH columns. Dropping the 1fr is what broke it the first
-   time: with one column the main area wrapped onto a second row and the page
-   came apart -- the header ended up under the sidebar and the cards were cut
-   in half. */
-#app {
-  transition: grid-template-columns .22s cubic-bezier(.4, 0, .2, 1);
+/* What animates is the sidebar's WIDTH, not grid-template-columns: browsers
+   interpolate a width everywhere, while interpolating a grid track is recent
+   and was silently doing nothing here. The grid follows with 'auto'.
+   overflow:hidden matters too -- without it the footer spills out of the
+   58px column while the transition is still running. */
+#sidebar {
+  width: 210px; overflow: hidden;
+  transition: width .22s cubic-bezier(.4, 0, .2, 1);
 }
-#app.collapsed { grid-template-columns: 58px 1fr; }
+#app.collapsed #sidebar { width: 58px; }
 
-/* Labels fade and give up their width rather than vanishing, so the icons
-   settle into place instead of jumping. */
+/* Labels fade and give up their width, so the icons settle instead of jumping. */
 .lbl {
   display: inline-block; white-space: nowrap;
   transition: opacity .12s ease, max-width .22s cubic-bezier(.4, 0, .2, 1);
@@ -634,16 +635,16 @@ nav button .ct { font-variant-numeric: tabular-nums; }
   font-size: 9px; padding: 0 4px; line-height: 1.5;
 }
 
+/* The footer is settings, not navigation: collapsed, only the way out stays.
+   Theme and refresh are both in Configuration as well, so nothing is lost. */
 #app.collapsed .side-foot { align-items: center; padding: 10px 6px; }
 #app.collapsed .side-foot .row { justify-content: center; gap: 0; }
-#app.collapsed .side-foot select { width: 44px; padding: 0 2px; background-image: none; }
-#app.collapsed #paused { display: none; }
-#app.collapsed #logout { padding: 0 7px; }
+#app.collapsed #conn,
+#app.collapsed #paused,
+#app.collapsed .side-foot label { display: none; }
+#app.collapsed #logout { padding: 0 8px; }
 
 #navtoggle .ico { transition: transform .22s cubic-bezier(.4, 0, .2, 1); }
-
-.btn .ico { opacity: .7; }
-.btn:hover .ico, .btn.primary .ico { opacity: 1; }
 
 /* ================================================================= themes */
 /* Each theme is the same dozen variables. Everything else in the sheet is
