@@ -429,6 +429,15 @@ const ICONS = {
   save:    'M5 4h11l3 3v13H5zM8 4v5h7M8 14h8v6H8z',
   left:    'M14 6l-6 6 6 6',
   right:   'M10 6l6 6-6 6',
+  trash:   'M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v6M14 11v6',
+  check:   'M4 12l5 5L20 6',
+  x:       'M6 6l12 12M18 6L6 18',
+  upload:  'M12 19V7M12 7l-5 5M12 7l5 5M5 21h14',
+  play:    'M7 5l12 7-12 7z',
+  pause:   'M8 5h3v14H8zM13 5h3v14h-3z',
+  next:    'M6 5l9 7-9 7zM17 5h2v14h-2z',
+  edit:    'M4 20h4l10-10-4-4L4 16zM14 6l4 4',
+  add:     'M12 5v14M5 12h14',
 };
 function icon(name, size = 15) {
   const ns = 'http://www.w3.org/2000/svg';
@@ -1103,7 +1112,7 @@ async function openTarget(id) {
     pane.replaceChildren(overviewPane(t, attrs, autoc, id));
     body.replaceChildren(
       h('div.wrap', { style: 'margin-bottom:12px' },
-        h('button.btn.primary.sm', { onclick: () => assignDialog(id) }, 'deploy'),
+        h('button.btn.primary.sm', { onclick: () => assignDialog(id) }, icon('deploy', 14), 'deploy'),
         h('button.btn.sm.danger', { onclick: () => cancelLatest(id, false) }, 'cancel action'),
         h('button.btn.sm.danger', { onclick: () => cancelLatest(id, true) }, 'force cancel'),
         h('button.btn.sm.danger', { onclick: async () => {
@@ -1181,7 +1190,7 @@ function actionsPane(id, actions) {
       for (const a of actions) parts.push(await actionLogText(id, a));
       download(`actions-${id}.log`, parts.join('\n' + '-'.repeat(72) + '\n\n'));
     } catch (er) { fail(er); } finally { b.classList.remove('loading'); }
-  } }, 'download all logs');
+  } }, icon('save', 13), 'download all logs');
   const expand = h('button.btn.sm', { onclick: () => {
     const shut = [...wrap.querySelectorAll('.acc:not(.open) .ahead')];
     if (shut.length) shut.forEach(x => x.click());
@@ -1224,7 +1233,7 @@ function actionsPane(id, actions) {
         } }, 'deploy this again'),
       h('button.btn.sm', { onclick: async () => {
           try { download(`action-${a.id}-${id}.log`, await actionLogText(id, a)); }
-          catch (e) { fail(e); } } }, 'download log'),
+          catch (e) { fail(e); } } }, icon('save', 13), 'download log'),
       a.active ? h('button.btn.sm.danger', { onclick: cancelOne }, 'cancel') : null,
       st === 'wait_for_confirmation'
         ? [h('button.btn.sm.primary', { onclick: () => confirmAction(id, a.id, 'confirmed') }, 'confirm'),
@@ -1517,7 +1526,7 @@ async function assignDialog(targetId, presetDs, explicitIds) {
     h('label.f', 'Force time', at), dtQuick(at), atHint,
     h('label.f', h('span.flex', confirmReq, 'require confirmation on the device'), h('span')),
     h('label.f', 'Send it to', mode), row, count,
-    h('div.flex', h('button.btn.sm', { onclick: runPreflight }, 'check the devices first'),
+    h('div.flex', h('button.btn.sm', { onclick: runPreflight }, icon('check', 14), 'check the devices first'),
       h('span.faint', 'a delta only applies to the version it was built from')),
     pre,
     h('p.faint', { style: 'margin:0;font-size:12px' },
@@ -1607,9 +1616,9 @@ async function openDs(x) {
                     catch (er) { fail(er); } } }, 'remove')],
             })))
           : h('span.faint', 'no modules — an incomplete set is never offered to any device'),
-        h('button.btn', { onclick: () => addModulesDialog(x, draw) }, 'add software modules'))),
+        h('button.btn', { onclick: () => addModulesDialog(x, draw) }, icon('add', 14), 'add software modules'))),
       h('div.wrap',
-        h('button.btn.primary', { onclick: () => assignDialog(null, x.id) }, 'deploy this set'),
+        h('button.btn.primary', { onclick: () => assignDialog(null, x.id) }, icon('deploy', 14), 'deploy this set'),
         h('button.btn.danger', { onclick: async () => {
             if (!confirm(`Delete ${x.name} ${x.version}?\n\nhawkBit only marks it deleted: the name and version stay reserved for good.`)) return;
             try { await del('/distributionsets/' + x.id); toast('Deleted', '', 'ok'); closeDrawer(); render(); }
@@ -1732,7 +1741,7 @@ async function openSm(m) {
           ? tableOf(['File', 'Size', 'SHA-256', ''], list.map(a => ({
               cells: [h('span.mono', a.providedFilename), h('span.nowrap', bytes(a.size)),
                 h('span.mono.faint', ((a.hashes && a.hashes.sha256) || '').slice(0, 16) + '…'),
-                h('button.btn.sm.danger', { onclick: async () => {
+                h('button.btn.sm.danger', { title: 'delete', onclick: async () => {
                     if (!confirm('Delete ' + a.providedFilename + '?')) return;
                     try { await del(`/softwaremodules/${m.id}/artifacts/${a.id}`); draw(); }
                     catch (e) { fail(e); } } }, 'delete')],
@@ -1741,7 +1750,7 @@ async function openSm(m) {
       h('div.panel', h('h3', 'Add artifacts'), h('div.body.stack',
         file, checks, prog,
         h('div.wrap',
-          h('button.btn', { onclick: () => runChecks() }, 'check'),
+          h('button.btn', { onclick: () => runChecks() }, icon('check', 14), 'check'),
           h('button.btn.primary', { onclick: async e => {
               const b = e.currentTarget;
               const plan = await runChecks();
@@ -1760,7 +1769,7 @@ async function openSm(m) {
                 draw();
               } catch (er) { fail(er); prog.style.display = 'none'; }
               finally { b.classList.remove('loading'); }
-            } }, 'upload')),
+            } }, icon('upload', 14), 'upload')),
         h('p.faint', { style: 'margin:0;font-size:12px' },
           'Pick the .swu and, for a delta, its .zck together — the same checks ' +
           'upload-swu.sh makes are made here, before anything is sent.'))),
@@ -1768,7 +1777,7 @@ async function openSm(m) {
       h('button.btn.danger', { onclick: async () => {
           if (!confirm(`Delete module ${m.name} ${m.version}?`)) return;
           try { await del('/softwaremodules/' + m.id); toast('Deleted', '', 'ok'); closeDrawer(); render(); }
-          catch (e) { fail(e); } } }, 'delete module')));
+          catch (e) { fail(e); } } }, icon('trash', 13), 'delete module')));
   };
   draw();
 }
@@ -1842,13 +1851,15 @@ VIEWS.ro = {
       pager(st, d.total, render));
   },
 };
+const ACT_ICON = { start: 'play', pause: 'pause', resume: 'play',
+  delete: 'trash', approve: 'check', 'trigger next group': 'next' };
 const actBtn = (label, fn) => h('button.btn.sm', {
   onclick: async e => {
     e.stopPropagation();
     try { await fn(); toast(label + ' ok', '', 'ok'); render(); }
     catch (er) { if (er.message !== 'cancelled by you') fail(er); }
   },
-}, label);
+}, ACT_ICON[label] ? icon(ACT_ICON[label], 13) : null, label);
 
 async function openRollout(r) {
   const body = h('div', h('div.empty', h('span.spin')));
@@ -1906,7 +1917,7 @@ async function openRolloutGroup(r, g) {
   try {
     const t = await get(`/rollouts/${r.id}/deploygroups/${g.id}/targets?limit=200`);
     body.replaceChildren(h('div.stack',
-      h('button.btn', { onclick: () => openRollout(r) }, '← back to the rollout'),
+      h('button.btn', { onclick: () => openRollout(r) }, icon('left', 14), 'back to the rollout'),
       h('div.panel', h('h3', `Targets in this group (${t.total})`), h('div.body',
         t.content.length
           ? tableOf(['Controller', 'Status', 'Last poll'], t.content.map(x => ({
@@ -2146,7 +2157,7 @@ VIEWS.cfg = {
       return h('div.flex', { style: 'gap:10px' }, label, inp,
         h('button.btn.sm', { onclick: async () => {
             try { await put('/system/configs/' + k, { value: inp.value }); toast('Saved', k, 'ok'); }
-            catch (e) { fail(e); } } }, 'save'));
+            catch (e) { fail(e); } } }, icon('save', 13), 'save'));
     }).filter(Boolean);
 
     const refresh = h('select', REFRESH_CHOICES.map(([v, l]) =>
