@@ -216,6 +216,41 @@ async function actionLogText(id, a) {
   return head.concat(body.length ? body : ['(no feedback recorded)']).join('\n') + '\n';
 }
 
+
+/* ---------------------------------------------------------------- icons */
+/* Inline SVG, stroked in currentColor: no icon font, no sprite sheet, nothing
+ * to fetch. They are there to make a row scannable, not decorative -- one
+ * stroke weight, one size, no fills. */
+const ICONS = {
+  dash:    'M3 3h7v7H3zM14 3h7v4h-7zM14 11h7v10h-7zM3 14h7v7H3z',
+  target:  'M3 5h18v11H3zM8 20h8M12 16v4',
+  filter:  'M3 5h18l-7 8v6l-4 2v-8z',
+  tag:     'M3 12V4h8l9 9-8 8-9-9zM7.5 7.5h.01',
+  rollout: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17l9 5 9-5',
+  package: 'M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8',
+  module:  'M9 3h6v3h3v6h3v6h-6v-3H9v-3H6V9H3V3z',
+  cfg:     'M4 6h16M4 12h16M4 18h16M9 4v4M15 10v4M7 16v4',
+  info:    'M12 3a9 9 0 100 18 9 9 0 000-18zM12 11v6M12 7.5h.01',
+  chip:    'M7 7h10v10H7zM4 10h3M4 14h3M17 10h3M17 14h3M10 4v3M14 4v3M10 17v3M14 17v3',
+  box:     'M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8',
+};
+function icon(name, size = 15) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', size); svg.setAttribute('height', size);
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.7');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.classList.add('ico');
+  const path = document.createElementNS(ns, 'path');
+  path.setAttribute('d', ICONS[name] || ICONS.info);
+  svg.append(path);
+  return svg;
+}
+
 /* --------------------------------------------------------------- chrome */
 function toast(title, msg, kind = 'info', ms = 6000) {
   const t = h('div.toast.' + kind, h('b', title), msg ? h('div.m', msg) : null);
@@ -266,8 +301,18 @@ const TARGET_PILL = {
 /* Types are a small closed set that you scan down a column, so they are read
  * as colour first and text second: system and application are different kinds
  * of update, and a combined set is a third thing rather than a bit of both. */
-const TYPE_PILL = { os: 'ty-os', app: 'ty-app', application: 'ty-app', os_app: 'ty-both' };
-const typePill = t => h('span.pill.' + (TYPE_PILL[t] || 'mute'), String(t || '—'));
+/* ONE VOCABULARY ACROSS THE TWO TABLES.
+ *
+ * hawkBit calls the module type 'application' and the distribution set type
+ * 'app'. They are the same thing to anyone using this, and two words for it in
+ * two adjacent tables reads as two different concepts. The badge says 'app' in
+ * both places; the underlying key is untouched, so filters and the API still
+ * work in hawkBit's own words. */
+const TYPE_PILL  = { os: 'ty-os', app: 'ty-app', application: 'ty-app', os_app: 'ty-both' };
+const TYPE_LABEL = { os: 'os', app: 'app', application: 'app', os_app: 'os+app' };
+const TYPE_ICON = { os: 'chip', app: 'box', application: 'box', os_app: 'package' };
+const typePill = t => h('span.pill.' + (TYPE_PILL[t] || 'mute'),
+  TYPE_ICON[t] ? icon(TYPE_ICON[t], 12) : null, TYPE_LABEL[t] || String(t || '—'));
 
 const pill = (t, k) => h('span.pill.' + (k || 'mute'), String(t || '—').toLowerCase().replace(/_/g, ' '));
 
@@ -1582,25 +1627,26 @@ VIEWS.about = {
 
 /* ---------------------------------------------------------------- shell */
 const NAV = [
-  { id: 'dash', label: 'Dashboard' },
+  { id: 'dash', label: 'Dashboard', ico: 'dash' },
   { sep: 'Fleet' },
-  { id: 'targets', label: 'Targets', count: 'targets' },
-  { id: 'filters', label: 'Filters' },
-  { id: 'tags', label: 'Tags' },
-  { id: 'ro', label: 'Rollouts', count: 'ro' },
+  { id: 'targets', label: 'Targets', count: 'targets', ico: 'target' },
+  { id: 'filters', label: 'Filters', ico: 'filter' },
+  { id: 'tags', label: 'Tags', ico: 'tag' },
+  { id: 'ro', label: 'Rollouts', count: 'ro', ico: 'rollout' },
   { sep: 'Software' },
-  { id: 'ds', label: 'Distribution sets', count: 'ds' },
-  { id: 'sm', label: 'Modules', count: 'sm' },
+  { id: 'ds', label: 'Distribution sets', count: 'ds', ico: 'package' },
+  { id: 'sm', label: 'Modules', count: 'sm', ico: 'module' },
   { sep: 'Server' },
-  { id: 'cfg', label: 'Configuration' },
-  { id: 'about', label: 'About' },
+  { id: 'cfg', label: 'Configuration', ico: 'cfg' },
+  { id: 'about', label: 'About', ico: 'info' },
 ];
 
 function drawNav() {
   $('#nav').replaceChildren(...NAV.map(n => n.sep
     ? h('div.sep', n.sep)
     : h('button', { class: S.view === n.id ? 'on' : '', onclick: () => go(n.id) },
-        n.label, n.count && S.counts[n.count] !== undefined ? h('span.ct', S.counts[n.count]) : null)));
+        icon(n.ico), n.label,
+        n.count && S.counts[n.count] !== undefined ? h('span.ct', S.counts[n.count]) : null)));
 }
 
 function go(id) {
