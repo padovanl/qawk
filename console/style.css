@@ -1184,8 +1184,19 @@ dialog.ask .da { display: flex; gap: 8px; justify-content: flex-end; padding: 14
 /* ------------------------------------------------------------ state legend */
 /* Five words that are not self-explanatory, explained where they are used
    rather than in a document nobody has open during a rollout. */
+/* Unfolds instead of appearing. A grid row track animates from 0fr to 1fr,
+   which gives a real height transition without measuring anything; the inner
+   element carries all the spacing, so at 0fr it collapses to nothing. */
+.legend-wrap {
+  display: grid; grid-template-rows: 0fr;
+  opacity: 0; margin-top: 0;
+  transition: grid-template-rows .24s cubic-bezier(.2,.8,.3,1),
+              opacity .18s ease, margin-top .24s cubic-bezier(.2,.8,.3,1);
+}
+.legend-wrap.open { grid-template-rows: 1fr; opacity: 1; margin-top: 10px; }
+.legend-wrap > .legend { overflow: hidden; min-height: 0; }
 .legend {
-  margin-top: 10px; padding: 11px 13px; border-radius: 10px;
+  padding: 11px 13px; border-radius: 10px;
   background: var(--bg-2); border: 1px solid var(--line);
   display: grid; gap: 7px;
 }

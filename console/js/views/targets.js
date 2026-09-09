@@ -148,13 +148,16 @@ VIEWS.targets = {
     // date", and 'unknown' is not a fault -- and getting that wrong during a
     // rollout is expensive. The legend folds away, and stays folded.
     const legendOpen = localStorage.getItem('hb-legend') === '1';
-    const legend = h('div.legend' + (legendOpen ? '' : '.hidden'),
-      T_LEGEND.map(([k, what]) => h('div.legend-row',
-        pill(k, TARGET_PILL[k] || 'mute'), h('span', what))));
+    // It unfolds rather than appearing: 'hidden' is display:none, which cannot
+    // be animated, so the rows live inside a wrapper whose row track goes from
+    // 0fr to 1fr. That animates the real height without anyone having to know
+    // what it is.
+    const legend = h('div.legend-wrap' + (legendOpen ? '.open' : ''),
+      h('div.legend', T_LEGEND.map(([k, what]) => h('div.legend-row',
+        pill(k, TARGET_PILL[k] || 'mute'), h('span', what)))));
     const legendBtn = h('button.btn.sm.ghost', {
       onclick: () => {
-        legend.classList.toggle('hidden');
-        const open = !legend.classList.contains('hidden');
+        const open = legend.classList.toggle('open');
         try { localStorage.setItem('hb-legend', open ? '1' : '0'); } catch (_) {}
         legendBtn.replaceChildren(icon('info', 13), open ? 'hide meanings' : 'what do these mean?');
       },
