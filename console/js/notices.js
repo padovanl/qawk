@@ -67,6 +67,15 @@ function noteTargets(list) {
   fresh.forEach(i => S.known.add(i));
   if (fresh.length === 1) toast('New device', fresh[0], 'info', 12000);
   else if (fresh.length > 1) toast('New devices', `${fresh.length} registered`, 'info', 12000);
+  // ...and the mirror of it. This list is a page, so only say a device is gone
+  // when the page is not simply showing different devices.
+  if (list.length && ids.length >= S.known.size) {
+    for (const old of [...S.known]) {
+      if (ids.includes(old)) continue;
+      S.known.delete(old);
+      toast('Device removed', old.slice(0, 24), 'mute', 9000);
+    }
+  }
 }
 
 /* EVERY deployment, not only the ones started from this tab.
@@ -126,31 +135,71 @@ S.catalogueSeen = null;        // { sm:Set, ds:Set } or null before the first lo
 
 async function cataloguesTick() {
   if (!S.auth) return;
-  let sm, ds;
+  let sm, ds, ro;
   try {
-    [sm, ds] = await Promise.all([
+    [sm, ds, ro] = await Promise.all([
       get('/softwaremodules?limit=50&sort=id:DESC'),
       get('/distributionsets?limit=50&sort=id:DESC'),
+      get('/rollouts?limit=25&sort=id:DESC').catch(() => ({ content: [] })),
     ]);
   } catch (_) { return; }
 
-  const ids = r => new Set((r.content || []).map(x => x.id));
+  const seenOf = r => new Map((r.content || []).map(x => [x.id, x]));
+  const now = { sm: seenOf(sm), ds: seenOf(ds), ro: seenOf(ro) };
   if (S.catalogueSeen === null) {
-    S.catalogueSeen = { sm: ids(sm), ds: ids(ds) };
+    S.catalogueSeen = {
+      sm: new Map([...now.sm].map(([k, v]) => [k, v.name + ' ' + v.version])),
+      ds: new Map([...now.ds].map(([k, v]) => [k, v.name + ' ' + v.version])),
+      ro: new Map([...now.ro].map(([k, v]) => [k, v.status])),
+    };
     return;
   }
 
-  for (const m of (sm.content || [])) {
-    if (S.catalogueSeen.sm.has(m.id)) continue;
-    S.catalogueSeen.sm.add(m.id);
-    toast('Software module uploaded', `${m.name} ${m.version} · ${m.type}`, 'ok', 7000);
+  /* GONE MEANS DELETED, but only inside the window we can see. These lists are
+     the newest 50: an id can leave because fifty newer ones arrived, which is
+     not a deletion. Anything below the oldest id still on the page is out of
+     view, so it is left alone rather than announced as removed. */
+  const floor = list => ((list.content || []).length
+    ? Math.min(...list.content.map(x => x.id)) : 0);
+
+  const watch = (kind, list, label, describe, newTitle, goneTitle) => {
+    const was = S.catalogueSeen[kind];
+    const low = floor(list);
+    for (const [id, x] of now[kind]) {
+      if (!was.has(id)) toast(newTitle, describe(x), label(x), 7000);
+      was.set(id, kind === 'ro' ? x.status : x.name + ' ' + x.version);
+    }
+    for (const [id, what] of [...was]) {
+      if (now[kind].has(id) || id < low) continue;
+      was.delete(id);
+      toast(goneTitle, what, 'mute', 7000);
+    }
+  };
+
+  watch('sm', sm, () => 'ok',
+        m => `${m.name} ${m.version} · ${m.type}`,
+        'Software module uploaded', 'Software module deleted');
+  watch('ds', ds, d => (d.complete ? 'ok' : 'warn'),
+        d => `${d.name} ${d.version} · ${d.type}${d.complete ? '' : ' — INCOMPLETE'}`,
+        'Distribution set created', 'Distribution set deleted');
+
+  // A rollout is worth hearing about when it appears AND when it moves: it is
+  // the one thing here that runs for a while on its own.
+  const wasRo = S.catalogueSeen.ro;
+  for (const [id, r] of now.ro) {
+    const before = wasRo.get(id);
+    if (before === undefined) toast('Rollout created', `${r.name} · ${r.status}`, 'info', 7000);
+    else if (before !== r.status) {
+      const done = ['finished', 'stopped'].includes(String(r.status).toLowerCase());
+      toast('Rollout ' + r.status, r.name, done ? 'ok' : 'info', 7000);
+    }
+    wasRo.set(id, r.status);
   }
-  for (const d of (ds.content || [])) {
-    if (S.catalogueSeen.ds.has(d.id)) continue;
-    S.catalogueSeen.ds.add(d.id);
-    toast('Distribution set created',
-          `${d.name} ${d.version} · ${d.type}${d.complete ? '' : ' — INCOMPLETE'}`,
-          d.complete ? 'ok' : 'warn', d.complete ? 7000 : 15000);
+  const roLow = floor(ro);
+  for (const [id, name] of [...wasRo]) {
+    if (now.ro.has(id) || id < roLow) continue;
+    wasRo.delete(id);
+    toast('Rollout deleted', String(name), 'mute', 7000);
   }
 }
 
