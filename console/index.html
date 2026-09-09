@@ -12,7 +12,8 @@
 <!-- login ------------------------------------------------------------ -->
 <section id="login">
   <form id="login-form">
-    <div>
+    <div class="login-head">
+      <img src="logo.png" alt="QubicaAMF" class="logo-big">
       <h1>hawkBit console</h1>
       <p>QubicaAMF · OTA</p>
     </div>
@@ -32,7 +33,11 @@
 <!-- app -------------------------------------------------------------- -->
 <div id="app" class="hidden">
   <aside id="sidebar">
-    <div class="brand"><b>hawkBit</b><span>QubicaAMF</span></div>
+    <div class="brand">
+      <img src="logo.png" alt="QubicaAMF" class="logo">
+      <div class="brand-t"><b>hawkBit</b><span>console</span></div>
+      <button class="btn sm ghost" id="navtoggle" title="collapse"></button>
+    </div>
     <nav id="nav"></nav>
     <div class="side-foot">
       <div class="row"><span id="conn">—</span><span id="busy"></span></div>

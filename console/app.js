@@ -59,6 +59,16 @@ function ago(ms) {
           : s < 86400 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 86400)}d`;
   return fut ? `in ${t}` : `${t} ago`;
 }
+// Counts in the sidebar: exact while it is worth reading, compact once it is
+// not. A fleet of 1,482 is '1.5k' -- the digit that matters is the first one.
+function compact(n) {
+  n = Number(n) || 0;
+  if (n < 1000) return String(n);
+  if (n < 10000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+  if (n < 1000000) return Math.round(n / 1000) + 'k';
+  return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+}
+
 function bytes(n) {
   if (n === null || n === undefined) return '—';
   const u = ['B', 'KiB', 'MiB', 'GiB']; let i = 0, v = Number(n);
@@ -233,6 +243,14 @@ const ICONS = {
   info:    'M12 3a9 9 0 100 18 9 9 0 000-18zM12 11v6M12 7.5h.01',
   chip:    'M7 7h10v10H7zM4 10h3M4 14h3M17 10h3M17 14h3M10 4v3M14 4v3M10 17v3M14 17v3',
   box:     'M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8',
+  plus:    'M12 5v14M5 12h14',
+  columns: 'M3 4h18v16H3zM9 4v16M15 4v16',
+  deploy:  'M12 19V5M12 5l-6 6M12 5l6 6',
+  refresh: 'M20 11a8 8 0 10-2.3 5.7M20 5v6h-6',
+  exit:    'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h9',
+  save:    'M5 4h11l3 3v13H5zM8 4v5h7M8 14h8v6H8z',
+  left:    'M14 6l-6 6 6 6',
+  right:   'M10 6l6 6-6 6',
 };
 function icon(name, size = 15) {
   const ns = 'http://www.w3.org/2000/svg';
@@ -435,12 +453,37 @@ const M_COLS = {
   vendor:  { label: 'Vendor', cell: m => h('span.faint', m.vendor || '—'), f: 'vendor' },
   desc:    { label: 'Description', cell: m => h('span.faint', m.description || '—'), f: 'description' },
   enc:     { label: 'Encrypted', cell: m => m.encrypted ? h('span.pill.info', 'yes') : h('span.faint', '—') },
+  // WHAT A DELTA STARTS FROM. For an application a delta applied to the wrong
+  // base does not merely save less: it fails. Worth a column of its own.
+  // WHAT A DELTA STARTS FROM -- and the two cases are not the same warning:
+  //
+  //   application: the manifest names one exact file, so a device on any other
+  //                version fails the update outright. Amber: check first.
+  //   system:      it compares against the other slot, whatever is in it. It
+  //                always works; only how much it saves varies. Grey: nothing
+  //                to check.
+  //
+  // Showing both as "from X" made the second look like a requirement it is not.
+  base:    { label: 'Delta base', cell: m => {
+              const c = h('span.faint', '');
+              deltaBase(m.id).then(v => {
+                if (!v) { c.textContent = '—'; c.title = 'not a delta package'; return; }
+                if (v === 'the other slot') {
+                  c.className = 'faint nowrap'; c.textContent = 'any';
+                  c.title = 'compares against the slot in use: it works from any version, ' +
+                            'only the saving changes';
+                } else {
+                  c.className = 'pill amber'; c.textContent = 'needs ' + v;
+                  c.title = 'fails unless the device is already on ' + v;
+                }
+              });
+              return c; } },
   created: { label: 'Created', cell: m => h('span.faint.nowrap', { title: when(m.createdAt) }, ago(m.createdAt)) },
 };
 const COLSETS = {
   targets: { defs: T_COLS, def: T_COLS_DEFAULT, attrs: true },
   ds: { defs: D_COLS, def: ['id', 'name', 'version', 'type', 'created'], attrs: false },
-  sm: { defs: M_COLS, def: ['id', 'name', 'version', 'type', 'vendor', 'created'], attrs: false },
+  sm: { defs: M_COLS, def: ['id', 'name', 'version', 'type', 'base', 'created'], attrs: false },
 };
 
 // Filter fields follow the chosen columns, so a column you added is a column
@@ -487,6 +530,21 @@ function limited(fn) {
   });
 }
 
+// Delta base, from the module's metadata. One request per row, so it goes
+// through the same limiter as everything else that is fetched per row.
+const metaCache = new Map();
+async function deltaBase(smId) {
+  if (!metaCache.has(smId)) {
+    metaCache.set(smId, limited(() => get(`/softwaremodules/${smId}/metadata`))
+      .then(r => {
+        const list = Array.isArray(r) ? r : (r.content || []);
+        const e = list.find(x => x.key === 'delta_base');
+        return e ? e.value : '';
+      }).catch(() => ''));
+  }
+  return metaCache.get(smId);
+}
+
 const attrCache = new Map();
 async function attrsOf(id) {
   if (!attrCache.has(id)) {
@@ -505,10 +563,10 @@ VIEWS.targets = {
         oninput: e => { S.q = e.target.value; debounceRender(); },
       }), h('kbd', '/')),
     h('div.vsep'),
-    h('button.btn.sm', { onclick: columnsDialog }, 'columns'),
-    h('button.btn.sm', { onclick: registerTargetDialog }, 'register'),
-    h('button.btn.sm', { onclick: () => saveFilterDialog(currentQuery()) }, 'save filter'),
-    h('button.btn.sm', { onclick: () => assignDialog(null) }, 'deploy to…'),
+    h('button.btn.sm', { onclick: () => columnsDialog('targets') }, icon('columns', 14), 'columns'),
+    h('button.btn.sm', { onclick: registerTargetDialog }, icon('plus', 14), 'register'),
+    h('button.btn.sm', { onclick: () => saveFilterDialog(currentQuery()) }, icon('save', 14), 'save filter'),
+    h('button.btn.sm.primary', { onclick: () => assignDialog(null) }, icon('deploy', 14), 'deploy to…'),
   ],
   async render(root) {
     const chips = h('div', { style: 'margin-bottom:12px' },
@@ -1040,8 +1098,8 @@ async function assignDialog(targetId, presetDs) {
 VIEWS.ds = {
   title: 'Distribution sets',
   bar: () => [
-    h('button.btn.sm', { onclick: () => columnsDialog('ds') }, 'columns'),
-    h('button.btn.sm', { onclick: newDsDialog }, 'new set'),
+    h('button.btn.sm', { onclick: () => columnsDialog('ds') }, icon('columns', 14), 'columns'),
+    h('button.btn.sm.primary', { onclick: newDsDialog }, icon('plus', 14), 'new set'),
   ],
   async render(root) {
     const st = pg('ds');
@@ -1138,11 +1196,12 @@ async function newDsDialog() {
 VIEWS.sm = {
   title: 'Software modules',
   bar: () => [
-    h('button.btn.sm', { onclick: () => columnsDialog('sm') }, 'columns'),
-    h('button.btn.sm', { onclick: newSmDialog }, 'new module'),
+    h('button.btn.sm', { onclick: () => columnsDialog('sm') }, icon('columns', 14), 'columns'),
+    h('button.btn.sm.primary', { onclick: newSmDialog }, icon('plus', 14), 'new module'),
   ],
   async render(root) {
     const st = pg('sm');
+    metaCache.clear(); waiting.length = 0;
     const fields = fieldsFor('sm');
     const chosen = cols('sm');
     const d = await get(pagedPath('/softwaremodules', st, fiqlOf(fields.filter(f => f.key), st), 'id:DESC'));
@@ -1156,6 +1215,17 @@ VIEWS.sm = {
         })), filterRow(fields, st, render)),
       pager(st, d.total, render));
   },
+};
+
+const baseCell = id => {
+  const c = h('span.faint', '…');
+  deltaBase(id).then(v => {
+    c.textContent = !v ? 'not a delta'
+      : v === 'the other slot'
+        ? 'any version — compares against the slot in use, only the saving changes'
+        : `only from ${v} — it fails on a device running anything else`;
+  });
+  return c;
 };
 
 async function openSm(m) {
@@ -1172,7 +1242,8 @@ async function openSm(m) {
       h('div.panel', h('h3', 'Module'), h('div.body', h('dl.kv',
         [['id', m.id], ['name', m.name], ['version', m.version], ['type', m.type],
          ['vendor', m.vendor || '—'], ['description', m.description || '—'],
-         ['encrypted', String(!!m.encrypted)]].map(([k, v]) => [h('dt', k), h('dd', v)])))),
+         ['encrypted', String(!!m.encrypted)]].map(([k, v]) => [h('dt', k), h('dd', v)]),
+        h('dt', 'delta base'), h('dd', baseCell(m.id))))),
       h('div.panel', h('h3', `Artifacts (${list.length})`), h('div.body',
         list.length
           ? tableOf(['File', 'Size', 'SHA-256', ''], list.map(a => ({
@@ -1236,7 +1307,7 @@ async function newSmDialog() {
 /* ------- rollouts ---------------------------------------------------- */
 VIEWS.ro = {
   title: 'Rollouts',
-  bar: () => [h('button.btn.sm', { onclick: newRolloutDialog }, 'new rollout')],
+  bar: () => [h('button.btn.sm.primary', { onclick: newRolloutDialog }, icon('plus', 14), 'new rollout')],
   async render(root) {
     const st = pg('ro');
     const fields = [{}, { key: 'name', ph: 'filter' }, {}, {}, {}, {}, {}];
@@ -1429,7 +1500,7 @@ async function newRolloutDialog() {
 /* ------- tags -------------------------------------------------------- */
 VIEWS.tags = {
   title: 'Tags',
-  bar: () => [h('button.btn.sm', { onclick: () => newTagDialog(render) }, 'new tag')],
+  bar: () => [h('button.btn.sm.primary', { onclick: () => newTagDialog(render) }, icon('plus', 14), 'new tag')],
   async render(root) {
     const [tt, dt] = await Promise.all([
       get('/targettags?limit=100&sort=id:DESC'),
@@ -1470,7 +1541,7 @@ async function newTagDialog(after) {
 /* ------- target filters (saved filters + auto-assignment) ------------ */
 VIEWS.filters = {
   title: 'Target filters',
-  bar: () => [h('button.btn.sm', { onclick: () => saveFilterDialog('') }, 'new filter')],
+  bar: () => [h('button.btn.sm.primary', { onclick: () => saveFilterDialog('') }, icon('plus', 14), 'new filter')],
   async render(root) {
     const d = await get('/targetfilters?limit=100&sort=id:DESC');
     root.replaceChildren(h('div.stack',
@@ -1641,12 +1712,21 @@ const NAV = [
   { id: 'about', label: 'About', ico: 'info' },
 ];
 
+function setCollapsed(v) {
+  document.getElementById('app').classList.toggle('collapsed', v);
+  try { localStorage.setItem('hb-nav', v ? '1' : '0'); } catch (_) {}
+  const b = $('#navtoggle');
+  if (b) { b.replaceChildren(icon(v ? 'right' : 'left', 14)); b.title = v ? 'expand' : 'collapse'; }
+}
+
 function drawNav() {
   $('#nav').replaceChildren(...NAV.map(n => n.sep
     ? h('div.sep', n.sep)
-    : h('button', { class: S.view === n.id ? 'on' : '', onclick: () => go(n.id) },
+    : h('button', { class: S.view === n.id ? 'on' : '', title: n.label, onclick: () => go(n.id) },
         icon(n.ico), n.label,
-        n.count && S.counts[n.count] !== undefined ? h('span.ct', S.counts[n.count]) : null)));
+        n.count && S.counts[n.count] !== undefined
+          ? h('span.ct', { title: S.counts[n.count] + ' total' }, compact(S.counts[n.count]))
+          : null)));
 }
 
 function go(id) {
@@ -1837,6 +1917,10 @@ $('#login-form').addEventListener('submit', async e => {
   }
 });
 
+$('#refresh').replaceChildren(icon('refresh', 14), 'refresh');
+$('#logout').replaceChildren(icon('exit', 14), 'exit');
+$('#navtoggle').onclick = () => setCollapsed(!$('#app').classList.contains('collapsed'));
+setCollapsed(localStorage.getItem('hb-nav') === '1');
 $('#refresh').onclick = render;
 $('#view').addEventListener('pointerenter', () => { pointerInside = true; });
 $('#view').addEventListener('pointerleave', () => { pointerInside = false; });

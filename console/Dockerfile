@@ -11,10 +11,10 @@
 FROM python:3-alpine
 
 WORKDIR /app
-COPY serve.py index.html app.js style.css /app/
+COPY serve.py index.html app.js style.css logo.png /app/
 
-# Not root. The console reads four files and opens one socket; nothing here
-# needs more than that.
+# Not root. The console reads a handful of files and opens one socket; nothing
+# here needs more than that.
 RUN adduser -D -u 10001 console && chown -R console:console /app
 USER console
 
