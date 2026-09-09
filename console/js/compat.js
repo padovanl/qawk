@@ -76,6 +76,8 @@ const NEEDED = {
   '/rest/v1/rollouts/{rolloutId}/triggerNextGroup': ['post'],
   '/rest/v1/rollouts/{rolloutId}/deploygroups': ['get'],
   '/rest/v1/rollouts/{rolloutId}/deploygroups/{groupId}/targets': ['get'],
+  // the About page reads the whole tenant configuration at once
+  '/rest/v1/system/configs': ['get'],
   '/rest/v1/system/configs/{keyName}': ['get', 'put'],
 };
 
