@@ -115,43 +115,121 @@ const PHASE_WORDS = [
   ['cancelling',  'live', 'someone stopped it and the device is being told'],
   ['error',       'err',  'the device reported a failure while the action is still open — '
                         + 'usually it is retrying, or about to give up'],
-  ['running',     'live', 'under way, with nothing more specific said yet'],
 ];
+/* A combined set is installed one part at a time, so "downloading" and
+   "installing" gain a "(part 2)" while the second one is under way. */
+const PHASE_NOTE = 'a set that carries both a system and an application is '
+                 + 'installed in two parts, one after the other — the phase says which';
 
-function phaseFrom(entries) {          // newest first
-  for (const e of entries) {
+/* THE FURTHEST IT GOT, NOT THE LAST THING IT SAID.
+ *
+ * Taking the newest recognisable entry is wrong, and wrong in a way that shows:
+ * a device that has finished installing polls again, hawkBit records another
+ * "retrieved", and the row falls back to "downloading" -- where it then sits
+ * through the reboot until the action closes. Seen exactly that.
+ *
+ * So the chain is walked in order and the HIGHEST point reached wins. A late
+ * poll cannot undo progress that was already reported.
+ *
+ * A combined set is two chunks and SWUpdate installs them as two runs, one
+ * after the other -- that is how hawkBit and SWUpdate do it, not a fault. The
+ * chain says so plainly:
+ *
+ *     Installing Update Chunk Artifacts.     chunk 1 starts
+ *     Installed Chunk.                       chunk 1 done
+ *     Installing Update Chunk Artifacts.     chunk 2 starts
+ *     Installed Chunk.                       chunk 2 done
+ *     All Chunks Installed.                  the deployment is complete
+ *
+ * so the phase says which chunk it is on, and only calls it done at the last
+ * line.
+ */
+/* Two things move independently, and conflating them is what made this wrong
+   twice: how many PARTS are done (only ever goes up), and where the CURRENT
+   part is (down, then install, then done -- and it starts over on the next
+   part). SWUpdate announces the install before it downloads, so within a part
+   the newest word wins; across parts, progress cannot go backwards. And once
+   the deployment says "All Chunks Installed", nothing after it counts -- a
+   poll arriving later used to drag the row back to "downloading" and leave it
+   there through the reboot. */
+const IN_ASSIGNED = 1, IN_DOWNLOAD = 2, IN_INSTALL = 3;
+
+function phaseFrom(entries) {
+  if (!entries || !entries.length) return null;
+  const chain = entries.slice().sort((a, b) => (a.id || 0) - (b.id || 0));
+  let done = 0, cur = 0, complete = false, special = null;
+
+  for (const e of chain) {
     const t = String(e.type || '').toLowerCase();
     const m = (e.messages || []).join(' ');
-    if (t === 'wait_for_confirmation')
-      return { label: 'waiting for confirmation', cls: 'warn pulse',
-               why: 'the update needs a human to allow it on the device' };
-    if (t === 'canceling') return { label: 'cancelling', cls: 'live' };
-    if (t === 'error')     return { label: 'error', cls: 'err' };
-    if (t === 'download')  return { label: 'downloading', cls: 'live',
-                                    why: 'fetching the artifacts' };
-    if (t === 'running') {
-      // An application update closes itself within a second of this, so an
-      // action still open here is a system one: everything is on the spare
-      // slot and only the reboot is left.
-      if (/All Chunks Installed|SWUPDATE successful/i.test(m))
-        return { label: 'waiting for reboot', cls: 'warn',
-                 why: 'written to the spare slot; it becomes active at the next boot' };
-      if (/Installing/i.test(m))
-        return { label: 'installing', cls: 'live', why: 'writing the payload' };
-      if (/Assignment initiated/i.test(m))
-        return { label: 'assigned', cls: 'live',
-                 why: 'the device has not polled yet' };
-      return { label: 'running', cls: 'live' };
-    }
-    if (t === 'retrieved')
-      return { label: 'downloading', cls: 'live',
-               why: 'the device has taken the deployment and is fetching it' };
+    if (t === 'wait_for_confirmation') { special = 'confirm'; continue; }
+    if (t === 'canceling') { special = 'cancel'; continue; }
+    if (t === 'error') { special = 'error'; continue; }
+    if (complete) continue;                       // the deployment is over
+    if (t === 'running' && /All Chunks Installed/i.test(m)) { complete = true; continue; }
+    if (t === 'running' && /Installed Chunk/i.test(m)) { done++; cur = 0; continue; }
+    if (t === 'running' && /Installing Update Chunk/i.test(m)) { cur = IN_INSTALL; continue; }
+    if (t === 'download') { cur = IN_DOWNLOAD; continue; }
+    if (t === 'retrieved') { cur = Math.max(cur, IN_DOWNLOAD); continue; }
+    if (t === 'running' && /Assignment initiated/i.test(m)) cur = Math.max(cur, IN_ASSIGNED);
   }
+
+  if (special === 'confirm')
+    return { label: 'waiting for confirmation', cls: 'warn pulse',
+             why: 'the update needs a human to allow it on the device' };
+  if (special === 'cancel') return { label: 'cancelling', cls: 'live' };
+  if (special === 'error')
+    return { label: 'error', cls: 'err',
+             why: 'the device reported a failure while the action is still open' };
+  if (complete)
+    return { label: 'waiting for reboot', cls: 'warn',
+             why: 'everything is written to the spare slot; it becomes active at the next boot' };
+
+  // "part N" only means something once a part has finished, which is exactly
+  // when there is more than one.
+  const part = done > 0 ? ` (part ${done + 1})` : '';
+  const why  = done > 0 ? 'a set carrying both a system and an application is installed '
+                        + 'in parts, one after the other' : null;
+  if (cur === IN_INSTALL)  return { label: 'installing' + part,  cls: 'live', why: why || 'writing the payload' };
+  if (cur === IN_DOWNLOAD) return { label: 'downloading' + part, cls: 'live', why: why || 'fetching the package' };
+  if (cur === IN_ASSIGNED) return { label: 'assigned', cls: 'live', why: 'the device has not polled yet' };
+  if (done > 0)            return { label: 'installing' + part,  cls: 'live', why };
   return null;
 }
 
-/* Fills a "pending" pill in with the phase, once the two requests it takes
-   have answered. Costs nothing on a fleet that is idle: only pending rows ask. */
+/* Asks what a pending device is actually doing. Two requests, and only for
+   rows that are pending -- an idle fleet asks nothing. */
+async function phaseOf(targetId) {
+  try {
+    const r = await limited(() => get(`/targets/${enc(targetId)}/actions?limit=1&sort=id:DESC`));
+    const a = (r.content || [])[0];
+    if (!a) return null;
+    if (a.active === false) return { closed: true };
+    const st = await limited(() => get(`/targets/${enc(targetId)}/actions/${a.id}/status`
+                                       + '?limit=40&sort=id:DESC'));
+    return phaseFrom(st.content || []);
+  } catch (_) { return null; }
+}
+
+/* Draws a phase into a pill. Separate from the asking so a caller that already
+   knows the phase can paint it with no flicker. */
+function paintPhase(p, ph) {
+  if (!ph) return p;
+  if (ph.closed) {
+    p.classList.remove('live'); p.classList.add('mute');
+    p.append(h('span.faint', { style: 'margin-left:5px' }, '\u00b7 just closed'));
+    p.title = 'the last action has closed; this row was read a moment earlier. '
+            + 'It settles at the next refresh';
+    return p;
+  }
+  p.className = 'pill ' + ph.cls;
+  p.replaceChildren(ph.label);
+  p.title = (ph.why ? ph.why + '. ' : '')
+          + 'hawkBit calls this "pending"; the phase is read from what the device last reported';
+  return p;
+}
+
+/* The old asynchronous path, kept for callers that have no phase to hand. */
 function explainPending(p, targetId) {
   limited(() => get(`/targets/${enc(targetId)}/actions?limit=1&sort=id:DESC`))
     .then(r => {
@@ -186,6 +264,7 @@ function explainPending(p, targetId) {
 }
 
 export {
-  ACTION_PILL, ACT_ICON, PHASE_WORDS, TARGET_PILL, actionPill, explainPending,
+  ACTION_PILL, ACT_ICON, PHASE_NOTE, PHASE_WORDS, TARGET_PILL, actionPill, explainPending,
+  paintPhase, phaseOf,
   phaseFrom, pill, typePill,
 };

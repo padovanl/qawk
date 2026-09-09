@@ -1,7 +1,7 @@
 import { S, del, enc, get, post, waiting } from '../api.js';
 import { PHASE_WORDS, TARGET_PILL, pill } from '../badges.js';
 import { ask, modal, toast } from '../chrome.js';
-import { T_COLS, attrCache, attrsOf, cols, columnsDialog, headsFor } from '../columns.js';
+import { T_COLS, attrsOf, cols, columnsDialog, headsFor, loadPhases } from '../columns.js';
 import { $, h, icon } from '../dom.js';
 import { fiqlEditor } from '../fiql.js';
 import { noteTargets } from '../notices.js';
@@ -221,7 +221,13 @@ VIEWS.targets = {
             : 'A device registers itself on its first poll.'));
     }
 
-    attrCache.clear();
+    // Look the phases up BEFORE building the rows: drawing "pending" and
+    // rewriting it a moment later is a flicker on every refresh.
+    await loadPhases(data.content);
+
+    // The attribute cache is NOT cleared here any more: clearing it made every
+    // attribute cell re-fetch and blink on each automatic refresh. Attributes
+    // change when a device reports them, which is once per poll at most.
     waiting.length = 0;      // rows from the previous page are no longer wanted
     const chosen = cols();
     const pageIds = data.content.map(t => t.controllerId);

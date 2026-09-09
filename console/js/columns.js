@@ -1,5 +1,5 @@
 import { enc, get, limited } from './api.js';
-import { TARGET_PILL, explainPending, pill, typePill } from './badges.js';
+import { TARGET_PILL, explainPending, paintPhase, phaseOf, pill, typePill } from './badges.js';
 import { modal } from './chrome.js';
 import { $, h } from './dom.js';
 import { render } from './router.js';
@@ -29,8 +29,15 @@ const T_COLS = {
                       p.append(h('span', { style: 'opacity:.7;margin-left:5px' }, '·  never installed'));
                     }
                     // "pending" covers assigned, downloading, installing and
-                    // waiting-for-reboot. Say which.
-                    if (t.updateStatus === 'pending') explainPending(p, t.controllerId);
+                    // waiting-for-reboot. Say which -- and say it straight
+                    // away: the view looks the phases up before it builds the
+                    // rows, so the pill is never drawn as "pending" and then
+                    // rewritten a moment later. That flicker was visible on
+                    // every refresh of a device taking an update.
+                    if (t.updateStatus === 'pending') {
+                      if (PHASES.has(t.controllerId)) paintPhase(p, PHASES.get(t.controllerId));
+                      else explainPending(p, t.controllerId);
+                    }
                     return p; } },
   ds:           { label: 'Assigned / installed', cell: t => {
                     const c = h('span.faint', '…'); loadAssignedInstalled(t.controllerId, c); return c; } },
@@ -149,42 +156,80 @@ async function deltaBase(smId) {
   return metaCache.get(smId);
 }
 
+/* Phases looked up before a render, keyed by controllerId. Filled by
+   loadPhases() and read by the status cell, so the two happen in the right
+   order instead of racing. */
+const PHASES = new Map();
+async function loadPhases(targets) {
+  PHASES.clear();
+  const pending = (targets || []).filter(t => t.updateStatus === 'pending');
+  if (!pending.length) return;
+  await Promise.all(pending.map(async t => {
+    const ph = await phaseOf(t.controllerId);
+    if (ph) PHASES.set(t.controllerId, ph);
+  }));
+}
+
 const attrCache = new Map();
+/* Attributes are cached with an age, not cleared on every render. Clearing
+   made every attribute cell re-fetch and blink on each automatic refresh;
+   never expiring would mean a device that reports a new value never shows it.
+   A device reports them once per poll at most, so a minute is generous. */
+const ATTR_TTL = 60000;
 async function attrsOf(id) {
-  if (!attrCache.has(id)) {
-    attrCache.set(id, limited(() => get(`/targets/${enc(id)}/attributes`)).catch(() => ({})));
+  const hit = attrCache.get(id);
+  if (hit && Date.now() - hit.at < ATTR_TTL) return hit.v;
+  const v = limited(() => get(`/targets/${enc(id)}/attributes`)).catch(() => ({}));
+  attrCache.set(id, { at: Date.now(), v });
+  return v;
+}
+
+
+/* WHAT THE CELL LOOKED LIKE LAST TIME, so a refresh does not blink.
+ *
+ * This cell fetches two things per row. Built fresh on every render it starts
+ * as "…" and fills in a moment later, which on a ten-second auto-refresh means
+ * the whole column visibly reforms every ten seconds. Whatever it showed last
+ * time is almost always still true, so it is painted straight away and quietly
+ * corrected if the server says otherwise. */
+const aiCache = new Map();
+
+function renderAI(cell, a, i) {
+  const name = d => (d ? `${d.name} ${d.version}` : '—');
+  // NOTHING AT ALL is one state, not two empty ones. A target whose only
+  // action was cancelled has neither, and hawkBit still calls it in_sync --
+  // which means "nothing outstanding", not "running what it should".
+  if (!a && !i) {
+    cell.replaceChildren(h('span.faint', '—'));
+    cell.title = 'this server has never installed anything here';
+    return;
   }
-  return attrCache.get(id);
+  const same = a && i && a.id === i.id;
+  // Two long names on one line wrap into porridge. One line each, labelled,
+  // clipped, with the whole thing in the tooltip -- and the second line only
+  // when the device is actually between two versions.
+  const line = (lab, d, cls) => h('div.ai-row',
+    h('span.ai-k' + (cls ? '.' + cls : ''), lab),
+    h('span.ai-v.mono', { title: name(d) }, name(d)));
+  cell.replaceChildren(same
+    ? h('div.ai', line('inst', i))
+    : h('div.ai', line('inst', i), line('asgn', a, 'wait')));
+  cell.title = same ? '' : 'assigned, not yet installed';
 }
 
 async function loadAssignedInstalled(id, cell) {
+  const seen = aiCache.get(id);
+  if (seen) renderAI(cell, seen.a, seen.i);      // no "…" on a refresh
   try {
     const [a, i] = await limited(() => Promise.all([
       get(`/targets/${enc(id)}/assignedDS`).catch(() => null),
       get(`/targets/${enc(id)}/installedDS`).catch(() => null),
     ]));
-    const name = d => d ? `${d.name} ${d.version}` : '—';
-    // NOTHING AT ALL is one state, not two empty ones. A target whose only
-    // action was cancelled has neither, and hawkBit still calls it in_sync --
-    // which means "nothing outstanding", not "running what it should".
-    if (!a && !i) {
-      cell.replaceChildren(h('span.faint', '—'));
-      cell.title = 'this server has never installed anything here';
-      return;
-    }
-    const same = a && i && a.id === i.id;
-    // Two long names on one line wrap into porridge. One line each, labelled,
-    // clipped, with the whole thing in the tooltip -- and the second line only
-    // when the device is actually between two versions.
-    const line = (lab, d, cls) => h('div.ai-row',
-      h('span.ai-k' + (cls ? '.' + cls : ''), lab),
-      h('span.ai-v.mono', { title: name(d) }, name(d)));
-    cell.replaceChildren(same
-      ? h('div.ai', line('inst', i))
-      : h('div.ai', line('inst', i), line('asgn', a, 'wait')));
-    cell.title = same ? '' : 'assigned, not yet installed';
-  } catch (_) { cell.textContent = '—'; }
+    const key = `${a && a.id}/${i && i.id}`;
+    if (!seen || seen.key !== key) { aiCache.set(id, { a, i, key }); renderAI(cell, a, i); }
+  } catch (_) { if (!seen) cell.textContent = '—'; }
 }
+
 
 async function columnsDialog(view = 'targets') {
   // Checkboxes could say which columns, never in what order -- and the order is
@@ -283,5 +328,5 @@ const baseCell = id => {
 };
 
 export {
-  D_COLS, M_COLS, T_COLS, attrCache, attrsOf, baseCell, cols, columnsDialog, fieldsFor, headsFor, loadAssignedInstalled, metaCache,
+  loadPhases, D_COLS, M_COLS, T_COLS, attrsOf, baseCell, cols, columnsDialog, fieldsFor, headsFor, loadAssignedInstalled, metaCache,
 };

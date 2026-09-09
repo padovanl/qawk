@@ -1,5 +1,5 @@
 import { S, enc, get } from '../api.js';
-import { TARGET_PILL, actionPill, pill } from '../badges.js';
+import { PHASE_WORDS, TARGET_PILL, actionPill, phaseOf, pill } from '../badges.js';
 import { $, h } from '../dom.js';
 import { noteTargets } from '../notices.js';
 import { VIEWS, drawNav, go, render } from '../router.js';
@@ -8,6 +8,13 @@ import { when } from '../util.js';
 import { openTarget } from './target-detail.js';
 
 /* ------- dashboard (EXTRA: the simple UI has no overview) ----------- */
+// The class a phase pill wears, from the one list the legend also reads.
+const phaseClass = label => {
+  const base = label.replace(/ \(part \d+\)$/, '');
+  const hit = PHASE_WORDS.find(([k]) => k === base);
+  return hit ? hit[1] : 'live';
+};
+
 VIEWS.dash = {
   title: 'Dashboard',
   async render(root) {
@@ -34,6 +41,17 @@ VIEWS.dash = {
       byStatus[t.updateStatus] = (byStatus[t.updateStatus] || 0) + 1;
     });
 
+    // THE SAME WORDS AS THE TARGETS TABLE. Counting raw "pending" here while
+    // the table showed "downloading" for the same device meant the two screens
+    // contradicted each other on the one thing you look at during a rollout.
+    const phases = {};
+    await Promise.all(tg.content
+      .filter(t => t.updateStatus === 'pending')
+      .map(async t => {
+        const ph = await phaseOf(t.controllerId);
+        if (ph && ph.label) phases[ph.label] = (phases[ph.label] || 0) + 1;
+      }));
+
     // hawkBit has no fleet-wide action feed, so this asks the most recently
     // seen targets for their latest one.
     const SAMPLE = 20;
@@ -51,9 +69,20 @@ VIEWS.dash = {
         card('Rollouts', ro.total)),
       h('div.panel', h('h3', 'Fleet status'), h('div.body.wrap',
         Object.keys(byStatus).length || virgin
-          ? Object.entries(byStatus).map(([k, v]) =>
-              h('button.btn.sm', { onclick: () => { S.status = k; go('targets'); } },
-                h('span.pill.' + (TARGET_PILL[k] || 'mute'), `${k.replace(/_/g, ' ')} · ${v}`)))
+          ? Object.entries(byStatus).flatMap(([k, v]) => {
+              // "pending" is broken out into what those devices are doing; the
+              // bucket itself stays clickable, since hawkBit's filter only
+              // knows the five words.
+              if (k !== 'pending' || !Object.keys(phases).length) {
+                return [h('button.btn.sm', { onclick: () => { S.status = k; go('targets'); } },
+                  h('span.pill.' + (TARGET_PILL[k] || 'mute'), `${k.replace(/_/g, ' ')} · ${v}`))];
+              }
+              return Object.entries(phases).map(([label, n]) =>
+                h('button.btn.sm', {
+                  title: 'hawkBit calls this pending; the phase is read from what the device reported',
+                  onclick: () => { S.status = 'pending'; go('targets'); },
+                }, h('span.pill.' + phaseClass(label), `${label} · ${n}`)));
+            })
             .concat(virgin ? [h('button.btn.sm', {
                 title: 'in sync as far as hawkBit is concerned: nothing pending, '
                      + 'but this server has never installed anything on them',

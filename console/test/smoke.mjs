@@ -212,32 +212,43 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
 }
 
 /* --- 9. "pending" broken down into what it is actually doing ----------- */
-/* hawkBit has no finer field than pending: the phase is read out of the
-   messages SWUpdate sends. These are the real message shapes, copied from a
-   device's action history. */
+/* Built from a real action's status history, ids and all -- copied out of a
+   combined deployment on a neo-intel. The ids matter: progress is the furthest
+   point the chain reached, not the newest entry. */
 {
   const { phaseFrom } = await import(JS + 'badges.js');
-  const P = (type, msg) => [{ type, messages: msg ? [msg] : [] }];
+  const E = (id, type, msg) => ({ id, type, messages: msg ? [msg] : [] });
   const lab = e => (phaseFrom(e) || {}).label;
-  ok('assegnata ma non ancora ritirata',
-     lab(P('running', "Assignment initiated by user 'admin'")) === 'assigned');
-  ok('ritirata = sta scaricando',
-     lab(P('retrieved', 'Update Server: Target retrieved update action and should start now the download.')) === 'downloading');
-  ok('download esplicito',
-     lab(P('download', 'Update Server: Target downloads /DEFAULT/...')) === 'downloading');
-  ok('installazione in corso',
-     lab(P('running', 'Installing Update Chunk Artifacts.')) === 'installing');
-  ok('tutto scritto, manca il riavvio',
-     lab(P('running', 'All Chunks Installed.')) === 'waiting for reboot');
-  ok('anche SWUPDATE successful vale come scritto',
-     lab(P('running', 'SWUPDATE successful !')) === 'waiting for reboot');
+
+  const assigned  = [E(193, 'running', "Assignment initiated by user 'admin'")];
+  const retrieved = assigned.concat(E(194, 'retrieved', 'Target retrieved update action'));
+  const dl1       = retrieved.concat(E(195, 'running', 'Installing Update Chunk Artifacts.'),
+                                     E(196, 'download', 'Target downloads /DEFAULT/...'));
+  const chunk1    = dl1.concat(E(198, 'running', '[server_install_update] : Update successful'),
+                               E(199, 'running', 'Installed Chunk.'));
+  const dl2       = chunk1.concat(E(200, 'running', 'Installing Update Chunk Artifacts.'),
+                                  E(201, 'download', 'Target downloads /DEFAULT/...'));
+  const chunk2    = dl2.concat(E(204, 'running', 'Installed Chunk.'),
+                               E(205, 'running', 'All Chunks Installed.'));
+  const polled    = chunk2.concat(E(206, 'retrieved', 'Target retrieved update action'));
+
+  ok('assegnata ma non ancora ritirata', lab(assigned) === 'assigned');
+  ok('ritirata = sta scaricando', lab(retrieved) === 'downloading');
+  // hawkBit notes "Installing Update Chunk Artifacts" and the downloads follow,
+  // so at that point the device really is downloading
+  ok('primo chunk: sta scaricando', lab(dl1) === 'downloading', lab(dl1));
+  ok('e senza "(part N)" quando ce n e una sola', !/part/.test(lab(dl1)), lab(dl1));
+  // "Update successful" arrives after EVERY chunk, so it cannot mean the end
+  ok('dopo il primo chunk non dice ancora riavvio', lab(chunk1) !== 'waiting for reboot', lab(chunk1));
+  ok('e dice che siamo alla seconda parte', /part 2/.test(lab(chunk1)), lab(chunk1));
+  ok('seconda parte in download', /downloading \(part 2\)/.test(lab(dl2)), lab(dl2));
+  ok('solo All Chunks Installed vale come fine', lab(chunk2) === 'waiting for reboot', lab(chunk2));
+  // THE REGRESSION: a poll after the end used to drag it back to downloading
+  ok('un poll dopo la fine non fa tornare indietro', lab(polled) === 'waiting for reboot', lab(polled));
+
   ok('in attesa di conferma umana',
-     lab(P('wait_for_confirmation', '')) === 'waiting for confirmation');
-  ok('annullamento in corso', lab(P('canceling', '')) === 'cancelling');
-  // newest entry wins
-  ok('vince la voce piu recente',
-     lab([{ type: 'running', messages: ['All Chunks Installed.'] },
-          { type: 'download', messages: ['...'] }]) === 'waiting for reboot');
+     lab([E(1, 'wait_for_confirmation', '')]) === 'waiting for confirmation');
+  ok('annullamento in corso', lab([E(1, 'canceling', '')]) === 'cancelling');
   ok('senza voci utili non inventa nulla', phaseFrom([]) === null);
 }
 
