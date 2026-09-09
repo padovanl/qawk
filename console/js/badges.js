@@ -87,6 +87,85 @@ function actionPill(a, targetId) {
   return p;
 }
 
+/* WHAT "pending" IS ACTUALLY DOING.
+ *
+ * A target's updateStatus is a fixed hawkBit enum -- in_sync, pending, error,
+ * registered, unknown -- and "pending" covers everything from "assigned, the
+ * device has not polled yet" to "written to the spare slot, waiting for the
+ * reboot". Those are very different things to be looking at during a rollout.
+ *
+ * There is no finer field: a status entry carries only type, messages and a
+ * timestamp, and no progress counter. But the MESSAGES are SWUpdate's own
+ * words, and they say exactly where it is. So the phase below is DERIVED from
+ * the newest entries of the active action -- read, not reported.
+ */
+function phaseFrom(entries) {          // newest first
+  for (const e of entries) {
+    const t = String(e.type || '').toLowerCase();
+    const m = (e.messages || []).join(' ');
+    if (t === 'wait_for_confirmation')
+      return { label: 'waiting for confirmation', cls: 'warn pulse',
+               why: 'the update needs a human to allow it on the device' };
+    if (t === 'canceling') return { label: 'cancelling', cls: 'live' };
+    if (t === 'error')     return { label: 'error', cls: 'err' };
+    if (t === 'download')  return { label: 'downloading', cls: 'live',
+                                    why: 'fetching the artifacts' };
+    if (t === 'running') {
+      // An application update closes itself within a second of this, so an
+      // action still open here is a system one: everything is on the spare
+      // slot and only the reboot is left.
+      if (/All Chunks Installed|SWUPDATE successful/i.test(m))
+        return { label: 'waiting for reboot', cls: 'warn',
+                 why: 'written to the spare slot; it becomes active at the next boot' };
+      if (/Installing/i.test(m))
+        return { label: 'installing', cls: 'live', why: 'writing the payload' };
+      if (/Assignment initiated/i.test(m))
+        return { label: 'assigned', cls: 'live',
+                 why: 'the device has not polled yet' };
+      return { label: 'running', cls: 'live' };
+    }
+    if (t === 'retrieved')
+      return { label: 'downloading', cls: 'live',
+               why: 'the device has taken the deployment and is fetching it' };
+  }
+  return null;
+}
+
+/* Fills a "pending" pill in with the phase, once the two requests it takes
+   have answered. Costs nothing on a fleet that is idle: only pending rows ask. */
+function explainPending(p, targetId) {
+  limited(() => get(`/targets/${enc(targetId)}/actions?limit=1&sort=id:DESC`))
+    .then(r => {
+      const a = (r.content || [])[0];
+      if (!a) return null;
+      /* The row said "pending" and the action is already closed. Not a
+         contradiction, a race: the target list and the actions are two
+         separate reads, and the action finished between them. Say so instead
+         of leaving a stale word on screen. */
+      if (a.active === false) {
+        p.classList.remove('live'); p.classList.add('mute');
+        p.append(h('span.faint', { style: 'margin-left:5px' }, '\u00b7 just closed'));
+        p.title = 'the last action has closed; this row was read a moment earlier. '
+                + 'It settles at the next refresh';
+        return null;
+      }
+      return limited(() => get(`/targets/${enc(targetId)}/actions/${a.id}/status`
+                               + '?limit=20&sort=id:DESC'));
+    })
+    .then(r => {
+      if (!r) return;
+      const ph = phaseFrom(r.content || []);
+      if (!ph) return;
+      p.className = 'pill ' + ph.cls;
+      p.replaceChildren(ph.label);
+      p.title = (ph.why ? ph.why + '. ' : '')
+              + 'hawkBit calls this "pending"; the phase is read from what the '
+              + 'device last reported';
+    })
+    .catch(() => { /* leave the plain "pending" */ });
+  return p;
+}
+
 export {
-  ACTION_PILL, ACT_ICON, TARGET_PILL, actionPill, pill, typePill,
+  ACTION_PILL, ACT_ICON, TARGET_PILL, actionPill, explainPending, phaseFrom, pill, typePill,
 };

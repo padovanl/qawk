@@ -211,5 +211,35 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   ok('un errore resta un errore', err.className.includes('err'));
 }
 
+/* --- 9. "pending" broken down into what it is actually doing ----------- */
+/* hawkBit has no finer field than pending: the phase is read out of the
+   messages SWUpdate sends. These are the real message shapes, copied from a
+   device's action history. */
+{
+  const { phaseFrom } = await import(JS + 'badges.js');
+  const P = (type, msg) => [{ type, messages: msg ? [msg] : [] }];
+  const lab = e => (phaseFrom(e) || {}).label;
+  ok('assegnata ma non ancora ritirata',
+     lab(P('running', "Assignment initiated by user 'admin'")) === 'assigned');
+  ok('ritirata = sta scaricando',
+     lab(P('retrieved', 'Update Server: Target retrieved update action and should start now the download.')) === 'downloading');
+  ok('download esplicito',
+     lab(P('download', 'Update Server: Target downloads /DEFAULT/...')) === 'downloading');
+  ok('installazione in corso',
+     lab(P('running', 'Installing Update Chunk Artifacts.')) === 'installing');
+  ok('tutto scritto, manca il riavvio',
+     lab(P('running', 'All Chunks Installed.')) === 'waiting for reboot');
+  ok('anche SWUPDATE successful vale come scritto',
+     lab(P('running', 'SWUPDATE successful !')) === 'waiting for reboot');
+  ok('in attesa di conferma umana',
+     lab(P('wait_for_confirmation', '')) === 'waiting for confirmation');
+  ok('annullamento in corso', lab(P('canceling', '')) === 'cancelling');
+  // newest entry wins
+  ok('vince la voce piu recente',
+     lab([{ type: 'running', messages: ['All Chunks Installed.'] },
+          { type: 'download', messages: ['...'] }]) === 'waiting for reboot');
+  ok('senza voci utili non inventa nulla', phaseFrom([]) === null);
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);

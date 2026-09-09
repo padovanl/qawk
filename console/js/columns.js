@@ -1,5 +1,5 @@
 import { enc, get, limited } from './api.js';
-import { TARGET_PILL, pill, typePill } from './badges.js';
+import { TARGET_PILL, explainPending, pill, typePill } from './badges.js';
 import { modal } from './chrome.js';
 import { $, h } from './dom.js';
 import { render } from './router.js';
@@ -28,6 +28,9 @@ const T_COLS = {
                       p.title = 'nothing pending — but this server has never installed anything here';
                       p.append(h('span', { style: 'opacity:.7;margin-left:5px' }, '·  never installed'));
                     }
+                    // "pending" covers assigned, downloading, installing and
+                    // waiting-for-reboot. Say which.
+                    if (t.updateStatus === 'pending') explainPending(p, t.controllerId);
                     return p; } },
   ds:           { label: 'Assigned / installed', cell: t => {
                     const c = h('span.faint', '…'); loadAssignedInstalled(t.controllerId, c); return c; } },
