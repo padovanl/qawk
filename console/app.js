@@ -128,6 +128,159 @@ const del = p => api(p, { method: 'DELETE' });
 const fiql = s => encodeURIComponent(s);
 const enc = encodeURIComponent;
 
+/* ------------------------------------------------- reading a .swu in the browser
+ *
+ * The console could upload anything: it POSTed the file and hoped. Everything
+ * upload-swu.sh refuses -- an unsigned package, a delta without its .zck, a
+ * .zck named differently from what the manifest asks for, a pair from two
+ * different builds -- went through the GUI unchecked, which made the friendlier
+ * path the dangerous one.
+ *
+ * The same reading is possible here. A .swu is a cpio archive whose first entry
+ * is sw-description, and File.slice() means only the few kilobytes that matter
+ * are ever read: a 600 MB package is inspected without loading 600 MB.
+ *
+ * The walk is written against a read(offset, length) function rather than a
+ * File so the same code can be exercised outside a browser. */
+async function cpioWalk(read, size) {
+  const td = new TextDecoder();
+  const out = [];
+  let off = 0;
+  while (off + 110 <= size) {
+    const hdr = await read(off, 110);
+    const magic = td.decode(hdr.subarray(0, 6));
+    if (magic !== '070701' && magic !== '070702') break;
+    const f = [];
+    for (let i = 0; i < 13; i++) f.push(parseInt(td.decode(hdr.subarray(6 + i * 8, 14 + i * 8)), 16));
+    const fsize = f[6], nsize = f[11];
+    if (!Number.isFinite(fsize) || !Number.isFinite(nsize)) break;
+    const name = td.decode((await read(off + 110, nsize)).subarray(0, Math.max(0, nsize - 1)));
+    let p = off + 110 + nsize;
+    p += (4 - (p % 4)) % 4;
+    if (name === 'TRAILER!!!') break;
+    out.push({ name, size: fsize, offset: p });
+    p += fsize;
+    p += (4 - (p % 4)) % 4;
+    off = p;
+  }
+  return out;
+}
+
+function parseSwDescription(text) {
+  const one = re => (text.match(re) || [])[1] || '';
+  const deltaSource = one(/\bsource\s*=\s*"([^"]*)"/);
+  let base = '';
+  const m = deltaSource.match(/\/versions\/(.+)\.img$/);
+  if (m) base = m[1];
+  else if (deltaSource.includes('by-partlabel')) base = 'the other slot';
+  return {
+    version: one(/\bversion\s*=\s*"([^"]*)"/),
+    hw: one(/hardware-compatibility\s*:\s*\[\s*"([^"]*)"/),
+    zckfile: one(/\bzckfile\s*=\s*"([^"]*)"/),
+    zckheader: one(/filename\s*=\s*"([^"]*)"\s*;\s*type\s*=\s*"delta"/),
+    delta: /\btype\s*=\s*"delta"/.test(text),
+    kind: /\bbootloader_state_marker\s*=\s*false/.test(text) ? 'app'
+        : (/\bbootenv\s*:/.test(text) || text.includes('by-partlabel')) ? 'os' : 'unknown',
+    appName: (one(/filename\s*=\s*"qamf-app-postinstall\.sh"[\s\S]*?data\s*=\s*"([^"]*)"/) || '').split(/\s+/)[0] || '',
+    machine: (one(/\bdescription\s*=\s*"([^"]*)"/).split(/\s+/)[0] === 'QubicaAMF'
+              ? one(/\bdescription\s*=\s*"([^"]*)"/).split(/\s+/)[1] : '') || '',
+    deltaSource, base,
+  };
+}
+
+const fileReader = file => async (off, len) =>
+  new Uint8Array(await file.slice(off, off + len).arrayBuffer());
+
+async function sha256Hex(bytes) {
+  const d = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(d)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function inspectSwu(file) {
+  const read = fileReader(file);
+  const ents = await cpioWalk(read, file.size);
+  if (!ents.length) throw new Error(`${file.name} is not a cpio archive: this is not a .swu`);
+  if (ents[0].name !== 'sw-description') {
+    throw new Error(`${file.name}: the first entry is "${ents[0].name}", not sw-description — SWUpdate would refuse it`);
+  }
+  const text = new TextDecoder().decode(await read(ents[0].offset, ents[0].size));
+  return Object.assign(parseSwDescription(text), {
+    entries: ents,
+    signed: ents.some(e => e.name === 'sw-description.sig'),
+    name: file.name,
+  });
+}
+
+/* The checks upload-swu.sh makes, made here too. Each one refuses something
+ * that otherwise fails on a device half an hour later, with an error that does
+ * not name the cause. Returns the list of files to upload, in order. */
+async function validateUpload(files, module, existing) {
+  const swus = files.filter(f => f.name.endsWith('.swu'));
+  const zcks = files.filter(f => f.name.endsWith('.zck'));
+  const others = files.filter(f => !f.name.endsWith('.swu') && !f.name.endsWith('.zck'));
+  if (swus.length > 1) throw new Error('pick one .swu at a time: a module holding two is offered whole, and the device installs whichever it picks first');
+  if (!swus.length) {
+    if (!others.length && !zcks.length) throw new Error('nothing to upload');
+    return { files, notes: ['no .swu among these files: uploading them unchecked'] };
+  }
+
+  const swu = swus[0];
+  const info = await inspectSwu(swu);
+  const notes = [];
+
+  if (!info.signed) {
+    throw new Error(`${swu.name} is not signed (no sw-description.sig).\n` +
+      'The image checks signatures: the device would refuse it after downloading it in full.');
+  }
+  // The module's type is what tells hawkBit what this is; a system package in an
+  // 'application' module is offered as an app update and vice versa.
+  const want = info.kind === 'os' ? 'os' : 'application';
+  if (info.kind !== 'unknown' && module.type !== want) {
+    throw new Error(`this is a ${info.kind === 'os' ? 'system' : 'application'} package, but the module is of type "${module.type}".\n` +
+      `It belongs in a module of type "${want}".`);
+  }
+  const otherSwu = (existing || []).find(n => n.endsWith('.swu') && n !== swu.name);
+  if (otherSwu) throw new Error(`this module already holds ${otherSwu}. A module takes one .swu (plus its .zck for a delta).`);
+
+  if (info.delta) {
+    if (!info.zckfile) throw new Error(`${swu.name} is a delta but its manifest names no zckfile`);
+    const haveIt = (existing || []).includes(info.zckfile);
+    const zck = zcks.find(z => z.name === info.zckfile);
+    if (!zck && !haveIt) {
+      const wrong = zcks.length ? `\nYou picked ${zcks[0].name}; the manifest asks for exactly that name.` : '';
+      throw new Error(`this is a delta: it carries only the chunk index and needs ${info.zckfile} beside it.` + wrong +
+        '\nWithout it the device downloads a header and fails.');
+    }
+    if (zck) {
+      // Same build or nothing: the .zckheader inside the package IS the head of
+      // the .zck, so the bytes settle it.
+      const he = info.entries.find(e => e.name === info.zckheader);
+      if (he) {
+        const read = fileReader(swu);
+        const a = await sha256Hex(await read(he.offset, he.size));
+        const b = await sha256Hex(new Uint8Array(await zck.slice(0, he.size).arrayBuffer()));
+        if (a !== b) {
+          throw new Error(`${swu.name} and ${zck.name} come from DIFFERENT builds.\n` +
+            'The chunk index in the package does not describe that file: the device would ' +
+            'download everything and then fail. Rebuild the image and the delta together.');
+        }
+        notes.push('delta pair verified: the index matches the .zck byte for byte');
+      }
+    }
+    if (info.base) notes.push(info.base === 'the other slot'
+      ? 'system delta: no fixed base, it rebuilds against the slot in use'
+      : `application delta: it only applies to a device already on ${info.base}`);
+  } else if (zcks.length) {
+    notes.push('this is not a delta; the .zck will be uploaded but nothing will ask for it');
+  }
+
+  notes.unshift(`${info.kind === 'os' ? 'system' : 'application'} ${info.delta ? 'delta' : 'full'}` +
+    (info.version ? ` · version ${info.version}` : '') + (info.hw ? ` · hardware ${info.hw}` : ''));
+  // The .swu first: hawkBit serves them independently, but a half-uploaded pair
+  // reads better with the package present.
+  return { files: [swu].concat(zcks, others), notes, info };
+}
+
 async function upload(smId, file, onProgress) {
   // XHR, not fetch: a .swu is hundreds of megabytes and upload.onprogress is
   // the only way to show how far it has got. fetch has no equivalent.
@@ -292,6 +445,25 @@ function icon(name, size = 15) {
   path.setAttribute('d', ICONS[name] || ICONS.info);
   svg.append(path);
   return svg;
+}
+
+/* An on/off control that looks like one. A checkbox says "there is a choice";
+ * a switch says "this is a state, and it is currently this one" -- which is
+ * what auto-confirmation, gateway tokens and the rest actually are.
+ * It is a real <input type=checkbox> underneath, so it keeps the keyboard and
+ * the accessibility for free; only the paint is ours. */
+function toggle(on, onChange, opts = {}) {
+  const input = h('input', { type: 'checkbox', checked: !!on, disabled: !!opts.disabled });
+  const el = h('label.switch' + (opts.disabled ? '.off' : ''), { title: opts.title || '' },
+    input, h('span.track', h('span.knob')),
+    opts.label ? h('span.swl', opts.label) : null);
+  input.addEventListener('change', async () => {
+    el.classList.add('busy');
+    try { await onChange(input.checked); }
+    catch (e) { input.checked = !input.checked; fail(e); }
+    finally { el.classList.remove('busy'); }
+  });
+  return el;
 }
 
 /* --------------------------------------------------------------- chrome */
@@ -694,6 +866,10 @@ VIEWS.targets = {
     h('button.btn.sm', { onclick: registerTargetDialog }, icon('plus', 14), 'register'),
     h('button.btn.sm', { onclick: () => saveFilterDialog(currentQuery()) }, icon('save', 14), 'save filter'),
     h('button.btn.sm.primary', { onclick: () => assignDialog(null) }, icon('deploy', 14), 'deploy to…'),
+    // A query that has already selected the fleet should not have to be typed
+    // again in the rollout dialog.
+    h('button.btn.sm', { onclick: () => newRolloutDialog(currentQuery()) },
+      icon('rollout', 14), 'roll out this filter'),
   ],
   async render(root) {
     const chips = h('div', { style: 'margin-bottom:12px' },
@@ -714,7 +890,7 @@ VIEWS.targets = {
     let data;
     try {
       data = await get(pagedPath('/targets', st, q, 'controllerId:ASC'));
-      if (!q) noteTargets(data.content);
+      if (!q) { noteTargets(data.content); S.counts.targets = data.total; drawNav(); }
     }
     catch (e) {
       return root.replaceChildren(chips, h('div.empty', h('b', 'That filter was refused'), e.message));
@@ -956,18 +1132,42 @@ function overviewPane(t, attrs, autoc, id) {
       h('dl.kv', kv.map(([k, v]) => [h('dt', k), h('dd', v ?? '—')]),
         h('dt', 'assigned / installed'), h('dd', dsBox)))),
     autoc ? h('div.panel', h('h3', 'Auto-confirmation'), h('div.body.flex',
-      pill(autoc.active ? 'on' : 'off', autoc.active ? 'ok' : 'mute'),
-      h('button.btn.sm', { onclick: async () => {
-          try {
-            if (autoc.active) await del(`/targets/${enc(id)}/autoConfirm/deactivate`);
-            else await post(`/targets/${enc(id)}/autoConfirm/activate`, {});
-            toast('Auto-confirmation', autoc.active ? 'off' : 'on', 'ok'); openTarget(id);
-          } catch (e) { fail(e); }
-        } }, autoc.active ? 'turn off' : 'turn on'),
-      h('span.faint', 'with it off, an update that needs confirmation waits for a human'))) : null,
-    h('div.panel', h('h3', 'Attributes reported by the device'), h('div.body',
-      rows.length ? h('dl.kv', rows.map(([k, v]) => [h('dt', k), h('dd', v)]))
-                  : h('span.faint', 'none yet — the device sends these on its next poll'))));
+      toggle(autoc.active, async v => {
+        // Both directions are POST. DELETE on deactivate answers 405 and leaves
+        // it switched on, which reads as a control that does nothing.
+        await post(`/targets/${enc(id)}/autoConfirm/${v ? 'activate' : 'deactivate'}`, {});
+        toast('Auto-confirmation', v ? 'on' : 'off', 'ok');
+        openTarget(id);
+      }),
+      h('span.faint', 'off means an update that needs confirmation waits for a human'))) : null,
+    attrPanel(rows));
+}
+
+/* Five attributes today, fifty when every application reports its version.
+ * The list gets its own scroll rather than pushing the panel off the drawer, a
+ * filter once there are enough to hunt through, and values that wrap instead of
+ * widening the panel -- a long one used to stretch the whole drawer. */
+function attrPanel(rows) {
+  if (!rows.length) {
+    return h('div.panel', h('h3', 'Attributes reported by the device'),
+      h('div.body', h('span.faint', 'none yet — the device sends these on its next poll')));
+  }
+  const list = h('dl.kv.attrs');
+  const paint = q => {
+    const f = q ? rows.filter(([k, v]) =>
+      (k + ' ' + v).toLowerCase().includes(q.toLowerCase())) : rows;
+    list.replaceChildren(...(f.length
+      ? f.flatMap(([k, v]) => [h('dt', { title: k }, k), h('dd', { title: v }, v)])
+      : [h('dt', ''), h('dd', h('span.faint', 'nothing matches'))]));
+  };
+  paint('');
+  const search = rows.length > 8
+    ? h('div.search', { style: 'flex:1;margin-bottom:8px' },
+        h('input', { type: 'text', placeholder: 'filter attributes',
+                     oninput: e => paint(e.target.value) }))
+    : null;
+  return h('div.panel', h('h3', `Attributes reported by the device (${rows.length})`),
+    h('div.body', search, list));
 }
 
 function actionsPane(id, actions) {
@@ -1011,6 +1211,17 @@ function actionsPane(id, actions) {
       } catch (e) { fail(e); }
     };
     const acts = h('div.wrap',
+      // Send the same thing again. The action does not carry its distribution
+      // set in the body, but _links does, and the id is the tail of that URL.
+      h('button.btn.sm', { onclick: async () => {
+          try {
+            const href = ((a._links || {}).distributionset || {}).href || '';
+            const dsId = (href.match(/\/distributionsets\/(\d+)/) || [])[1];
+            if (!dsId) throw new Error('this action no longer names a distribution set');
+            await get('/distributionsets/' + dsId);   // gone? say so before opening a dialog
+            assignDialog(id, Number(dsId));
+          } catch (e) { fail(e); }
+        } }, 'deploy this again'),
       h('button.btn.sm', { onclick: async () => {
           try { download(`action-${a.id}-${id}.log`, await actionLogText(id, a)); }
           catch (e) { fail(e); } } }, 'download log'),
@@ -1129,6 +1340,70 @@ async function deviceTypes() {
   return [...out].sort();
 }
 
+/* ------------------------------------------------------------- preflight
+ *
+ * An application delta names ONE file as its term of comparison:
+ *
+ *   source = "/data/apps/hello/versions/1.1.0.img"
+ *
+ * On a device that is not on 1.1.0 that file does not exist, the handler has
+ * nothing to open, and the update aborts -- it does not fall back to sending
+ * everything. So a delta pointed at a fleet on mixed versions fails on every
+ * device except the ones already at the base.
+ *
+ * Everything needed to say so in advance is already on the server: delta_source
+ * in the module's metadata, and app_<name> among the attributes each device
+ * reports. This puts the two together BEFORE the assignment instead of after,
+ * and says which devices and why. */
+async function deltaNeedsOf(dsId) {
+  const sm = await get(`/distributionsets/${dsId}/assignedSM?limit=50`).catch(() => ({ content: [] }));
+  const needs = [];
+  for (const m of sm.content || []) {
+    let md;
+    try { md = await get(`/softwaremodules/${m.id}/metadata`); } catch (_) { continue; }
+    const list = Array.isArray(md) ? md : (md.content || []);
+    const src = (list.find(x => x.key === 'delta_source') || {}).value || '';
+    const base = (list.find(x => x.key === 'delta_base') || {}).value || '';
+    const mm = src.match(/^\/data\/apps\/([^/]+)\/versions\/(.+)\.img$/);
+    if (mm) needs.push({ module: `${m.name} ${m.version}`, app: mm[1], version: mm[2], source: src });
+    else if (base === 'the other slot') needs.push({ module: `${m.name} ${m.version}`, slot: true });
+  }
+  return needs;
+}
+
+async function preflight(dsId, ids) {
+  const needs = await deltaNeedsOf(dsId);
+  const app = needs.filter(n => n.app);
+  if (!app.length) {
+    return { ok: true, lines: needs.some(n => n.slot)
+      ? ['a system delta: no fixed base, it installs from any version']
+      : [] };
+  }
+  const sample = ids.slice(0, 200);
+  const bad = [];
+  await Promise.all(sample.map(async id => {
+    const a = await limited(() => get(`/targets/${enc(id)}/attributes`)).catch(() => ({}));
+    for (const n of app) {
+      const have = (a || {})['app_' + n.app];
+      if (have !== n.version) bad.push({ id, app: n.app, want: n.version, have: have || 'not installed' });
+    }
+  }));
+  const lines = [];
+  for (const n of app) {
+    const mine = bad.filter(b => b.app === n.app);
+    if (!mine.length) {
+      lines.push(`every device is on ${n.app} ${n.version}: the delta applies`);
+    } else {
+      lines.push(`${mine.length} of ${sample.length} device(s) are NOT on ${n.app} ${n.version}, and the update will fail on them.`);
+      lines.push(`Why: the package compares against ${n.source}. That file is only there on a device already running ${n.version}; without it SWUpdate aborts rather than sending the whole image.`);
+      const shown = mine.slice(0, 6).map(b => `${b.id.slice(0, 16)} has ${b.have}`);
+      lines.push(shown.join(' · ') + (mine.length > shown.length ? ` · and ${mine.length - shown.length} more` : ''));
+      lines.push(`Send them the full package, or a delta built from what they are running.`);
+    }
+  }
+  return { ok: !bad.length, lines, bad: bad.length };
+}
+
 async function assignDialog(targetId, presetDs, explicitIds) {
   let sets;
   try { sets = await distributionSets(true); } catch (e) { return fail(e); }
@@ -1202,35 +1477,60 @@ async function assignDialog(targetId, presetDs, explicitIds) {
   [one, typeSel, fq].forEach(el => { el.addEventListener('change', recount); el.addEventListener('input', recount); });
   paint();
 
+  const pre = h('div.checks.hidden');
+  let lastPlan = null;
+  const runPreflight = async () => {
+    pre.classList.remove('hidden');
+    pre.replaceChildren(h('div.faint', h('span.spin'), ' checking the devices…'));
+    try {
+      const ids = await resolveIds();
+      const r = await preflight(sel.value, ids);
+      lastPlan = { ids, ok: r.ok };
+      pre.replaceChildren(...(r.lines.length
+        ? r.lines.map(l => h('div.' + (r.ok ? 'good' : 'bad'), l))
+        : [h('div.good', 'nothing to check: not a delta')]));
+    } catch (e) { pre.replaceChildren(h('div.bad', e.message)); lastPlan = null; }
+  };
+  sel.addEventListener('change', () => { pre.classList.add('hidden'); lastPlan = null; });
+
+  async function resolveIds() {
+    if (mode.value === 'picked') return explicitIds;
+    if (mode.value === 'one') {
+      if (!one.value.trim()) throw new Error('name a device');
+      return [one.value.trim()];
+    }
+    const q = queryOf();
+    if (mode.value === 'type' && !q) throw new Error('pick a device type');
+    if (mode.value === 'fiql' && !q) throw new Error('write a query, or pick another mode');
+    const out = [];
+    for (let off = 0; ; off += 200) {
+      const r = await get(`/targets?limit=200&offset=${off}` + (q ? '&q=' + fiql(q) : ''));
+      out.push(...r.content.map(t => t.controllerId));
+      if (out.length >= r.total || !r.content.length) break;
+    }
+    if (!out.length) throw new Error('that matches no device');
+    return out;
+  }
+
   modal(targetId ? 'Deploy to ' + targetId : 'Deploy', [
     h('label.f', 'Distribution set', sel), h('label.f', 'Mode', type),
     h('label.f', 'Force time', at), dtQuick(at), atHint,
     h('label.f', h('span.flex', confirmReq, 'require confirmation on the device'), h('span')),
     h('label.f', 'Send it to', mode), row, count,
+    h('div.flex', h('button.btn.sm', { onclick: runPreflight }, 'check the devices first'),
+      h('span.faint', 'a delta only applies to the version it was built from')),
+    pre,
     h('p.faint', { style: 'margin:0;font-size:12px' },
       'A set is refused if it is incomplete, or if its type is not among those the target type ' +
       'accepts. forced is re-offered at every poll until the action closes.'),
   ], async () => {
-    let ids;
-    if (mode.value === 'picked') {
-      ids = explicitIds;
-    } else if (mode.value === 'one') {
-      if (!one.value.trim()) throw new Error('name a device');
-      ids = [one.value.trim()];
-    } else {
-      const q = queryOf();
-      if (mode.value === 'type' && !q) throw new Error('pick a device type');
-      if (mode.value === 'fiql' && !q) throw new Error('write a query, or pick another mode');
-      // Paged: a fleet does not fit in one response, and assigning to "all"
-      // has to mean all of them.
-      ids = [];
-      for (let off = 0; ; off += 200) {
-        const r = await get(`/targets?limit=200&offset=${off}` + (q ? '&q=' + fiql(q) : ''));
-        ids.push(...r.content.map(t => t.controllerId));
-        if (ids.length >= r.total || !r.content.length) break;
-      }
-      if (!ids.length) throw new Error('that matches no device');
-      if (ids.length > 1 && !confirm(`Deploy to ${ids.length} devices?`)) return false;
+    const ids = await resolveIds();
+    if (ids.length > 1 && !confirm(`Deploy to ${ids.length} devices?`)) return false;
+    // If the check has been run and found trouble, say so once more here: the
+    // panel is easy to scroll past, an assignment is not easy to take back.
+    if (lastPlan && !lastPlan.ok &&
+        !confirm('The check says this delta will fail on some of these devices.\n\nAssign it anyway?')) {
+      return false;
     }
     const body = ids.map(id => {
       const o = { id, type: type.value };
@@ -1271,6 +1571,7 @@ VIEWS.ds = {
     const fields = fieldsFor('ds');
     const chosen = cols('ds');
     const d = await get(pagedPath('/distributionsets', st, fiqlOf(fields.filter(f => f.key), st), 'id:DESC'));
+    if (!Object.values(st.f).some(Boolean)) { S.counts.ds = d.total; drawNav(); }
     if (!d.content.length && !Object.values(st.f).some(Boolean)) return root.replaceChildren(h('div.empty',
       h('b', 'No distribution sets'), 'A set is what you assign to devices.'));
     root.replaceChildren(
@@ -1371,6 +1672,7 @@ VIEWS.sm = {
     const fields = fieldsFor('sm');
     const chosen = cols('sm');
     const d = await get(pagedPath('/softwaremodules', st, fiqlOf(fields.filter(f => f.key), st), 'id:DESC'));
+    if (!Object.values(st.f).some(Boolean)) { S.counts.sm = d.total; drawNav(); }
     if (!d.content.length && !Object.values(st.f).some(Boolean)) return root.replaceChildren(h('div.empty',
       h('b', 'No modules'), 'A module holds the .swu, and for a delta its .zck as well.'));
     root.replaceChildren(
@@ -1400,7 +1702,22 @@ async function openSm(m) {
   const draw = async () => {
     const arts = await get(`/softwaremodules/${m.id}/artifacts`).catch(() => []);
     const list = Array.isArray(arts) ? arts : (arts.content || []);
-    const file = h('input', { type: 'file' });
+    const file = h('input', { type: 'file', multiple: true });
+    const checks = h('div.checks.hidden');
+    const runChecks = async () => {
+      const picked = [...file.files];
+      checks.classList.remove('hidden');
+      if (!picked.length) { checks.replaceChildren(h('div.bad', 'pick a file first')); return null; }
+      checks.replaceChildren(h('div.faint', h('span.spin'), ' reading…'));
+      try {
+        const plan = await validateUpload(picked, m, list.map(a => a.providedFilename));
+        checks.replaceChildren(...plan.notes.map(n => h('div.good', n)));
+        return plan;
+      } catch (e) {
+        checks.replaceChildren(...String(e.message).split('\n').map(l => h('div.bad', l)));
+        return null;
+      }
+    };
     const bar = h('i.run', { style: 'width:0%' });
     const pct = h('b', '0%');
     const prog = h('div.upl', { style: 'display:none' }, h('div.bars', bar), pct);
@@ -1421,21 +1738,33 @@ async function openSm(m) {
                     catch (e) { fail(e); } } }, 'delete')],
             })))
           : h('span.faint', 'nothing uploaded yet'))),
-      h('div.panel', h('h3', 'Add artifacts'), h('div.body.stack', file, prog,
-        h('button.btn.primary', { onclick: async () => {
-            if (!file.files[0]) return toast('Pick a file first', '', 'info');
-            prog.style.display = '';
-            try {
-              await upload(m.id, file.files[0], f => {
-                bar.style.width = (f * 100).toFixed(1) + '%';
-                pct.textContent = (f * 100).toFixed(0) + '%';
-              });
-              toast('Uploaded', file.files[0].name, 'ok'); draw();
-            } catch (e) { fail(e); prog.style.display = 'none'; }
-          } }, 'upload'),
+      h('div.panel', h('h3', 'Add artifacts'), h('div.body.stack',
+        file, checks, prog,
+        h('div.wrap',
+          h('button.btn', { onclick: () => runChecks() }, 'check'),
+          h('button.btn.primary', { onclick: async e => {
+              const b = e.currentTarget;
+              const plan = await runChecks();
+              if (!plan) return;
+              b.classList.add('loading');
+              prog.style.display = '';
+              try {
+                for (const f of plan.files) {
+                  pct.textContent = f.name + ' 0%';
+                  await upload(m.id, f, p => {
+                    bar.style.width = (p * 100).toFixed(1) + '%';
+                    pct.textContent = f.name + ' ' + (p * 100).toFixed(0) + '%';
+                  });
+                }
+                toast('Uploaded', plan.files.map(f => f.name).join(', '), 'ok');
+                draw();
+              } catch (er) { fail(er); prog.style.display = 'none'; }
+              finally { b.classList.remove('loading'); }
+            } }, 'upload')),
         h('p.faint', { style: 'margin:0;font-size:12px' },
-          'A delta needs both files in this same module — the .swu and the .zck it names — and they ' +
-          'must come from the same build. ota/hawkbit/upload-swu.sh checks that for you.'))),
+          'Pick the .swu and, for a delta, its .zck together — the same checks ' +
+          'upload-swu.sh makes are made here, before anything is sent.'))),
+
       h('button.btn.danger', { onclick: async () => {
           if (!confirm(`Delete module ${m.name} ${m.version}?`)) return;
           try { await del('/softwaremodules/' + m.id); toast('Deleted', '', 'ok'); closeDrawer(); render(); }
@@ -1590,13 +1919,13 @@ async function openRolloutGroup(r, g) {
   } catch (e) { body.replaceChildren(h('div.empty', e.message)); }
 }
 
-async function newRolloutDialog() {
+async function newRolloutDialog(presetQuery) {
   const sets = await distributionSets(true);
   const name = h('input', { type: 'text', placeholder: 'neo-intel 25.7.3' });
   const desc = h('input', { type: 'text' });
   const ds = h('select', sets.content.filter(d => d.complete)
     .map(d => h('option', { value: d.id }, `${d.name} ${d.version} · ${d.type}`)));
-  const q = h('input', { type: 'text', value: 'attribute.device_type==neo-intel' });
+  const q = h('input', { type: 'text', value: presetQuery || 'attribute.device_type==neo-intel' });
   const groupsBox = numInput(3, 1, 50), groups = groupsBox.input;
   const errThBox = numInput(10, 0, 100, 5), errTh = errThBox.input;
   const okThBox = numInput(100, 0, 100, 5), okTh = okThBox.input;
@@ -1802,18 +2131,22 @@ VIEWS.cfg = {
     const rows = keys.map(k => {
       const v = vals[k];
       if (!v) return null;
-      const inp = typeof v.value === 'boolean'
-        ? h('input', { type: 'checkbox', checked: v.value })
-        : h('input', { type: 'text', value: v.value ?? '' });
-      return h('div.flex', { style: 'gap:10px' },
-        h('div', { style: 'flex:0 0 320px' }, h('div.mono', k),
-          hint[k] ? h('div.faint', { style: 'font-size:11px' }, hint[k]) : null),
-        inp,
+      const label = h('div', { style: 'flex:0 0 320px' }, h('div.mono', k),
+        hint[k] ? h('div.faint', { style: 'font-size:11px' }, hint[k]) : null);
+      // A boolean is a switch that saves itself; anything else keeps its field
+      // and its button, because half-typed text must not be sent.
+      if (typeof v.value === 'boolean') {
+        return h('div.flex', { style: 'gap:10px' }, label,
+          toggle(v.value, async on => {
+            await put('/system/configs/' + k, { value: on });
+            toast('Saved', `${k} ${on ? 'on' : 'off'}`, 'ok');
+          }));
+      }
+      const inp = h('input', { type: 'text', value: v.value ?? '' });
+      return h('div.flex', { style: 'gap:10px' }, label, inp,
         h('button.btn.sm', { onclick: async () => {
-            try {
-              await put('/system/configs/' + k, { value: inp.type === 'checkbox' ? inp.checked : inp.value });
-              toast('Saved', k, 'ok');
-            } catch (e) { fail(e); } } }, 'save'));
+            try { await put('/system/configs/' + k, { value: inp.value }); toast('Saved', k, 'ok'); }
+            catch (e) { fail(e); } } }, 'save'));
     }).filter(Boolean);
 
     const refresh = h('select', REFRESH_CHOICES.map(([v, l]) =>
@@ -2057,6 +2390,22 @@ function setCollapsed(v) {
   if (b) { b.replaceChildren(icon(v ? 'right' : 'left', 14)); b.title = v ? 'expand' : 'collapse'; }
 }
 
+/* The counts belonged to the dashboard, so they only existed once you had been
+ * there: reload on Targets and the sidebar came up bare. They are their own
+ * thing now -- four limit=1 requests, which return a total and no rows -- and
+ * each list view also refreshes its own from the page it just fetched, for
+ * free. Rounded once they stop being worth reading exactly: 1482 -> 1.5k. */
+async function refreshCounts() {
+  const ask = async (path, key) => {
+    try { S.counts[key] = (await get(path + '?limit=1')).total; } catch (_) {}
+  };
+  await Promise.all([
+    ask('/targets', 'targets'), ask('/distributionsets', 'ds'),
+    ask('/softwaremodules', 'sm'), ask('/rollouts', 'ro'),
+  ]);
+  drawNav();
+}
+
 function drawNav() {
   $('#nav').replaceChildren(...NAV.map(n => n.sep
     ? h('div.sep', h('span.lbl', n.sep))
@@ -2241,7 +2590,7 @@ async function start() {
   $('#conn').textContent = S.user + ' @ hawkBit';
   S.view = (location.hash || '#dash').slice(1);
   if (!VIEWS[S.view]) S.view = 'dash';
-  drawNav(); await render(); tick();
+  drawNav(); refreshCounts(); await render(); tick();
 }
 
 $('#login-form').addEventListener('submit', async e => {
@@ -2276,12 +2625,31 @@ window.addEventListener('hashchange', () => {
   const id = location.hash.slice(1);
   if (VIEWS[id] && id !== S.view) { S.view = id; drawNav(); render(); }
 });
+const SHORTCUTS = [
+  ['/', 'focus the search box'],
+  ['r', 'reload the current view'],
+  ['?', 'this list'],
+  ['Esc', 'close the panel, or leave a field'],
+  ['g then d / t / s / m', 'go to dashboard, targets, distribution sets, modules'],
+];
+function shortcutsDialog() {
+  modal('Keyboard', [h('dl.kv', SHORTCUTS.flatMap(([k, w]) =>
+    [h('dt', h('kbd', k)), h('dd', w)]))], async () => {}, 'Close');
+}
+
+let gPending = false;
 document.addEventListener('keydown', e => {
   if (e.target.matches('input, select, textarea')) { if (e.key === 'Escape') e.target.blur(); return; }
+  if (gPending) {
+    gPending = false;
+    const to = { d: 'dash', t: 'targets', s: 'ds', m: 'sm', f: 'filters', o: 'ro' }[e.key];
+    if (to) { e.preventDefault(); go(to); return; }
+  }
   if (e.key === '/') { e.preventDefault(); const i = $('#bar-extra input'); if (i) i.focus(); }
+  else if (e.key === '?') { e.preventDefault(); shortcutsDialog(); }
   else if (e.key === 'r') render();
   else if (e.key === 'Escape') closeDrawer();
-  else if (e.key === 'g') { const i = NAV.filter(n => n.id); S.navHint = true; }
+  else if (e.key === 'g') { gPending = true; setTimeout(() => { gPending = false; }, 1200); }
 });
 
 if (S.auth) start();

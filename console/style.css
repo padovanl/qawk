@@ -830,3 +830,50 @@ th .arrow { margin-left: 5px; font-size: 9px; opacity: .8; }
 
 table.t td input[type=checkbox], table.t th input[type=checkbox] { margin: 0; vertical-align: middle; }
 table.t tbody tr.sel { background: color-mix(in srgb, var(--accent) 9%, var(--bg-2)); }
+
+/* --------------------------------------------------------- upload checks */
+/* The verdict sits between the file picker and the button, so it is read on the
+   way to pressing it rather than after. */
+.checks { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.checks .good, .checks .bad { display: flex; gap: 7px; align-items: flex-start; line-height: 1.45; }
+.checks .good { color: var(--fg-dim); }
+.checks .good::before { content: "✓"; color: var(--ok); font-weight: 700; }
+.checks .bad { color: var(--err); }
+.checks .bad::before { content: "✕"; font-weight: 700; }
+.checks .bad:not(:first-child)::before { content: " "; }
+
+/* ---------------------------------------------------------------- switch */
+/* A real checkbox with our paint over it: keyboard, focus and screen readers
+   keep working, and what you see is a state rather than a question. */
+.switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch .track {
+  width: 38px; height: 22px; border-radius: 11px; flex: 0 0 auto;
+  background: var(--bg-3); box-shadow: inset 0 0 0 1px var(--line-2);
+  position: relative; transition: background .18s, box-shadow .18s;
+}
+.switch .knob {
+  position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
+  border-radius: 50%; background: var(--fg-faint);
+  transition: transform .18s cubic-bezier(.4,0,.2,1), background .18s;
+}
+.switch input:checked + .track {
+  background: var(--accent); box-shadow: inset 0 0 0 1px var(--accent);
+}
+.switch input:checked + .track .knob { transform: translateX(16px); background: #fff; }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch .swl { font-size: 12px; color: var(--fg-dim); }
+.switch.off { opacity: .5; cursor: not-allowed; }
+/* While the server is deciding, the switch says so instead of lying about the
+   state it will end up in. */
+.switch.busy .knob { background: var(--warn); animation: pulse 1s ease-in-out infinite; }
+.switch.busy { pointer-events: none; }
+
+/* ------------------------------------------------------------- attributes */
+/* Written for fifty of them, not five: its own scroll so the panel cannot grow
+   past the drawer, a key column that stops widening, and values that wrap. */
+dl.kv.attrs { max-height: 320px; overflow: auto; padding-right: 4px; }
+dl.kv.attrs dt {
+  max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+dl.kv.attrs dd { overflow-wrap: anywhere; }
