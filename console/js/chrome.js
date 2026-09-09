@@ -63,6 +63,61 @@ function ask(title, message, opts = {}) {
   });
 }
 
+/* WAITING FOR THE SERVER.
+ *
+ * When hawkBit is not answering, a console full of empty tables is worse than
+ * no console: every panel says "none", the counts read zero, and it all looks
+ * like a server that lost its data rather than one that has not answered yet.
+ * hawkBit takes about a minute to come up, which is exactly when someone is
+ * most likely to be looking.
+ *
+ * So the page is covered until the server is back, and the cover takes itself
+ * away -- nobody should have to reload to find out.
+ */
+let gateTimer = null;
+
+function serverGate(reachable) {
+  const on = document.getElementById('offline');
+  if (reachable) {
+    if (gateTimer) { clearInterval(gateTimer); gateTimer = null; }
+    if (on) on.remove();
+    return;
+  }
+  if (on) return;                                  // already covering
+
+  const since = Date.now();
+  const said = h('span.gate-since', 'trying…');
+  const bar = h('i.gate-bar');
+  const gate = h('div#offline.gate',
+    h('div.gate-glow'),
+    h('div.gate-card',
+      h('img.gate-logo', { src: 'logo.png', alt: 'QubicaAMF' }),
+      h('h2', 'Waiting for the server'),
+      h('p', 'hawkBit is not answering yet. It takes about a minute to start, '
+           + 'so this usually clears itself.'),
+      h('div.gate-track', bar),
+      h('div.gate-foot', h('span.spin'), said),
+      h('p.gate-hint', 'Nothing is lost, and no reload is needed — the console '
+                     + 'goes back to what it was showing as soon as the server answers.')));
+  document.body.append(gate);
+
+  const tick = () => {
+    const s = Math.round((Date.now() - since) / 1000);
+    said.textContent = s < 60 ? `trying for ${s}s`
+                              : `trying for ${Math.floor(s / 60)}m ${String(s % 60).padStart(2, '0')}s`;
+    // hawkBit is usually up inside 90 seconds, so the bar is a rough "how far
+    // along a normal start are we" rather than a promise.
+    bar.style.width = Math.min(96, Math.round((s / 90) * 100)) + '%';
+    // A request of our own, so recovery is noticed even when nothing else is
+    // asking: an idle page would otherwise sit here for ever.
+    fetch('/rest/v1/targets?limit=1', {
+      headers: { Authorization: 'Basic ' + (sessionStorage.getItem('hb-auth') || '') },
+    }).then(r => { if (r.ok || r.status === 401) serverGate(true); }).catch(() => {});
+  };
+  tick();
+  gateTimer = setInterval(tick, 4000);
+}
+
 function drawer(title, node) {
   $('#drawer-title').textContent = title;
   $('#drawer-body').replaceChildren(node);
@@ -74,5 +129,5 @@ function closeDrawer() {
 }
 
 export {
-  ask, closeDrawer, drawer, fail, modal, toast,
+  ask, closeDrawer, drawer, fail, modal, serverGate, toast,
 };

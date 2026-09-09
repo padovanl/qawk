@@ -1,5 +1,5 @@
 import { signOut } from './auth.js';
-import { toast } from './chrome.js';
+import { serverGate, toast } from './chrome.js';
 import { $, h } from './dom.js';
 import { render } from './router.js';
 
@@ -107,11 +107,12 @@ function limited(fn) {
 }
 
 function noteConnection(ok) {
+  // The cover goes up and down with the connection; it is the honest signal.
+  // A toast would slide away while the server was still missing, leaving a
+  // console full of empty tables that look like lost data.
+  serverGate(ok);
   if (ok && S.offline) { S.offline = false; toast('Reconnected', 'hawkBit is answering again', 'ok'); }
-  else if (!ok && !S.offline) {
-    S.offline = true;
-    toast('Lost the server', 'hawkBit is not answering — the tables are the last good copy', 'err', 20000);
-  }
+  else if (!ok && !S.offline) S.offline = true;
 }
 
 export {

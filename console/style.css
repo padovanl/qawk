@@ -1263,3 +1263,53 @@ pre.cmd {
   content: ''; flex: 1; height: 1px; background: var(--line);
 }
 .legend-h:first-child { margin-top: 0; }
+
+/* --------------------------------------------------------- waiting for the server */
+/* A console full of empty tables looks like a server that lost its data, not
+   one that has not answered yet. Cover it until it is back, and take the cover
+   away without anyone reloading. */
+.gate {
+  position: fixed; inset: 0; z-index: 500;
+  display: grid; place-items: center; padding: 24px; overflow: hidden;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(8px);
+  animation: gatein .2s ease-out;
+}
+@keyframes gatein { from { opacity: 0; } }
+.gate-glow {
+  position: absolute; inset: -25% -10% auto -10%; height: 70vh; pointer-events: none;
+  background:
+    radial-gradient(44% 58% at 24% 18%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(38% 52% at 80% 10%, color-mix(in srgb, var(--accent-2) 16%, transparent), transparent 72%);
+  filter: blur(8px);
+}
+.gate-card {
+  position: relative; width: min(440px, 100%);
+  padding: 34px 34px 26px; text-align: center;
+  border-radius: 18px; background: var(--bg-2); border: 1px solid var(--line);
+  box-shadow: 0 28px 70px -18px rgba(0,0,0,.6);
+  animation: liftin .28s cubic-bezier(.2,.8,.3,1);
+}
+.gate-logo { width: 58px; height: auto; margin-bottom: 16px; opacity: .95; }
+.gate-card h2 { margin: 0 0 9px; font-size: 18px; letter-spacing: -.2px; }
+.gate-card p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--fg-dim); }
+/* A rough sense of "how far into a normal start", not a promise. */
+.gate-track {
+  height: 4px; margin: 22px 0 14px; border-radius: 99px; overflow: hidden;
+  background: var(--bg-3);
+}
+.gate-bar {
+  display: block; height: 100%; width: 0; border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 1s linear;
+}
+.gate-foot {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-family: var(--mono); font-size: 12px; color: var(--fg-faint);
+}
+.gate-hint {
+  margin-top: 18px !important; padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 12px !important; opacity: .75;
+}
+

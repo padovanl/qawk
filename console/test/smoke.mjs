@@ -317,5 +317,17 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   ok('senza id funziona come prima', h('span.mono').id === '');
 }
 
+/* --- 13. the page is covered while the server is missing --------------- */
+{
+  const { serverGate } = await import(JS + 'chrome.js');
+  const has = () => globalThis.document.__has('#offline');
+  serverGate(false);
+  ok('senza server la pagina viene coperta', has());
+  serverGate(false);
+  ok('non ne mette due', globalThis.document.body.findAll('gate').length === 1);
+  serverGate(true);
+  ok('quando torna si toglie da sola', !has());
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);

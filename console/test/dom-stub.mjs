@@ -20,6 +20,9 @@ export class El {
     };
     this.hidden = false; this.value = ''; this.disabled = false; this.title = '';
     this.id = '';
+    // Non-enumerable, or the parent link makes the tree circular and
+    // JSON.stringify -- which a test uses -- throws.
+    Object.defineProperty(this, 'parentNode', { value: null, writable: true, enumerable: false });
     // the console checks this before touching a node it built a frame ago
     this.isConnected = true;
     this._cls = new Set();
@@ -50,11 +53,30 @@ export class El {
   static _node(k) {
     return (k && typeof k === 'object') ? k : { nodeType: 3, textContent: String(k) };
   }
-  append(...k) { this.children.push(...k.map(El._node)); }
-  appendChild(k) { this.children.push(El._node(k)); return k; }
-  insertBefore(k) { this.children.push(El._node(k)); return k; }
-  replaceChildren(...k) { this.children = k.map(El._node); }
-  remove() {}
+  // Parents are tracked, so remove() actually detaches: a no-op made every
+  // "it takes itself away" test pass without the code doing anything.
+  _adopt(k) {
+    const n = El._node(k);
+    if (n && typeof n === 'object') {
+      if (!Object.getOwnPropertyDescriptor(n, 'parentNode')) {
+        Object.defineProperty(n, 'parentNode', { value: null, writable: true, enumerable: false });
+      }
+      n.parentNode = this;
+    }
+    return n;
+  }
+  append(...k) { this.children.push(...k.map(x => this._adopt(x))); }
+  appendChild(k) { this.children.push(this._adopt(k)); return k; }
+  insertBefore(k) { this.children.push(this._adopt(k)); return k; }
+  prepend(...k) { this.children.unshift(...k.map(x => this._adopt(x))); }
+  replaceChildren(...k) { this.children = k.map(x => this._adopt(x)); }
+  remove() {
+    const p = this.parentNode;
+    if (!p) return;
+    const i = p.children.indexOf(this);
+    if (i >= 0) p.children.splice(i, 1);
+    this.parentNode = null;
+  }
   /* Good enough for '#id' and '.class': the console looks elements up that
      way, and a stub that answers "here is a fresh element" to everything makes
      any assertion about presence meaningless. */
@@ -109,7 +131,10 @@ export function install() {
                     'i-user', 'i-lock', 'signin']) {
     const el = new El('div'); el.id = id; doc.body.append(el);
   }
-  doc.getElementById = id => doc.body._find('#' + id) || new El();
+  // NULL when it is not there, as a browser does. Handing back a spare
+  // element made "is it already on the page?" always answer yes, so code that
+  // guards against creating something twice never created it once.
+  doc.getElementById = id => doc.body._find('#' + id);
   doc.activeElement = null;
   doc.hidden = false;
   // document.querySelector searches the body, where the furniture lives
