@@ -194,5 +194,22 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   ok('scrivere invece lo chiama', fired === 1, `chiamate: ${fired}`);
 }
 
+/* --- 8. a closed action must not look like a running one --------------- */
+/* hawkBit keeps an action's LAST reported status even after it is closed, so a
+   deployment that finished and was polled again reads "retrieved" for good.
+   Spinning on that says work is under way when the action is over. */
+{
+  const { actionPill } = await import(JS + 'badges.js');
+  const live = actionPill({ status: 'retrieved', active: true });
+  ok('unazione attiva gira', live.className.includes('live'), live.className);
+  const closed = actionPill({ status: 'retrieved', active: false });
+  ok('unazione chiusa non gira', !closed.className.includes('live'), closed.className);
+  ok('e dice che e chiusa', closed.textContent.includes('closed'), closed.textContent);
+  const done = actionPill({ status: 'finished', active: false });
+  ok('un esito resta un esito', done.className.includes('ok') && !done.textContent.includes('closed'));
+  const err = actionPill({ status: 'error', active: false });
+  ok('un errore resta un errore', err.className.includes('err'));
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);

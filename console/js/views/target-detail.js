@@ -1,5 +1,5 @@
 import { S, del, enc, get, post, put } from '../api.js';
-import { ACTION_PILL, pill } from '../badges.js';
+import { actionPill, pill } from '../badges.js';
 import { ask, closeDrawer, drawer, fail, toast } from '../chrome.js';
 import { loadAssignedInstalled } from '../columns.js';
 import { $, h, icon } from '../dom.js';
@@ -156,7 +156,7 @@ function actionsPane(id, actions) {
     const chev = h('span.chev', '▸');
     const summary = h('span.faint.sum', '');
     const head = h('div.ahead',
-      chev, h('span.mono', '#' + a.id), pill(st, ACTION_PILL[st]),
+      chev, h('span.mono', '#' + a.id), actionPill(a),
       a.active ? h('span.pill.live', 'active') : null,
       h('span.faint', a.type || ''), summary,
       h('span.faint.nowrap.when', when(a.lastModifiedAt || a.createdAt)));

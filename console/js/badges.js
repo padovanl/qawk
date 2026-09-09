@@ -41,6 +41,27 @@ const pill = (t, k) => h('span.pill.' + (k || 'mute'), String(t || '—').toLowe
 const ACT_ICON = { start: 'play', pause: 'pause', resume: 'play',
   delete: 'trash', approve: 'check', 'trigger next group': 'next' };
 
+/* An action's status is the LAST thing the device reported about it, not its
+ * outcome. hawkBit keeps that even after the action is closed, so a deployment
+ * that finished at 21:46:07 and was polled again twelve seconds later ends up
+ * reading "retrieved" for good -- with active:false.
+ *
+ * Spinning on that is a lie: it says work is under way when the action is
+ * over. So the spinner belongs to ACTIVE actions only, and a closed one whose
+ * last word was not an outcome says as much rather than looking stuck.
+ */
+const TERMINAL = new Set(['finished', 'error', 'canceled', 'cancel_rejected']);
+function actionPill(a) {
+  const st = String(a.status || '').toLowerCase();
+  if (a.active !== false) return pill(st, ACTION_PILL[st]);
+  if (TERMINAL.has(st)) return pill(st, ACTION_PILL[st]);
+  const p = pill(st, 'mute');
+  p.title = `the action is closed; "${st}" is only the last thing the device `
+          + 'reported about it, which can arrive after the closing feedback';
+  p.append(h('span', { style: 'opacity:.7;margin-left:5px' }, '\u00b7 closed'));
+  return p;
+}
+
 export {
-  ACTION_PILL, ACT_ICON, TARGET_PILL, pill, typePill,
+  ACTION_PILL, ACT_ICON, TARGET_PILL, actionPill, pill, typePill,
 };

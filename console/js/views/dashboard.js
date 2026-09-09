@@ -1,5 +1,5 @@
 import { S, enc, get } from '../api.js';
-import { ACTION_PILL, TARGET_PILL, pill } from '../badges.js';
+import { TARGET_PILL, actionPill, pill } from '../badges.js';
 import { $, h } from '../dom.js';
 import { noteTargets } from '../notices.js';
 import { VIEWS, drawNav, go, render } from '../router.js';
@@ -67,7 +67,7 @@ VIEWS.dash = {
           ? tableOf(['Target', 'Action', 'Status', 'Type', 'When'], recent.map(a => ({
               onclick: () => openTarget(a._t),
               cells: [h('span.mono', a._t.slice(0, 16)), h('span.mono', '#' + a.id),
-                      pill(a.status, ACTION_PILL[a.status]), h('span.dim', a.type || '—'),
+                      actionPill(a), h('span.dim', a.type || '—'),
                       h('span.faint.nowrap', when(a.lastModifiedAt || a.createdAt))],
             })))
           : h('div.empty', 'nothing has been deployed yet'))));
