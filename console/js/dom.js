@@ -2,8 +2,15 @@
 const $ = (s, r = document) => r.querySelector(s);
 
 function h(tag, attrs, ...kids) {
-  const [name, ...cls] = tag.split('.');
+  // 'div#compat.compat.warn' -> <div id="compat" class="compat warn">.
+  // The id was NOT understood before: the whole 'div#compat' went to
+  // createElement, which throws InvalidCharacterError in a browser -- so the
+  // compatibility bar, the one element written with an id, was never created
+  // at all. It failed inside a promise nobody awaited, so nothing said so.
+  const [head, ...cls] = tag.split('.');
+  const [name, id] = head.split('#');
   const e = document.createElement(name || 'div');
+  if (id) e.id = id;
   if (cls.length) e.className = cls.join(' ');
   if (attrs && (attrs.nodeType || typeof attrs !== 'object' || Array.isArray(attrs))) {
     kids.unshift(attrs);

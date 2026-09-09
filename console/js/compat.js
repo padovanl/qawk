@@ -137,16 +137,39 @@ function banner(kind, headline, detail, lines) {
   $('#main').prepend(bar);
 }
 
-/* Run once, after sign-in. Never blocks anything: a server that will not
-   describe itself still gets used, it just says so. */
+/* Run after sign-in, and again if the server was not answering yet.
+ *
+ * hawkBit takes about a minute to answer after its container starts, so a
+ * console opened alongside it asks a server that is not there and says "cannot
+ * tell which hawkBit this is". That was then on screen for good: the check ran
+ * once. A warning that outlives the thing it warned about teaches people to
+ * ignore warnings.
+ *
+ * So while the verdict is "cannot tell" it keeps asking, quietly, and the bar
+ * removes itself the moment the answer is good.
+ */
+let compatTimer = null;
+
+function clearBanner() {
+  const b = $('#compat');
+  if (b) b.remove();
+}
+
 async function checkCompat() {
   if (sessionStorage.getItem('hb-compat-hidden')) return;
   const r = await inspect();
+
   if (!r.known) {
-    banner('warn', `Cannot tell which hawkBit this is`,
-      `the console is written for ${EXPECTED_VERSION}; ${r.why}. Things may not work as described.`);
+    banner('warn', 'Cannot tell which hawkBit this is',
+      `the console is written for ${EXPECTED_VERSION}; ${r.why}. `
+      + 'Still trying — this clears itself as soon as the server answers.');
+    if (!compatTimer) compatTimer = setInterval(retry, 15000);
     return;
   }
+
+  // We got an answer: stop asking, whatever it says.
+  if (compatTimer) { clearInterval(compatTimer); compatTimer = null; }
+
   if (r.api !== EXPECTED_API) {
     banner('bad', `This hawkBit speaks API ${r.api}, not ${EXPECTED_API}`,
       `the console is written for hawkBit ${EXPECTED_VERSION}. Things may not work.`);
@@ -157,7 +180,17 @@ async function checkCompat() {
       `${r.missing.length} of the ${r.total} endpoints it uses are missing or changed — `
       + `it expects ${EXPECTED_VERSION}. Whatever depends on them will not work.`,
       r.missing);
+    return;
   }
+  // Everything matches: nothing to say, and nothing left on screen.
+  clearBanner();
+}
+
+async function retry() {
+  if (sessionStorage.getItem('hb-compat-hidden')) {
+    clearInterval(compatTimer); compatTimer = null; return;
+  }
+  await checkCompat();
 }
 
 export { EXPECTED_API, EXPECTED_VERSION, NEEDED, checkCompat, inspect, shape };

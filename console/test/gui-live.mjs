@@ -129,5 +129,20 @@ console.log(`  console: ${BASE}\n`);
   ok('mostra lintervallo di polling letto dal server', !poll || text.includes(poll), poll);
 }
 
+/* ---- the compatibility bar clears itself when the server answers ------- */
+{
+  const { checkCompat } = await mod('compat.js');
+  const { $ } = await mod('dom.js');
+  // this server is the one the console was written for, so after a check that
+  // reaches it there must be no bar left
+  await checkCompat();
+  await settle(3000);
+  // __has answers truthfully: the stub's querySelector still hands back a
+  // spare element for anything the console looks up, so presence has to be
+  // asked of the tree itself.
+  ok('nessun avviso di compatibilita con il server giusto',
+     !globalThis.document.__has('#compat'));
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);

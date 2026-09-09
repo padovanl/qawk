@@ -19,6 +19,7 @@ export class El {
       removeProperty: k => { delete vars[k]; },
     };
     this.hidden = false; this.value = ''; this.disabled = false; this.title = '';
+    this.id = '';
     // the console checks this before touching a node it built a frame ago
     this.isConnected = true;
     this._cls = new Set();
@@ -54,7 +55,18 @@ export class El {
   insertBefore(k) { this.children.push(El._node(k)); return k; }
   replaceChildren(...k) { this.children = k.map(El._node); }
   remove() {}
-  querySelector() { return new El(); }
+  /* Good enough for '#id' and '.class': the console looks elements up that
+     way, and a stub that answers "here is a fresh element" to everything makes
+     any assertion about presence meaningless. */
+  querySelector(sel) {
+    return this._find(String(sel || '')) || new El();
+  }
+  _find(sel) {
+    if (sel.startsWith('#') && this.id === sel.slice(1)) return this;
+    if (sel.startsWith('.') && this._cls.has(sel.slice(1))) return this;
+    for (const c of this.children) { const r = c._find && c._find(sel); if (r) return r; }
+    return null;
+  }
   querySelectorAll() { return []; }
   matches() { return false; }
   contains() { return false; }
@@ -84,9 +96,25 @@ export function install() {
   doc.createElement = n => new El(n);
   doc.createElementNS = (_, n) => new El(n);
   doc.createTextNode = t => ({ nodeType: 3, textContent: String(t) });
-  doc.getElementById = () => new El();
+  /* The page's own furniture, so a lookup finds the SAME element every time
+     and something genuinely absent is genuinely absent. Without this every
+     querySelector answered with a fresh element, which made "is the bar gone?"
+     unanswerable. */
+  for (const id of ['app', 'login', 'main', 'view', 'toasts', 'conn', 'busy',
+                    'nav', 'sidebar', 'title', 'bar-extra', 'refresh', 'logout',
+                    'theme', 'theme-login', 'auto', 'paused', 'progress', 'scrim',
+                    'drawer', 'drawer-title', 'drawer-body', 'drawer-close',
+                    'modal', 'modal-title', 'modal-body', 'modal-ok', 'modal-cancel',
+                    'navtoggle', 'login-form', 'login-err', 'u', 'p', 'reveal',
+                    'i-user', 'i-lock', 'signin']) {
+    const el = new El('div'); el.id = id; doc.body.append(el);
+  }
+  doc.getElementById = id => doc.body._find('#' + id) || new El();
   doc.activeElement = null;
   doc.hidden = false;
+  // document.querySelector searches the body, where the furniture lives
+  doc.querySelector = sel => doc.body._find(String(sel || '')) || new El();
+  doc.__has = sel => !!doc.body._find(String(sel || ''));
   globalThis.document = doc;
 
   const store = () => {

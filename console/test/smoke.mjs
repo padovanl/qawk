@@ -304,5 +304,18 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   ok('la croce lo chiude', removed);
 }
 
+/* --- 12. h() understands an id -------------------------------------- */
+/* The compatibility bar is the one element written as 'div#compat...', and
+   before this the whole string went to createElement -- which throws in a
+   browser. It was created inside a promise nobody awaited, so the bar simply
+   never appeared and nothing said why. */
+{
+  const { h } = await import(JS + 'dom.js');
+  const e = h('div#compat.compat.warn', 'x');
+  ok('h() ricava lid dal tag', e.id === 'compat', e.id || '(vuoto)');
+  ok('e le classi restano quelle', e.className === 'compat warn', e.className);
+  ok('senza id funziona come prima', h('span.mono').id === '');
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);
