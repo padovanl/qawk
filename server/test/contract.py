@@ -324,6 +324,16 @@ for p in ("softwaremoduletypes", "distributionsettypes"):
 c, h, b = call("GET", "/rest/v1/system/configs")
 check("mgmt-system-configs", c, b)
 
+# hawkBit's clients write FIQL's ";" unescaped (our upload script does); the
+# filter must survive it, or the request quietly returns everything.
+c, h, b = call("GET", f"/rest/v1/softwaremodules?q=name==hello-{RUN};version==1.2.0")
+if c == 200 and b["total"] == 1 and b["content"][0]["version"] == "1.2.0":
+    passed += 1
+    print("  ok   an unescaped ';' in q= still filters")
+else:
+    failed += 1
+    print(f"  FAIL an unescaped ';' in q=: {c} total={b.get('total') if isinstance(b, dict) else b}")
+
 c, h, b = call("GET", "/rest/v1/targets/does-not-exist")
 check("err-target-404", c, b)
 c, h, b = call("GET", "/rest/v1/targets?q=nonesuch==x")
@@ -363,7 +373,11 @@ c, h, b = call("GET", f"/rest/v1/rollouts/{ro['id']}/deploygroups/{g['content'][
 check("mgmt-rollout-group-targets", c, b)
 c, h, b = call("POST", f"/rest/v1/rollouts/{ro['id']}/start")
 check("mgmt-rollout-start", c, b)
-time.sleep(1)
+# and hawkBit goes through 'starting' in the background too
+for _ in range(30):
+    if call("GET", f"/rest/v1/rollouts/{ro['id']}")[2].get("status") not in ("creating", "ready", "starting"):
+        break
+    time.sleep(1)
 c, h, b = call("GET", f"/rest/v1/rollouts/{ro['id']}")
 check("mgmt-rollout-running", c, b)
 

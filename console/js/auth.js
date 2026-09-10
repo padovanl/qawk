@@ -1,5 +1,6 @@
 import { S, get } from './api.js';
 import { checkCompat } from './compat.js';
+import { whoIsServer } from './server.js';
 import { $, h, icon } from './dom.js';
 import { VIEWS, drawNav, refreshCounts, render, tick } from './router.js';
 import { theme } from './theme.js';
@@ -20,6 +21,7 @@ async function start() {
   // Asked once, in the background: it costs one request and must never hold
   // up the first screen.
   checkCompat();
+  whoIsServer();
 }
 
 /* Sign-in dressing: the field icons, a reveal for the password, and a theme

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -56,6 +57,7 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 	svc := service.New(st, art, log)
 
 	r := chi.NewRouter()
+	r.Use(keepSemicolons)
 	r.Use(middleware.Recoverer)
 	r.Use(requestLog(log))
 
@@ -73,6 +75,11 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 			"features": []string{},
 		})
 	})
+	// /live says the process is up; /health that it can serve (the database
+	// answers). Kubernetes restarts on the first and routes on the second: a
+	// database outage takes every instance out of the load balancer, it does
+	// not restart them all in a loop.
+	r.Get("/live", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok\n")) })
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		if err := pool.Ping(r.Context()); err != nil {
 			http.Error(w, "database: "+err.Error(), http.StatusServiceUnavailable)
@@ -92,6 +99,23 @@ func (s *Server) Handler() http.Handler { return s.handler }
 
 // RunBackground runs the rollout engine and auto-assignment until ctx ends.
 func (s *Server) RunBackground(ctx context.Context) { s.svc.Run(ctx) }
+
+// keepSemicolons protects FIQL's ";" (AND) in a query string.
+//
+// hawkBit's clients -- our upload script among them -- write
+// q=name==x;version==y with the ";" as it is. Tomcat takes it; Go, since 1.17,
+// treats a ";" in a query as an invalid separator and silently drops the whole
+// parameter, so the filter vanished and the request returned EVERYTHING. The
+// upload script then took the first module it got, which was the wrong one.
+// Escaping every ";" before anything parses the query keeps "q" whole.
+func keepSemicolons(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.RawQuery, ";") {
+			r.URL.RawQuery = strings.ReplaceAll(r.URL.RawQuery, ";", "%3B")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 // requestLog logs each request at debug level, and errors at info: with a
 // fleet polling every thirty seconds, logging every poll at info would bury

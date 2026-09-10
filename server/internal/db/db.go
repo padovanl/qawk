@@ -18,20 +18,21 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-// Open connects, waiting for the database to accept connections.
+// Open connects, waiting up to wait for the database to accept connections.
 //
-// In a container stack PostgreSQL starts next to Qawk and takes a few seconds
-// before it listens; failing on the first attempt would make every cold start
-// a race. Sixty seconds is far more than it ever needs, and short enough that
-// a wrong URL is reported rather than retried for ever.
-func Open(ctx context.Context, url string, maxConns int32, log *slog.Logger) (*pgxpool.Pool, error) {
+// In a container stack PostgreSQL starts next to Qawk, and the first time it
+// initialises its data directory before it listens -- over a minute, measured,
+// on a busy disk. Failing early makes every cold start a race; waiting for
+// ever hides a wrong URL. So the wait is long by default and configurable
+// (QAWK_DB_WAIT), and every attempt is logged.
+func Open(ctx context.Context, url string, maxConns int32, wait time.Duration, log *slog.Logger) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return nil, fmt.Errorf("database URL: %w", err)
 	}
 	cfg.MaxConns = maxConns
 
-	deadline := time.Now().Add(60 * time.Second)
+	deadline := time.Now().Add(wait)
 	for {
 		pool, err := pgxpool.NewWithConfig(ctx, cfg)
 		if err == nil {

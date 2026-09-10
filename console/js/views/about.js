@@ -3,6 +3,7 @@ import { ACTION_PILL, PHASE_WORDS, TARGET_PILL, pill, typePill } from '../badges
 import { modal } from '../chrome.js';
 import { $, h, icon } from '../dom.js';
 import { EXPECTED_VERSION, inspect } from '../compat.js';
+import { serverInfo, whoIsServer } from '../server.js';
 import { VIEWS, go, render } from '../router.js';
 import { tableOf } from '../table.js';
 
@@ -33,6 +34,7 @@ const panel = (title, ...body) => h('div.panel', h('h3', title), h('div.body.sta
 /* ---------------------------------------------------------------- server */
 async function serverTab(root) {
   root.replaceChildren(h('div.empty', h('span.spin'), ' asking the server…'));
+  if (!serverInfo()) await whoIsServer();
 
   const [compat, cfg, counts] = await Promise.all([
     inspect().catch(e => ({ known: false, why: e.message })),
@@ -55,6 +57,7 @@ async function serverTab(root) {
   root.replaceChildren(h('div.stack',
     panel('Which hawkBit this is',
       h('dl.kv',
+        h('dt', 'server'), h('dd', (() => { const i = serverInfo(); return i ? i.name + (i.version ? ' ' + i.version : '') : '—'; })()),
         h('dt', 'written for'), h('dd', 'hawkBit ' + EXPECTED_VERSION),
         h('dt', 'API version'), h('dd', compat.api || '—'),
         h('dt', 'endpoints'), h('dd', verdict),

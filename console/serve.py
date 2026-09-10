@@ -88,7 +88,7 @@ class Handler(SimpleHTTPRequestHandler):
     # it, which the console reads once to check it is talking to the release it
     # was written for -- hawkBit publishes its version nowhere else a browser
     # can reach.
-    PROXIED = ("/rest/", "/v3/api-docs")
+    PROXIED = ("/rest/", "/v3/api-docs", "/qawk/")
 
     def proxied(self):
         return self.path.startswith(self.PROXIED)

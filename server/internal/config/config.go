@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -19,6 +20,9 @@ type Config struct {
 
 	// DatabaseURL is a PostgreSQL connection string.
 	DatabaseURL string
+
+	// DBWait is how long to wait for the database at startup.
+	DBWait time.Duration
 
 	// DBMaxConns is the size of this instance's connection pool. Across all
 	// instances it must stay under PostgreSQL's max_connections.
@@ -77,5 +81,10 @@ func Load() (Config, error) {
 		return c, fmt.Errorf("QAWK_DB_MAX_CONNS must be a number of at least 2")
 	}
 	c.DBMaxConns = int32(n)
+	w, err := time.ParseDuration(env("QAWK_DB_WAIT", "5m"))
+	if err != nil || w <= 0 {
+		return c, fmt.Errorf("QAWK_DB_WAIT must be a duration such as 90s or 5m")
+	}
+	c.DBWait = w
 	return c, nil
 }
