@@ -329,5 +329,27 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   ok('quando torna si toglie da sola', !has());
 }
 
+/* --- 14. notifications can be turned off, and are all on by default ---- */
+{
+  const { NOTICES, noticeOn, setNotice } = await import(JS + 'notices.js');
+  ok('ci sono sei categorie', NOTICES.length === 6, String(NOTICES.length));
+  ok('tutte attive senza aver scelto nulla', NOTICES.every(([id]) => noticeOn(id)));
+  setNotice('deploy', false);
+  ok('spegnerne una funziona', !noticeOn('deploy'));
+  ok('e non tocca le altre', noticeOn('rollout') && noticeOn('devices'));
+  setNotice('deploy', true);
+  ok('e si riaccende', noticeOn('deploy'));
+  // every category must be routed through the switch, or turning one off
+  // silences most of it and not all
+  const src = await readFile(JS + 'notices.js', 'utf8');
+  const raised = [...src.matchAll(/notify\('([a-z]+)'/g)].map(m => m[1]);
+  const known = new Set(NOTICES.map(([id]) => id));
+  ok('ogni notifica passa da una categoria nota',
+     raised.every(k => known.has(k)), [...new Set(raised)].join(','));
+  ok('nessun toast sfugge agli interruttori',
+     !/\n\s*toast\(/.test(src.replace(/const notify[\s\S]*?;\n/, '')),
+     'toast diretti in notices.js');
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);

@@ -1327,3 +1327,7 @@ pre.cmd {
   font-size: 12px !important; opacity: .75;
 }
 
+/* One switch per kind of notification, with what it covers beside it. */
+.notice-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.notice-row > label { flex: 0 0 auto; min-width: 210px; }
+.notice-row > .faint { font-size: 12px; }

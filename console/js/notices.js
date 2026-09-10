@@ -23,6 +23,31 @@ import { go } from './router.js';
  *   3. a target registering for the first time. That is the factory-device
  *      moment: it is the arrival you are waiting for and there is nothing else
  *      on screen that announces it. */
+/* WHICH OF THESE ARE WANTED.
+ *
+ * All of them, until someone says otherwise: a notification you did not ask
+ * for is easy to turn off, one you never saw is not. The choice is per browser
+ * -- two people watching the same server want different things from it -- and
+ * lives in Configuration.
+ */
+const NOTICES = [
+  ['deploy',     'Deployments',      'when one starts, and how it ended'],
+  ['catalogue',  'Modules and sets', 'uploaded, created or deleted, by anyone'],
+  ['rollout',    'Rollouts',         'created, deleted, and every status change'],
+  ['devices',    'Devices',          'arriving and leaving the fleet'],
+  ['watched',    'What you deployed', 'the result of a deployment started here'],
+  ['connection', 'The server',       'when it comes back after being unreachable'],
+];
+const noticeOn = id => {
+  try { return localStorage.getItem('hb-notice-' + id) !== '0'; } catch (_) { return true; }
+};
+const setNotice = (id, on) => {
+  try { localStorage.setItem('hb-notice-' + id, on ? '1' : '0'); } catch (_) {}
+};
+/* Every toast raised by a watcher goes through here, so turning one off turns
+   off all of it and not merely most of it. */
+const notify = (kind, ...args) => { if (noticeOn(kind)) toast(...args); };
+
 S.watched = new Map();      // actionId -> {target, label}
 S.offline = false;
 S.known = null;             // controllerIds seen so far, or null before the first list
@@ -53,7 +78,7 @@ async function noticesTick() {
     } catch (_) {}
     S.watched.delete(id);
     const ok = verdict === 'finished';
-    toast(ok ? 'Deployment finished' : 'Deployment ' + verdict,
+    notify('watched', ok ? 'Deployment finished' : 'Deployment ' + verdict,
       `${w.label} on ${w.target.slice(0, 16)}`, ok ? 'ok' : 'err', ok ? 8000 : 20000);
   }
 }
@@ -65,15 +90,15 @@ function noteTargets(list) {
   if (S.known === null) { S.known = new Set(ids); return; }
   const fresh = ids.filter(i => !S.known.has(i));
   fresh.forEach(i => S.known.add(i));
-  if (fresh.length === 1) toast('New device', fresh[0], 'info', 12000);
-  else if (fresh.length > 1) toast('New devices', `${fresh.length} registered`, 'info', 12000);
+  if (fresh.length === 1) notify('devices', 'New device', fresh[0], 'info', 12000);
+  else if (fresh.length > 1) notify('devices', 'New devices', `${fresh.length} registered`, 'info', 12000);
   // ...and the mirror of it. This list is a page, so only say a device is gone
   // when the page is not simply showing different devices.
   if (list.length && ids.length >= S.known.size) {
     for (const old of [...S.known]) {
       if (ids.includes(old)) continue;
       S.known.delete(old);
-      toast('Device removed', old.slice(0, 24), 'mute', 9000);
+      notify('devices', 'Device removed', old.slice(0, 24), 'mute', 9000);
     }
   }
 }
@@ -106,13 +131,13 @@ async function deploymentsTick() {
   for (const [id, a] of now) {
     const before = S.actionsSeen.get(id);
     if (before === undefined) {
-      if (a.active) toast('Deployment started', `#${id} · ${a.type || 'update'}`, 'info', 6000);
+      if (a.active) notify('deploy', 'Deployment started', `#${id} · ${a.type || 'update'}`, 'info', 6000);
     } else if (before === true && a.active === false) {
       // 'finished' only means it closed; a failure closes too, and the verdict
       // is the last thing the device said.
       const bad = ['error', 'canceled', 'cancel_rejected'].includes(String(a.status).toLowerCase());
-      toast(bad ? 'Deployment ' + a.status : 'Deployment finished',
-            `#${id}`, bad ? 'err' : 'ok', bad ? 20000 : 7000);
+      notify('deploy', bad ? 'Deployment ' + a.status : 'Deployment finished',
+             `#${id}`, bad ? 'err' : 'ok', bad ? 20000 : 7000);
     }
     S.actionsSeen.set(id, a.active);
   }
@@ -166,13 +191,13 @@ async function cataloguesTick() {
     const was = S.catalogueSeen[kind];
     const low = floor(list);
     for (const [id, x] of now[kind]) {
-      if (!was.has(id)) toast(newTitle, describe(x), label(x), 7000);
+      if (!was.has(id)) notify('catalogue', newTitle, describe(x), label(x), 7000);
       was.set(id, kind === 'ro' ? x.status : x.name + ' ' + x.version);
     }
     for (const [id, what] of [...was]) {
       if (now[kind].has(id) || id < low) continue;
       was.delete(id);
-      toast(goneTitle, what, 'mute', 7000);
+      notify('catalogue', goneTitle, what, 'mute', 7000);
     }
   };
 
@@ -188,10 +213,10 @@ async function cataloguesTick() {
   const wasRo = S.catalogueSeen.ro;
   for (const [id, r] of now.ro) {
     const before = wasRo.get(id);
-    if (before === undefined) toast('Rollout created', `${r.name} · ${r.status}`, 'info', 7000);
+    if (before === undefined) notify('rollout', 'Rollout created', `${r.name} · ${r.status}`, 'info', 7000);
     else if (before !== r.status) {
       const done = ['finished', 'stopped'].includes(String(r.status).toLowerCase());
-      toast('Rollout ' + r.status, r.name, done ? 'ok' : 'info', 7000);
+      notify('rollout', 'Rollout ' + r.status, r.name, done ? 'ok' : 'info', 7000);
     }
     wasRo.set(id, r.status);
   }
@@ -199,7 +224,7 @@ async function cataloguesTick() {
   for (const [id, name] of [...wasRo]) {
     if (now.ro.has(id) || id < roLow) continue;
     wasRo.delete(id);
-    toast('Rollout deleted', String(name), 'mute', 7000);
+    notify('rollout', 'Rollout deleted', String(name), 'mute', 7000);
   }
 }
 
@@ -233,5 +258,5 @@ buildTick();
 setInterval(buildTick, 15000);
 
 export {
-  noteTargets, watchAction,
+  NOTICES, noticeOn, setNotice, noteTargets, watchAction,
 };

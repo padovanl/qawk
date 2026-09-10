@@ -3,6 +3,7 @@ import { fail, toast } from '../chrome.js';
 import { $, h, icon } from '../dom.js';
 import { IDLE_CHOICES, idleMin, setIdleMin } from '../idle.js';
 import { toggle } from '../inputs.js';
+import { NOTICES, noticeOn, setNotice } from '../notices.js';
 import { REFRESH_CHOICES, VIEWS, refreshMs, render, setRefreshMs } from '../router.js';
 import { THEMES, applyTheme, theme } from '../theme.js';
 import { when } from '../util.js';
@@ -74,6 +75,15 @@ VIEWS.cfg = {
             'so the spinners and progress bars here are still. Layout transitions still run. ' +
             'On Windows it is Settings → Accessibility → Visual effects → Animation effects.'))
         : null,
+      h('div.panel', h('h3', 'Notifications'), h('div.body.stack',
+        h('p.faint', { style: 'margin:0;font-size:12px' },
+          'Everything this server does is announced, whoever did it — a script '
+          + 'loading the catalogue, a rollout moving, someone else deploying. '
+          + 'Turn off what you do not want to hear about; the choice is kept in '
+          + 'this browser.'),
+        ...NOTICES.map(([id, label, what]) => h('div.notice-row',
+          toggle(noticeOn(id), on => setNotice(id, on), { label }),
+          h('span.faint', what))))),
       h('div.panel', h('h3', 'Sign out when idle'), h('div.body.flex',
         h('div', { style: 'flex:0 0 320px' }, h('div.mono', 'idle timeout'),
           h('div.faint', { style: 'font-size:11px' },
