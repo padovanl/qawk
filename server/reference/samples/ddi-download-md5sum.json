@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/DEFAULT/controller/v1/qawk-probe/softwaremodules/4/artifacts/hello-1.1.0.swu.MD5SUM"
+  },
+  "status": 200,
+  "headers": {
+    "content-disposition": "attachment;filename=hello-1.1.0.swu.MD5SUM",
+    "content-type": "text/plain",
+    "content-length": "49"
+  },
+  "body": "a9c3f2bf5012b5e2e841147a0a1f8132  hello-1.1.0.swu"
+}

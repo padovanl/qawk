@@ -1,0 +1,36 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/rest/v1/targettags",
+    "body": [
+      {
+        "name": "qawk-probe-tag",
+        "colour": "#ff0000",
+        "description": "probe"
+      }
+    ],
+    "ddi": false
+  },
+  "status": 201,
+  "headers": {
+    "content-type": "application/hal+json",
+    "content-length": "249"
+  },
+  "body": [
+    {
+      "_links": {
+        "self": {
+          "href": "http://localhost:8080/rest/v1/targettags/1"
+        }
+      },
+      "colour": "#ff0000",
+      "createdAt": 1789075037507,
+      "createdBy": "admin",
+      "description": "probe",
+      "id": 1,
+      "lastModifiedAt": 1789075037507,
+      "lastModifiedBy": "admin",
+      "name": "qawk-probe-tag"
+    }
+  ]
+}

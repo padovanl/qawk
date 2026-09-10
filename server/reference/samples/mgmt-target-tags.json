@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets/0123456789abcdef0123456789abcdef/tags",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0d751713988987e9331980363e24189ce\"",
+    "content-type": "application/hal+json",
+    "content-length": "2"
+  },
+  "body": []
+}

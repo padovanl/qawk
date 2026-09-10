@@ -1,0 +1,71 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets/0123456789abcdef0123456789abcdef/actions?limit=3&sort=id:DESC",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0d942d1c2ac4f43b1a09b48d5d5a9e23e\"",
+    "content-type": "application/hal+json",
+    "content-length": "960"
+  },
+  "body": {
+    "content": [
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef/actions/15"
+          }
+        },
+        "active": false,
+        "createdAt": 1789064346040,
+        "createdBy": "admin",
+        "forceType": "forced",
+        "id": 15,
+        "lastModifiedAt": 1789064346040,
+        "lastModifiedBy": "admin",
+        "status": "finished",
+        "type": "update",
+        "weight": 1000
+      },
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef/actions/14"
+          }
+        },
+        "active": false,
+        "createdAt": 1789064206609,
+        "createdBy": "admin",
+        "forceType": "forced",
+        "id": 14,
+        "lastModifiedAt": 1789064206609,
+        "lastModifiedBy": "admin",
+        "status": "finished",
+        "type": "update",
+        "weight": 1000
+      },
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef/actions/13"
+          }
+        },
+        "active": false,
+        "createdAt": 1789063744744,
+        "createdBy": "admin",
+        "forceType": "forced",
+        "id": 13,
+        "lastModifiedAt": 1789063744744,
+        "lastModifiedBy": "admin",
+        "status": "finished",
+        "type": "update",
+        "weight": 1000
+      }
+    ],
+    "total": 15,
+    "size": 3
+  }
+}

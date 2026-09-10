@@ -1,0 +1,68 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/distributionsettypes",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0db022787cf5c802f807e867880aea985\"",
+    "content-type": "application/hal+json",
+    "content-length": "931"
+  },
+  "body": {
+    "content": [
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/distributionsettypes/1"
+          }
+        },
+        "createdAt": 1789062197079,
+        "createdBy": "system",
+        "deleted": false,
+        "description": "Default type with Firmware/OS only.",
+        "id": 1,
+        "key": "os",
+        "lastModifiedAt": 1789062197079,
+        "lastModifiedBy": "system",
+        "name": "OS only"
+      },
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/distributionsettypes/2"
+          }
+        },
+        "createdAt": 1789062197085,
+        "createdBy": "system",
+        "deleted": false,
+        "description": "Default type with Firmware/OS and optional app(s).",
+        "id": 2,
+        "key": "os_app",
+        "lastModifiedAt": 1789062197085,
+        "lastModifiedBy": "system",
+        "name": "OS with app(s)"
+      },
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/distributionsettypes/3"
+          }
+        },
+        "createdAt": 1789062197084,
+        "createdBy": "system",
+        "deleted": false,
+        "description": "Default type with app(s) only.",
+        "id": 3,
+        "key": "app",
+        "lastModifiedAt": 1789062197084,
+        "lastModifiedBy": "system",
+        "name": "App(s) only"
+      }
+    ],
+    "total": 3,
+    "size": 3
+  }
+}

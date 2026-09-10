@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "PUT",
+    "path": "/DEFAULT/controller/v1/qawk-probe/configData",
+    "body": {
+      "mode": "merge",
+      "data": {
+        "device_type": "probe",
+        "slot": "A"
+      }
+    },
+    "ddi": true
+  },
+  "status": 200,
+  "headers": {
+    "content-length": "0"
+  },
+  "body": null
+}

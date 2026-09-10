@@ -1,0 +1,47 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/DEFAULT/controller/v1/qawk-probe/deploymentBase/16?c=425452694",
+    "body": null,
+    "ddi": true
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"02abefaa76fcb4480a95e57a01c94e72a\"",
+    "content-type": "application/hal+json",
+    "content-length": "630"
+  },
+  "body": {
+    "id": "16",
+    "deployment": {
+      "download": "attempt",
+      "update": "attempt",
+      "chunks": [
+        {
+          "part": "bApp",
+          "version": "1.1.0",
+          "name": "hello",
+          "artifacts": [
+            {
+              "filename": "hello-1.1.0.swu",
+              "hashes": {
+                "sha1": "70804b5a380ca87eac9abb6e8e578d4681337f59",
+                "md5": "a9c3f2bf5012b5e2e841147a0a1f8132",
+                "sha256": "150e5485d5ebcb1d3a3401d81a00cb0782a0533dc4578b4c532ad56aff80a01a"
+              },
+              "size": 26624,
+              "_links": {
+                "download-http": {
+                  "href": "http://localhost:8080/DEFAULT/controller/v1/qawk-probe/softwaremodules/4/artifacts/hello-1.1.0.swu"
+                },
+                "md5sum-http": {
+                  "href": "http://localhost:8080/DEFAULT/controller/v1/qawk-probe/softwaremodules/4/artifacts/hello-1.1.0.swu.MD5SUM"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

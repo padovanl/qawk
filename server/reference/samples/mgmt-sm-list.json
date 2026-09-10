@@ -1,0 +1,62 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/softwaremodules?limit=2",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"009fbbd67835f735249692529da81cd7b\"",
+    "content-type": "application/hal+json",
+    "content-length": "723"
+  },
+  "body": {
+    "content": [
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/softwaremodules/1"
+          }
+        },
+        "complete": true,
+        "createdAt": 1789062199496,
+        "createdBy": "admin",
+        "deleted": false,
+        "encrypted": false,
+        "id": 1,
+        "lastModifiedAt": 1789063709339,
+        "lastModifiedBy": "admin",
+        "locked": true,
+        "name": "neo-intel-os",
+        "type": "os",
+        "typeName": "OS",
+        "vendor": "QubicaAMF",
+        "version": "25.7.2"
+      },
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/softwaremodules/2"
+          }
+        },
+        "complete": true,
+        "createdAt": 1789062279503,
+        "createdBy": "admin",
+        "deleted": false,
+        "encrypted": false,
+        "id": 2,
+        "lastModifiedAt": 1789062984413,
+        "lastModifiedBy": "admin",
+        "locked": true,
+        "name": "neo-intel-os-delta",
+        "type": "os",
+        "typeName": "OS",
+        "vendor": "QubicaAMF",
+        "version": "25.7.2"
+      }
+    ],
+    "total": 11,
+    "size": 2
+  }
+}

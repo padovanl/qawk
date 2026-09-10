@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targettypes/1",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"05afe36a5ecb7c725fe2b8843b774ce44\"",
+    "content-type": "application/hal+json",
+    "content-length": "391"
+  },
+  "body": {
+    "_links": {
+      "self": {
+        "href": "http://localhost:8080/rest/v1/targettypes/1"
+      },
+      "compatibledistributionsettypes": {
+        "href": "http://localhost:8080/rest/v1/targettypes/1/compatibledistributionsettypes"
+      }
+    },
+    "createdAt": 1789062198096,
+    "createdBy": "admin",
+    "deleted": false,
+    "description": "QubicaAMF neo-intel",
+    "id": 1,
+    "key": "neo-intel",
+    "lastModifiedAt": 1789062198176,
+    "lastModifiedBy": "admin",
+    "name": "neo-intel"
+  }
+}

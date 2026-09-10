@@ -1,0 +1,72 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets/0123456789abcdef0123456789abcdef/actions/15/status?limit=5&sort=id:DESC",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"035456bbedc6eed8b4a043a2c2d89790e\"",
+    "content-type": "application/hal+json",
+    "content-length": "969"
+  },
+  "body": {
+    "content": [
+      {
+        "id": 157,
+        "messages": [
+          "Update Installed."
+        ],
+        "reportedAt": 1789064993294,
+        "timestamp": 1789064993293,
+        "type": "finished"
+      },
+      {
+        "id": 156,
+        "messages": [
+          "Update Server: Target retrieved update action and should start now the download."
+        ],
+        "reportedAt": 1789064423340,
+        "timestamp": 1789064423340,
+        "type": "retrieved"
+      },
+      {
+        "id": 155,
+        "messages": [
+          "All Chunks Installed."
+        ],
+        "reportedAt": 1789064393329,
+        "timestamp": 1789064393328,
+        "type": "running"
+      },
+      {
+        "id": 154,
+        "messages": [
+          "Installed Chunk."
+        ],
+        "reportedAt": 1789064393326,
+        "timestamp": 1789064393324,
+        "type": "running"
+      },
+      {
+        "id": 153,
+        "messages": [
+          "[channel_get_file] : Total download size is 607858 kB.",
+          "Software Update started !",
+          "[scan_mtd_devices] : MTD is not present on the target",
+          "[lua_handlers_init] : External Lua handler(s) not found.",
+          "Installation in progress",
+          "ERROR : resize2fs 1.47.0 (5-Feb-2023)",
+          "SWUPDATE successful !",
+          "Waiting for requests..."
+        ],
+        "reportedAt": 1789064393319,
+        "timestamp": 1789064393317,
+        "type": "running"
+      }
+    ],
+    "total": 16,
+    "size": 5
+  }
+}

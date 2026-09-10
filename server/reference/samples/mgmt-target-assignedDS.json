@@ -1,0 +1,89 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets/0123456789abcdef0123456789abcdef/assignedDS",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"078fc121a3956c5259a6e023bdea9c92c\"",
+    "content-type": "application/hal+json",
+    "content-length": "1379"
+  },
+  "body": {
+    "_links": {
+      "self": {
+        "href": "http://localhost:8080/rest/v1/distributionsets/12"
+      },
+      "modules": {
+        "href": "http://localhost:8080/rest/v1/distributionsets/12/assignedSM?offset=0&limit=50"
+      },
+      "type": {
+        "href": "http://localhost:8080/rest/v1/distributionsettypes/2"
+      },
+      "metadata": {
+        "href": "http://localhost:8080/rest/v1/distributionsets/12/metadata"
+      }
+    },
+    "complete": true,
+    "createdAt": 1789062467997,
+    "createdBy": "admin",
+    "deleted": false,
+    "description": "system and application in one action",
+    "id": 12,
+    "lastModifiedAt": 1789063744740,
+    "lastModifiedBy": "admin",
+    "locked": true,
+    "modules": [
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/softwaremodules/5"
+          }
+        },
+        "complete": true,
+        "createdAt": 1789062460040,
+        "createdBy": "admin",
+        "deleted": false,
+        "encrypted": false,
+        "id": 5,
+        "lastModifiedAt": 1789063744740,
+        "lastModifiedBy": "admin",
+        "locked": true,
+        "name": "hello",
+        "type": "application",
+        "typeName": "Application",
+        "vendor": "QubicaAMF",
+        "version": "1.2.0"
+      },
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/softwaremodules/1"
+          }
+        },
+        "complete": true,
+        "createdAt": 1789062199496,
+        "createdBy": "admin",
+        "deleted": false,
+        "encrypted": false,
+        "id": 1,
+        "lastModifiedAt": 1789063709339,
+        "lastModifiedBy": "admin",
+        "locked": true,
+        "name": "neo-intel-os",
+        "type": "os",
+        "typeName": "OS",
+        "vendor": "QubicaAMF",
+        "version": "25.7.2"
+      }
+    ],
+    "name": "combo-full",
+    "requiredMigrationStep": false,
+    "type": "os_app",
+    "typeName": "OS with app(s)",
+    "valid": true,
+    "version": "25.7.2+1.2.0"
+  }
+}

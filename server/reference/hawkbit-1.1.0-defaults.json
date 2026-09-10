@@ -1,0 +1,149 @@
+{
+  "softwaremoduletypes": [
+    {
+      "createdAt": 1789062197068,
+      "createdBy": "system",
+      "deleted": false,
+      "description": "Core firmware or operating system",
+      "id": 1,
+      "key": "os",
+      "lastModifiedAt": 1789062197068,
+      "lastModifiedBy": "system",
+      "maxAssignments": 1,
+      "minArtifacts": 0,
+      "name": "OS"
+    },
+    {
+      "createdAt": 1789062197041,
+      "createdBy": "system",
+      "deleted": false,
+      "description": "Application Addons",
+      "id": 2,
+      "key": "application",
+      "lastModifiedAt": 1789062197041,
+      "lastModifiedBy": "system",
+      "maxAssignments": 2147483647,
+      "minArtifacts": 0,
+      "name": "Application"
+    }
+  ],
+  "distributionsettypes": [
+    {
+      "createdAt": 1789062197079,
+      "createdBy": "system",
+      "deleted": false,
+      "description": "Default type with Firmware/OS only.",
+      "id": 1,
+      "key": "os",
+      "lastModifiedAt": 1789062197079,
+      "lastModifiedBy": "system",
+      "name": "OS only",
+      "mandatorymodules": [
+        "os"
+      ],
+      "optionalmodules": []
+    },
+    {
+      "createdAt": 1789062197085,
+      "createdBy": "system",
+      "deleted": false,
+      "description": "Default type with Firmware/OS and optional app(s).",
+      "id": 2,
+      "key": "os_app",
+      "lastModifiedAt": 1789062197085,
+      "lastModifiedBy": "system",
+      "name": "OS with app(s)",
+      "mandatorymodules": [
+        "os"
+      ],
+      "optionalmodules": [
+        "application"
+      ]
+    },
+    {
+      "createdAt": 1789062197084,
+      "createdBy": "system",
+      "deleted": false,
+      "description": "Default type with app(s) only.",
+      "id": 3,
+      "key": "app",
+      "lastModifiedAt": 1789062197084,
+      "lastModifiedBy": "system",
+      "name": "App(s) only",
+      "mandatorymodules": [
+        "application"
+      ],
+      "optionalmodules": []
+    }
+  ],
+  "system_configs": {
+    "user.confirmation.flow.enabled": {
+      "value": false,
+      "global": true
+    },
+    "action.cleanup.onQuotaHit.percent": {
+      "value": 0,
+      "global": true
+    },
+    "authentication.gatewaytoken.enabled": {
+      "value": true,
+      "global": true
+    },
+    "authentication.header.authority": {
+      "value": "",
+      "global": true
+    },
+    "authentication.gatewaytoken.key": {
+      "value": "example-gateway-token",
+      "global": false
+    },
+    "pollingTime": {
+      "value": "00:00:30",
+      "global": false
+    },
+    "authentication.targettoken.enabled": {
+      "value": true,
+      "global": true
+    },
+    "rollout.approval.enabled": {
+      "value": false,
+      "global": true
+    },
+    "action.cleanup.auto.expiry": {
+      "value": -1,
+      "global": true
+    },
+    "action.cleanup.auto.status": {
+      "value": "CANCELED,ERROR",
+      "global": true
+    },
+    "maintenanceWindowPollCount": {
+      "value": 3,
+      "global": true
+    },
+    "repository.actions.autoclose.enabled": {
+      "value": false,
+      "global": true
+    },
+    "default.ds.type": {
+      "value": 2,
+      "global": false
+    },
+    "authentication.header.enabled": {
+      "value": false,
+      "global": true
+    },
+    "pollingOverdueTime": {
+      "value": "00:05:00",
+      "global": true
+    },
+    "implicit.lock.enabled": {
+      "value": true,
+      "global": true
+    },
+    "batch.assignments.enabled": {
+      "value": false,
+      "global": true
+    }
+  }
+}

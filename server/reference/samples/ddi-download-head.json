@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "HEAD",
+    "path": "/DEFAULT/controller/v1/qawk-probe/softwaremodules/4/artifacts/hello-1.1.0.swu"
+  },
+  "status": 200,
+  "headers": {
+    "content-disposition": "attachment;filename=hello-1.1.0.swu",
+    "last-modified": "Thu, 10 Sep 2026 17:47:39 GMT",
+    "etag": "\"70804b5a380ca87eac9abb6e8e578d4681337f59\"",
+    "accept-ranges": "bytes",
+    "content-type": "application/octet-stream",
+    "content-length": "26624"
+  }
+}

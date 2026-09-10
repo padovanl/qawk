@@ -1,0 +1,13 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/DEFAULT/controller/v1/qawk-probe",
+    "body": null,
+    "ddi": true
+  },
+  "status": 401,
+  "headers": {
+    "content-length": "0"
+  },
+  "body": null
+}

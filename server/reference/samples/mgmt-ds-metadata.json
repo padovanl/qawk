@@ -1,0 +1,19 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/distributionsets/1/metadata",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"096ed6e97d7774198f36a18994679c422\"",
+    "content-type": "application/hal+json",
+    "content-length": "33"
+  },
+  "body": {
+    "content": [],
+    "total": 0,
+    "size": 0
+  }
+}

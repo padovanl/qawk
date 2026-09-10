@@ -1,0 +1,33 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/rest/v1/distributionsets/4/assignedTargets",
+    "body": [
+      {
+        "id": "qawk-probe",
+        "type": "soft"
+      }
+    ],
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "content-type": "application/hal+json",
+    "content-length": "163"
+  },
+  "body": {
+    "alreadyAssigned": 0,
+    "assigned": 1,
+    "assignedActions": [
+      {
+        "id": 16,
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/targets/qawk-probe/actions/16"
+          }
+        }
+      }
+    ],
+    "total": 1
+  }
+}

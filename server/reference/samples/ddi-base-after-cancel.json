@@ -1,0 +1,26 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/DEFAULT/controller/v1/qawk-probe",
+    "body": null,
+    "ddi": true
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"07a1ffc743f4837d82194dda925979b51\"",
+    "content-type": "application/hal+json",
+    "content-length": "167"
+  },
+  "body": {
+    "config": {
+      "polling": {
+        "sleep": "00:00:30"
+      }
+    },
+    "_links": {
+      "deploymentBase": {
+        "href": "http://localhost:8080/DEFAULT/controller/v1/qawk-probe/deploymentBase/17?c=426376215"
+      }
+    }
+  }
+}

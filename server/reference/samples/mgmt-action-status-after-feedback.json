@@ -1,0 +1,65 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets/qawk-probe/actions/16/status?sort=id:DESC",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0fdf6879e1379096b41d4413c70b43612\"",
+    "content-type": "application/hal+json",
+    "content-length": "896"
+  },
+  "body": {
+    "content": [
+      {
+        "id": 162,
+        "messages": [
+          "Installing Update Chunk Artifacts."
+        ],
+        "reportedAt": 1789075037367,
+        "timestamp": 1789075037363,
+        "type": "running"
+      },
+      {
+        "id": 161,
+        "messages": [
+          "Update Server: Target downloads /DEFAULT/controller/v1/qawk-probe/softwaremodules/4/artifacts/hello-1.1.0.swu.MD5SUM"
+        ],
+        "reportedAt": 1789075037360,
+        "timestamp": 1789075037360,
+        "type": "download"
+      },
+      {
+        "id": 160,
+        "messages": [
+          "Update Server: Target downloads /DEFAULT/controller/v1/qawk-probe/softwaremodules/4/artifacts/hello-1.1.0.swu"
+        ],
+        "reportedAt": 1789075037255,
+        "timestamp": 1789075037255,
+        "type": "download"
+      },
+      {
+        "id": 159,
+        "messages": [
+          "Update Server: Target retrieved update action and should start now the download."
+        ],
+        "reportedAt": 1789075037195,
+        "timestamp": 1789075037195,
+        "type": "retrieved"
+      },
+      {
+        "id": 158,
+        "messages": [
+          "Assignment initiated by user 'admin'"
+        ],
+        "reportedAt": 1789075037180,
+        "timestamp": 1789075037178,
+        "type": "running"
+      }
+    ],
+    "total": 5,
+    "size": 5
+  }
+}

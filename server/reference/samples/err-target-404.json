@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets/does-not-exist",
+    "body": null,
+    "ddi": false
+  },
+  "status": 404,
+  "headers": {
+    "content-type": "application/hal+json",
+    "content-length": "267"
+  },
+  "body": {
+    "errorCode": "hawkbit.server.error.repo.entityNotFound",
+    "exceptionClass": "org.eclipse.hawkbit.repository.exception.EntityNotFoundException",
+    "info": {
+      "type": "Target",
+      "entityId": "does-not-exist"
+    },
+    "message": "Target with given identifier {does-not-exist} does not exist."
+  }
+}

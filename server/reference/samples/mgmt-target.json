@@ -1,0 +1,55 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets/0123456789abcdef0123456789abcdef",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0c1c873a44c1b46d147fc045a95072c4c\"",
+    "content-type": "application/hal+json",
+    "content-length": "1268"
+  },
+  "body": {
+    "_links": {
+      "self": {
+        "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef"
+      },
+      "assignedDS": {
+        "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef/assignedDS"
+      },
+      "installedDS": {
+        "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef/installedDS"
+      },
+      "attributes": {
+        "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef/attributes"
+      },
+      "actions": {
+        "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef/actions?offset=0&limit=50&sort=id%3ADESC"
+      },
+      "metadata": {
+        "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef/metadata"
+      }
+    },
+    "address": "http://192.0.2.10",
+    "controllerId": "0123456789abcdef0123456789abcdef",
+    "createdAt": 1789062229612,
+    "createdBy": "CONTROLLER_PLUG_AND_PLAY",
+    "description": "Plug and Play target: 0123456789abcdef0123456789abcdef",
+    "installedAt": 1789064993293,
+    "ipAddress": "192.0.2.10",
+    "lastControllerRequestAt": 1789075024256,
+    "lastModifiedAt": 1789064346040,
+    "lastModifiedBy": "admin",
+    "name": "0123456789abcdef0123456789abcdef",
+    "pollStatus": {
+      "lastRequestAt": 1789075024256,
+      "nextExpectedRequestAt": 1789075054256,
+      "overdue": false
+    },
+    "requestAttributes": false,
+    "securityToken": "07afc1c88627611630a875f79dab5a2b",
+    "updateStatus": "in_sync"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/DEFAULT/controller/v1/qawk-probe",
+    "body": null,
+    "ddi": true
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0095008cd417e92abba3e8a7c06d54ff5\"",
+    "content-type": "application/hal+json",
+    "content-length": "43"
+  },
+  "body": {
+    "config": {
+      "polling": {
+        "sleep": "00:00:30"
+      }
+    }
+  }
+}

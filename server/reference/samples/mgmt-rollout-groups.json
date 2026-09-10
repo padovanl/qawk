@@ -1,0 +1,55 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/rollouts/1/deploygroups",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0df99b87c1601e4a04e19248b936a10c0\"",
+    "content-type": "application/hal+json",
+    "content-length": "597"
+  },
+  "body": {
+    "content": [
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/rollouts/1/deploygroups/1"
+          }
+        },
+        "createdAt": 1789075038528,
+        "createdBy": "admin",
+        "description": "group-1",
+        "dynamic": false,
+        "errorAction": {
+          "action": "PAUSE",
+          "expression": ""
+        },
+        "errorCondition": {
+          "condition": "THRESHOLD",
+          "expression": "50"
+        },
+        "id": 1,
+        "lastModifiedAt": 1789075041027,
+        "lastModifiedBy": "system",
+        "name": "group-1",
+        "status": "ready",
+        "successAction": {
+          "action": "NEXTGROUP",
+          "expression": ""
+        },
+        "successCondition": {
+          "condition": "THRESHOLD",
+          "expression": "100"
+        },
+        "targetFilterQuery": "",
+        "targetPercentage": 100.0,
+        "totalTargets": 1
+      }
+    ],
+    "total": 1,
+    "size": 1
+  }
+}

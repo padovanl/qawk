@@ -1,0 +1,11 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/rest/v1/rollouts/1/start",
+    "body": null,
+    "ddi": false
+  },
+  "status": 204,
+  "headers": {},
+  "body": null
+}

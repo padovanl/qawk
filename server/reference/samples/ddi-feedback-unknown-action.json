@@ -1,0 +1,29 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/DEFAULT/controller/v1/qawk-probe/deploymentBase/999999/feedback",
+    "body": {
+      "status": {
+        "execution": "closed",
+        "result": {
+          "finished": "success"
+        }
+      }
+    },
+    "ddi": true
+  },
+  "status": 404,
+  "headers": {
+    "content-type": "application/hal+json",
+    "content-length": "249"
+  },
+  "body": {
+    "errorCode": "hawkbit.server.error.repo.entityNotFound",
+    "exceptionClass": "org.eclipse.hawkbit.repository.exception.EntityNotFoundException",
+    "info": {
+      "type": "Action",
+      "entityId": 999999
+    },
+    "message": "Action with given identifier {999999} does not exist."
+  }
+}

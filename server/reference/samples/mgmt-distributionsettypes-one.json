@@ -1,0 +1,36 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/distributionsettypes/1",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0138961d152125fc1fe310c2751a05681\"",
+    "content-type": "application/hal+json",
+    "content-length": "496"
+  },
+  "body": {
+    "_links": {
+      "self": {
+        "href": "http://localhost:8080/rest/v1/distributionsettypes/1"
+      },
+      "mandatorymodules": {
+        "href": "http://localhost:8080/rest/v1/distributionsettypes/1/mandatorymoduletypes"
+      },
+      "optionalmodules": {
+        "href": "http://localhost:8080/rest/v1/distributionsettypes/1/optionalmoduletypes"
+      }
+    },
+    "createdAt": 1789062197079,
+    "createdBy": "system",
+    "deleted": false,
+    "description": "Default type with Firmware/OS only.",
+    "id": 1,
+    "key": "os",
+    "lastModifiedAt": 1789062197079,
+    "lastModifiedBy": "system",
+    "name": "OS only"
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/distributionsets/1",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"018a817f28672cbbfd0caf12575361912\"",
+    "content-type": "application/hal+json",
+    "content-length": "950"
+  },
+  "body": {
+    "_links": {
+      "self": {
+        "href": "http://localhost:8080/rest/v1/distributionsets/1"
+      },
+      "modules": {
+        "href": "http://localhost:8080/rest/v1/distributionsets/1/assignedSM?offset=0&limit=50"
+      },
+      "type": {
+        "href": "http://localhost:8080/rest/v1/distributionsettypes/1"
+      },
+      "metadata": {
+        "href": "http://localhost:8080/rest/v1/distributionsets/1/metadata"
+      }
+    },
+    "complete": true,
+    "createdAt": 1789062279234,
+    "createdBy": "admin",
+    "deleted": false,
+    "id": 1,
+    "lastModifiedAt": 1789063709339,
+    "lastModifiedBy": "admin",
+    "locked": true,
+    "modules": [
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/softwaremodules/1"
+          }
+        },
+        "complete": true,
+        "createdAt": 1789062199496,
+        "createdBy": "admin",
+        "deleted": false,
+        "encrypted": false,
+        "id": 1,
+        "lastModifiedAt": 1789063709339,
+        "lastModifiedBy": "admin",
+        "locked": true,
+        "name": "neo-intel-os",
+        "type": "os",
+        "typeName": "OS",
+        "vendor": "QubicaAMF",
+        "version": "25.7.2"
+      }
+    ],
+    "name": "os-full",
+    "requiredMigrationStep": false,
+    "type": "os",
+    "typeName": "OS only",
+    "valid": true,
+    "version": "25.7.2"
+  }
+}

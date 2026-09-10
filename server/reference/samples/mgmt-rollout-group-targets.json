@@ -1,0 +1,46 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/rollouts/1/deploygroups/1/targets",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0e5ff978d18fabfb0443ebf9b7300f2b6\"",
+    "content-type": "application/hal+json",
+    "content-length": "653"
+  },
+  "body": {
+    "content": [
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/targets/qawk-probe"
+          }
+        },
+        "address": "http://172.20.0.1",
+        "controllerId": "qawk-probe",
+        "createdAt": 1789074990703,
+        "createdBy": "CONTROLLER_PLUG_AND_PLAY",
+        "description": "Plug and Play target: qawk-probe",
+        "installedAt": 1789075037417,
+        "ipAddress": "172.20.0.1",
+        "lastControllerRequestAt": 1789074990703,
+        "lastModifiedAt": 1789075037385,
+        "lastModifiedBy": "admin",
+        "name": "qawk-probe",
+        "pollStatus": {
+          "lastRequestAt": 1789074990703,
+          "nextExpectedRequestAt": 1789075020703,
+          "overdue": false
+        },
+        "requestAttributes": true,
+        "securityToken": "24b2b31130c60d711ee427183e5ee752",
+        "updateStatus": "in_sync"
+      }
+    ],
+    "total": 1,
+    "size": 1
+  }
+}

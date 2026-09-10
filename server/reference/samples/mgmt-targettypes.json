@@ -1,0 +1,68 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targettypes",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"032143481471011692cedd96a84c9e166\"",
+    "content-type": "application/hal+json",
+    "content-length": "818"
+  },
+  "body": {
+    "content": [
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/targettypes/1"
+          }
+        },
+        "createdAt": 1789062198096,
+        "createdBy": "admin",
+        "deleted": false,
+        "description": "QubicaAMF neo-intel",
+        "id": 1,
+        "key": "neo-intel",
+        "lastModifiedAt": 1789062198176,
+        "lastModifiedBy": "admin",
+        "name": "neo-intel"
+      },
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/targettypes/2"
+          }
+        },
+        "createdAt": 1789062198205,
+        "createdBy": "admin",
+        "deleted": false,
+        "description": "QubicaAMF 6hd",
+        "id": 2,
+        "key": "6hd",
+        "lastModifiedAt": 1789062198253,
+        "lastModifiedBy": "admin",
+        "name": "6hd"
+      },
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/targettypes/3"
+          }
+        },
+        "createdAt": 1789062198277,
+        "createdBy": "admin",
+        "deleted": false,
+        "description": "QubicaAMF st05",
+        "id": 3,
+        "key": "st05",
+        "lastModifiedAt": 1789062198319,
+        "lastModifiedBy": "admin",
+        "name": "st05"
+      }
+    ],
+    "total": 3,
+    "size": 3
+  }
+}

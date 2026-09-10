@@ -1,0 +1,26 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/DEFAULT/controller/v1/qawk-probe",
+    "body": null,
+    "ddi": true
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0fb94593bb8feba86e34375b3d0ad69e6\"",
+    "content-type": "application/hal+json",
+    "content-length": "151"
+  },
+  "body": {
+    "config": {
+      "polling": {
+        "sleep": "00:00:30"
+      }
+    },
+    "_links": {
+      "cancelAction": {
+        "href": "http://localhost:8080/DEFAULT/controller/v1/qawk-probe/cancelAction/16"
+      }
+    }
+  }
+}

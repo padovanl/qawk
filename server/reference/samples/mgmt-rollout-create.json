@@ -1,0 +1,82 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/rest/v1/rollouts",
+    "body": {
+      "name": "qawk-probe-rollout",
+      "distributionSetId": 4,
+      "targetFilterQuery": "controllerId==qawk-probe",
+      "amountGroups": 1,
+      "successCondition": {
+        "condition": "THRESHOLD",
+        "expression": "100"
+      },
+      "errorCondition": {
+        "condition": "THRESHOLD",
+        "expression": "50"
+      }
+    },
+    "ddi": false
+  },
+  "status": 201,
+  "headers": {
+    "content-type": "application/hal+json",
+    "content-length": "1126"
+  },
+  "body": {
+    "_links": {
+      "start": {
+        "href": "http://localhost:8080/rest/v1/rollouts/1/start"
+      },
+      "pause": {
+        "href": "http://localhost:8080/rest/v1/rollouts/1/pause"
+      },
+      "resume": {
+        "href": "http://localhost:8080/rest/v1/rollouts/1/resume"
+      },
+      "triggerNextGroup": {
+        "href": "http://localhost:8080/rest/v1/rollouts/1/triggerNextGroup"
+      },
+      "approve": {
+        "href": "http://localhost:8080/rest/v1/rollouts/1/approve"
+      },
+      "deny": {
+        "href": "http://localhost:8080/rest/v1/rollouts/1/deny"
+      },
+      "groups": {
+        "href": "http://localhost:8080/rest/v1/rollouts/1/deploygroups?offset=0&limit=50"
+      },
+      "distributionset": {
+        "href": "http://localhost:8080/rest/v1/distributionsets/4",
+        "name": "app-full:1.1.0"
+      },
+      "self": {
+        "href": "http://localhost:8080/rest/v1/rollouts/1"
+      }
+    },
+    "createdAt": 1789075038524,
+    "createdBy": "admin",
+    "deleted": false,
+    "distributionSetId": 4,
+    "dynamic": false,
+    "forcetime": 0,
+    "id": 1,
+    "lastModifiedAt": 1789075038524,
+    "lastModifiedBy": "admin",
+    "name": "qawk-probe-rollout",
+    "status": "creating",
+    "targetFilterQuery": "controllerId==qawk-probe",
+    "totalGroups": 1,
+    "totalTargets": 1,
+    "totalTargetsPerStatus": {
+      "running": 0,
+      "notstarted": 1,
+      "scheduled": 0,
+      "cancelled": 0,
+      "finished": 0,
+      "error": 0
+    },
+    "type": "forced",
+    "weight": 1000
+  }
+}

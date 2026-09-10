@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets?q=nonesuch==x",
+    "body": null,
+    "ddi": false
+  },
+  "status": 400,
+  "headers": {
+    "content-type": "application/hal+json",
+    "content-length": "163"
+  },
+  "body": {
+    "errorCode": "hawkbit.server.error.rest.param.rsqlInvalidField",
+    "exceptionClass": "org.eclipse.hawkbit.repository.exception.RSQLParameterUnsupportedFieldException"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets/0123456789abcdef0123456789abcdef/attributes",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0779a27f970011eae0f15eab1d560bd70\"",
+    "content-type": "application/hal+json",
+    "content-length": "128"
+  },
+  "body": {
+    "device_type": "neo-intel",
+    "slot": "A",
+    "app_hello": "1.2.0",
+    "app_qamf-composer": "1.1.0",
+    "ip": "192.0.2.10",
+    "os_version": "25.7.2"
+  }
+}

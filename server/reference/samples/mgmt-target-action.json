@@ -1,0 +1,42 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets/0123456789abcdef0123456789abcdef/actions/15",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"015a8c48f525e02ac41b012dabd42dcea\"",
+    "content-type": "application/hal+json",
+    "content-length": "695"
+  },
+  "body": {
+    "_links": {
+      "self": {
+        "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef/actions/15"
+      },
+      "target": {
+        "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef",
+        "name": "0123456789abcdef0123456789abcdef"
+      },
+      "distributionset": {
+        "href": "http://localhost:8080/rest/v1/distributionsets/12",
+        "name": "combo-full:25.7.2+1.2.0"
+      },
+      "status": {
+        "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef/actions/15/status?offset=0&limit=50&sort=id%3ADESC"
+      }
+    },
+    "active": false,
+    "createdAt": 1789064346040,
+    "createdBy": "admin",
+    "forceType": "forced",
+    "id": 15,
+    "lastModifiedAt": 1789064346040,
+    "lastModifiedBy": "admin",
+    "status": "finished",
+    "type": "update",
+    "weight": 1000
+  }
+}

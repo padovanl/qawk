@@ -1,0 +1,47 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/DEFAULT/controller/v1/qawk-probe/deploymentBase/17?c=426376215",
+    "body": null,
+    "ddi": true
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"03056eed86fd275ff9ac09fb4ad0ae53d\"",
+    "content-type": "application/hal+json",
+    "content-length": "628"
+  },
+  "body": {
+    "id": "17",
+    "deployment": {
+      "download": "forced",
+      "update": "forced",
+      "chunks": [
+        {
+          "part": "bApp",
+          "version": "1.2.0",
+          "name": "hello",
+          "artifacts": [
+            {
+              "filename": "hello-1.2.0.swu",
+              "hashes": {
+                "sha1": "4147c00882ef0b4360e0c767e76848cc32c9193b",
+                "md5": "21a0c9661f7f342fbfdec52939127139",
+                "sha256": "a47780cce11c746339c4eaff5c1c171c0b6235d04a387b04ff30f79ffd097f22"
+              },
+              "size": 26112,
+              "_links": {
+                "download-http": {
+                  "href": "http://localhost:8080/DEFAULT/controller/v1/qawk-probe/softwaremodules/5/artifacts/hello-1.2.0.swu"
+                },
+                "md5sum-http": {
+                  "href": "http://localhost:8080/DEFAULT/controller/v1/qawk-probe/softwaremodules/5/artifacts/hello-1.2.0.swu.MD5SUM"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

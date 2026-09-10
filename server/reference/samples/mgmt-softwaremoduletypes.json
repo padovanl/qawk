@@ -1,0 +1,56 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/softwaremoduletypes",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0c029abc43faadafdc1e769b48ff93ef0\"",
+    "content-type": "application/hal+json",
+    "content-length": "682"
+  },
+  "body": {
+    "content": [
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/softwaremoduletypes/1"
+          }
+        },
+        "createdAt": 1789062197068,
+        "createdBy": "system",
+        "deleted": false,
+        "description": "Core firmware or operating system",
+        "id": 1,
+        "key": "os",
+        "lastModifiedAt": 1789062197068,
+        "lastModifiedBy": "system",
+        "maxAssignments": 1,
+        "minArtifacts": 0,
+        "name": "OS"
+      },
+      {
+        "_links": {
+          "self": {
+            "href": "http://localhost:8080/rest/v1/softwaremoduletypes/2"
+          }
+        },
+        "createdAt": 1789062197041,
+        "createdBy": "system",
+        "deleted": false,
+        "description": "Application Addons",
+        "id": 2,
+        "key": "application",
+        "lastModifiedAt": 1789062197041,
+        "lastModifiedBy": "system",
+        "maxAssignments": 2147483647,
+        "minArtifacts": 0,
+        "name": "Application"
+      }
+    ],
+    "total": 2,
+    "size": 2
+  }
+}

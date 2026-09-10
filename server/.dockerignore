@@ -1,0 +1,7 @@
+# The binary embeds the two OpenAPI documents in reference/; the recorded
+# samples and the parity list are for the tests and for people, not for it.
+reference/samples
+reference/PARITY.md
+reference/hawkbit-1.1.0-defaults.json
+test
+*.md

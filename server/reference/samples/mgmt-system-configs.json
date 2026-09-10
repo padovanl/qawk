@@ -1,0 +1,194 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/system/configs",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"024f1d07391b882c85ce4e145864c5f18\"",
+    "content-type": "application/hal+json",
+    "content-length": "3057"
+  },
+  "body": {
+    "user.confirmation.flow.enabled": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/user.confirmation.flow.enabled"
+        }
+      ],
+      "value": false
+    },
+    "action.cleanup.onQuotaHit.percent": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/action.cleanup.onQuotaHit.percent"
+        }
+      ],
+      "value": 0
+    },
+    "authentication.gatewaytoken.enabled": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/authentication.gatewaytoken.enabled"
+        }
+      ],
+      "value": true
+    },
+    "authentication.header.authority": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/authentication.header.authority"
+        }
+      ],
+      "value": ""
+    },
+    "authentication.gatewaytoken.key": {
+      "createdAt": 1789062197196,
+      "createdBy": "admin",
+      "global": false,
+      "lastModifiedAt": 1789062197196,
+      "lastModifiedBy": "admin",
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/authentication.gatewaytoken.key"
+        }
+      ],
+      "value": "example-gateway-token"
+    },
+    "pollingTime": {
+      "createdAt": 1789062197215,
+      "createdBy": "admin",
+      "global": false,
+      "lastModifiedAt": 1789062197215,
+      "lastModifiedBy": "admin",
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/pollingTime"
+        }
+      ],
+      "value": "00:00:30"
+    },
+    "authentication.targettoken.enabled": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/authentication.targettoken.enabled"
+        }
+      ],
+      "value": true
+    },
+    "rollout.approval.enabled": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/rollout.approval.enabled"
+        }
+      ],
+      "value": false
+    },
+    "action.cleanup.auto.expiry": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/action.cleanup.auto.expiry"
+        }
+      ],
+      "value": -1
+    },
+    "action.cleanup.auto.status": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/action.cleanup.auto.status"
+        }
+      ],
+      "value": "CANCELED,ERROR"
+    },
+    "maintenanceWindowPollCount": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/maintenanceWindowPollCount"
+        }
+      ],
+      "value": 3
+    },
+    "repository.actions.autoclose.enabled": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/repository.actions.autoclose.enabled"
+        }
+      ],
+      "value": false
+    },
+    "default.ds.type": {
+      "global": false,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/default.ds.type"
+        }
+      ],
+      "value": 2
+    },
+    "authentication.header.enabled": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/authentication.header.enabled"
+        }
+      ],
+      "value": false
+    },
+    "pollingOverdueTime": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/pollingOverdueTime"
+        }
+      ],
+      "value": "00:05:00"
+    },
+    "implicit.lock.enabled": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/implicit.lock.enabled"
+        }
+      ],
+      "value": true
+    },
+    "batch.assignments.enabled": {
+      "global": true,
+      "links": [
+        {
+          "rel": "self",
+          "href": "http://localhost:8080/rest/v1/system/configs/batch.assignments.enabled"
+        }
+      ],
+      "value": false
+    }
+  }
+}

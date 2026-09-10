@@ -1,0 +1,17 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets",
+    "body": null,
+    "ddi": false
+  },
+  "status": 401,
+  "headers": {
+    "content-type": "application/hal+json"
+  },
+  "body": {
+    "timestamp": "2026-09-10T21:17:17.157Z",
+    "status": 401,
+    "error": "Unauthorized"
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets/qawk-probe",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"03071fb1db2fe8291d49c6fbd271dcf70\"",
+    "content-type": "application/hal+json",
+    "content-length": "1065"
+  },
+  "body": {
+    "_links": {
+      "self": {
+        "href": "http://localhost:8080/rest/v1/targets/qawk-probe"
+      },
+      "assignedDS": {
+        "href": "http://localhost:8080/rest/v1/targets/qawk-probe/assignedDS"
+      },
+      "installedDS": {
+        "href": "http://localhost:8080/rest/v1/targets/qawk-probe/installedDS"
+      },
+      "attributes": {
+        "href": "http://localhost:8080/rest/v1/targets/qawk-probe/attributes"
+      },
+      "actions": {
+        "href": "http://localhost:8080/rest/v1/targets/qawk-probe/actions?offset=0&limit=50&sort=id%3ADESC"
+      },
+      "metadata": {
+        "href": "http://localhost:8080/rest/v1/targets/qawk-probe/metadata"
+      }
+    },
+    "address": "http://172.20.0.1",
+    "controllerId": "qawk-probe",
+    "createdAt": 1789074990703,
+    "createdBy": "CONTROLLER_PLUG_AND_PLAY",
+    "description": "Plug and Play target: qawk-probe",
+    "installedAt": 1789075037417,
+    "ipAddress": "172.20.0.1",
+    "lastControllerRequestAt": 1789075044257,
+    "lastModifiedAt": 1789075043603,
+    "lastModifiedBy": "admin",
+    "name": "qawk-probe",
+    "pollStatus": {
+      "lastRequestAt": 1789075044257,
+      "nextExpectedRequestAt": 1789075074257,
+      "overdue": false
+    },
+    "requestAttributes": true,
+    "securityToken": "24b2b31130c60d711ee427183e5ee752",
+    "updateStatus": "pending"
+  }
+}

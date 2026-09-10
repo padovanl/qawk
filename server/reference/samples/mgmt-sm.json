@@ -1,0 +1,44 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/softwaremodules/1",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0a32de17729133712f0dd2b1f7adfbeb1\"",
+    "content-type": "application/hal+json",
+    "content-length": "571"
+  },
+  "body": {
+    "_links": {
+      "self": {
+        "href": "http://localhost:8080/rest/v1/softwaremodules/1"
+      },
+      "artifacts": {
+        "href": "http://localhost:8080/rest/v1/softwaremodules/1/artifacts"
+      },
+      "type": {
+        "href": "http://localhost:8080/rest/v1/softwaremoduletypes/1"
+      },
+      "metadata": {
+        "href": "http://localhost:8080/rest/v1/softwaremodules/1/metadata"
+      }
+    },
+    "complete": true,
+    "createdAt": 1789062199496,
+    "createdBy": "admin",
+    "deleted": false,
+    "encrypted": false,
+    "id": 1,
+    "lastModifiedAt": 1789063709339,
+    "lastModifiedBy": "admin",
+    "locked": true,
+    "name": "neo-intel-os",
+    "type": "os",
+    "typeName": "OS",
+    "vendor": "QubicaAMF",
+    "version": "25.7.2"
+  }
+}

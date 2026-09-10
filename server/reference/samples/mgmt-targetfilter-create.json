@@ -1,0 +1,37 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/rest/v1/targetfilters",
+    "body": {
+      "name": "qawk-probe-filter",
+      "query": "controllerId==qawk-probe"
+    },
+    "ddi": false
+  },
+  "status": 201,
+  "headers": {
+    "content-type": "application/hal+json",
+    "content-length": "445"
+  },
+  "body": {
+    "_links": {
+      "self": {
+        "href": "http://localhost:8080/rest/v1/targetfilters/1"
+      },
+      "autoAssignDS": {
+        "href": "http://localhost:8080/rest/v1/targetfilters/1/autoAssignDS"
+      }
+    },
+    "autoAssignActionType": null,
+    "autoAssignDistributionSet": null,
+    "autoAssignWeight": null,
+    "confirmationRequired": null,
+    "createdAt": 1789075037489,
+    "createdBy": "admin",
+    "id": 1,
+    "lastModifiedAt": 1789075037489,
+    "lastModifiedBy": "admin",
+    "name": "qawk-probe-filter",
+    "query": "controllerId==qawk-probe"
+  }
+}

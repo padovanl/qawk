@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/targets/0123456789abcdef0123456789abcdef/autoConfirm",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0639cffb56a94634308e54618c6aedd0f\"",
+    "content-type": "application/hal+json",
+    "content-length": "141"
+  },
+  "body": {
+    "active": false,
+    "_links": {
+      "activate": {
+        "href": "http://localhost:8080/rest/v1/targets/0123456789abcdef0123456789abcdef/autoConfirm/activate"
+      }
+    }
+  }
+}

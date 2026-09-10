@@ -1,0 +1,35 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/rest/v1/softwaremodules/1/artifacts",
+    "body": null,
+    "ddi": false
+  },
+  "status": 200,
+  "headers": {
+    "etag": "\"0e06768b5b3b4e4efaf0c168440bf2ff5\"",
+    "content-type": "application/hal+json",
+    "content-length": "450"
+  },
+  "body": [
+    {
+      "_links": {
+        "self": {
+          "href": "http://localhost:8080/rest/v1/softwaremodules/1/artifacts/1"
+        }
+      },
+      "createdAt": 1789062279027,
+      "createdBy": "admin",
+      "hashes": {
+        "sha1": "947fc3007294a67ef81e4f18812122a55b72bb2a",
+        "md5": "4e90a88b6283eeee9871a2c85b004342",
+        "sha256": "18ecea4cb8d0fb275ada8e6adb1682aaccb5b4afbb6df8bc0f05c7099b5b03a2"
+      },
+      "id": 1,
+      "lastModifiedAt": 1789062279027,
+      "lastModifiedBy": "admin",
+      "providedFilename": "qamf-neo-intel-swu-neo-intel.swu",
+      "size": 622446592
+    }
+  ]
+}
