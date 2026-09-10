@@ -50,6 +50,7 @@ for (const f of await sources(JS)) {
     const raw = m[2] ?? m[3] ?? m[4] ?? '';
     if (!raw.startsWith('/')) continue;             // a variable, checked below
     if (raw.startsWith('/v3/')) continue;           // the API description itself
+    if (raw.startsWith('/qawk/')) continue;         // Qawk's own additions, not hawkBit's API
     // the ${...} go first: a ternary inside one contains a '?', which would
     // otherwise be mistaken for the start of the query string
     let path = raw.replace(/\$\{[^}]*\}/g, '{}').split('?')[0];

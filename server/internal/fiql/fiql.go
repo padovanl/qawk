@@ -403,13 +403,22 @@ func build(f Field, op string, vals []string, bind Binder) (string, *httpx.Error
 func Compare(col string, kind Kind, enum []string, op string, vals []string, bind Binder) (string, *httpx.Error) {
 	switch kind {
 	case Number:
-		nums := make([]string, len(vals))
-		for i, v := range vals {
+		// A value that is not a number matches nothing, it is not an error:
+		// that is what hawkBit does with id==abc, and what the console's
+		// filter editor was calibrated against.
+		nums := make([]string, 0, len(vals))
+		for _, v := range vals {
 			n, err := strconv.ParseInt(v, 10, 64)
 			if err != nil {
-				return "", httpx.RSQLSyntax(v + " is not a number")
+				continue
 			}
-			nums[i] = bind(n)
+			nums = append(nums, bind(n))
+		}
+		if len(nums) == 0 {
+			if op == "!=" || op == "=out=" {
+				return "TRUE", nil
+			}
+			return "FALSE", nil
 		}
 		return scalar(col, op, nums), nil
 	case Bool:

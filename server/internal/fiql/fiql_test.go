@@ -76,7 +76,6 @@ func TestRefused(t *testing.T) {
 		"updatestatus==nonsense": "rsqlInvalidField", // a value outside the enum
 		"attribute.==x":          "rsqlInvalidField", // a map field with no key
 		"valid==maybe":           "rsqlInvalidField",
-		"id==abc":                "rsqlParamSyntax",
 		"name==":                 "rsqlParamSyntax",
 		"name":                   "rsqlParamSyntax",
 		"name==a;":               "rsqlParamSyntax",
@@ -107,6 +106,16 @@ func TestNothingTypedReachesSQL(t *testing.T) {
 		}
 		if strings.Contains(sql, "DROP") {
 			t.Errorf("%q leaked into SQL: %s", q, sql)
+		}
+	}
+}
+
+// hawkBit accepts a non-number on a number field and finds nothing.
+func TestNotANumberMatchesNothing(t *testing.T) {
+	for q, want := range map[string]string{"id==abc": "FALSE", "id!=abc": "TRUE", "id=in=(abc,3)": "t.id IN ($1)"} {
+		sql, _, code := compile(t, q)
+		if code != "" || sql != want {
+			t.Errorf("%q: got %q (%s), want %q", q, sql, code, want)
 		}
 	}
 }
