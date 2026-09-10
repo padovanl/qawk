@@ -593,13 +593,16 @@ func (a *API) download(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, err)
 		return
 	}
-	// Only the start of a download is worth a line in the history.
+	var actionID int64
+	rng := r.Header.Get("Range")
+	ranged := rng != ""
 	if r.Method == http.MethodGet {
-		rng := r.Header.Get("Range")
-		if rng == "" || strings.HasPrefix(rng, "bytes=0-") {
-			if err := a.svc.Downloading(context.WithoutCancel(r.Context()), t, smID, r.URL.Path); err != nil {
-				a.log.Warn("recording a download", "target", t.ControllerID, "err", err)
-			}
+		fromStart := rng == "" || strings.HasPrefix(rng, "bytes=0-")
+		var err error
+		actionID, err = a.svc.BeginDownload(context.WithoutCancel(r.Context()), t, smID, art, r.URL.Path,
+			ranged, fromStart, !md5sum)
+		if err != nil {
+			a.log.Warn("recording a download", "target", t.ControllerID, "err", err)
 		}
 	}
 	w.Header().Set("Content-Disposition", "attachment;filename="+name)
@@ -623,5 +626,39 @@ func (a *API) download(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("ETag", `"`+art.SHA1+`"`)
 	w.Header().Set("Accept-Ranges", "bytes")
-	http.ServeContent(w, r, "", time.UnixMilli(art.CreatedAt), f)
+	if actionID == 0 {
+		http.ServeContent(w, r, "", time.UnixMilli(art.CreatedAt), f)
+		return
+	}
+	// Count what leaves, so the console can say how far the device has got
+	// -- and, once the last byte of a whole file is out, that it is
+	// installing. Saved every two seconds, and at the end.
+	ctx := context.WithoutCancel(r.Context())
+	pw := &progressWriter{ResponseWriter: w, last: time.Now(), flush: func(n int64, done bool) {
+		if err := a.svc.DownloadProgress(ctx, actionID, art.ID, n, done); err != nil {
+			a.log.Warn("download progress", "target", t.ControllerID, "err", err)
+		}
+	}}
+	http.ServeContent(pw, r, "", time.UnixMilli(art.CreatedAt), f)
+	pw.flush(pw.n-pw.flushed, !ranged && pw.n == art.Size)
+}
+
+// progressWriter counts the bytes written through it and reports them, at
+// most every two seconds.
+type progressWriter struct {
+	http.ResponseWriter
+	n, flushed int64
+	last       time.Time
+	flush      func(n int64, done bool)
+}
+
+func (p *progressWriter) Write(b []byte) (int, error) {
+	k, err := p.ResponseWriter.Write(b)
+	p.n += int64(k)
+	if time.Since(p.last) >= 2*time.Second {
+		p.flush(p.n-p.flushed, false)
+		p.flushed = p.n
+		p.last = time.Now()
+	}
+	return k, err
 }

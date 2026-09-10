@@ -1,4 +1,5 @@
 import { start } from './auth.js';
+import { serverInfo } from './server.js';
 import { enc, get, limited } from './api.js';
 import { h, icon } from './dom.js';
 import { download } from './util.js';
@@ -106,8 +107,12 @@ function actionPill(a, targetId) {
    in the first place. */
 const PHASE_WORDS = [
   ['assigned',    'live', 'created; the device has not polled yet'],
-  ['downloading', 'live', 'fetching the package AND writing it — SWUpdate reports '
-                        + 'nothing in between, so the two cannot be separated'],
+  ['downloading', 'live', 'fetching the package. With Qawk the percentage is the bytes it has '
+                        + 'sent -- a few MB ahead of the device, for the network\'s buffers. With '
+                        + 'hawkBit, fetching and writing cannot be told apart: SWUpdate reports '
+                        + 'nothing in between'],
+  ['installing',  'live', 'Qawk only: every byte of the part has been delivered and the device '
+                        + 'has not reported yet -- it is writing and verifying it'],
 
   ['installed',   'ok',   'an application update is done: it needs no reboot and the '
                         + 'action closes itself within a moment'],
@@ -246,8 +251,56 @@ async function phaseOf(targetId) {
       limited(() => get(`/targets/${enc(targetId)}/actions/${a.id}/status?limit=40&sort=id:DESC`)),
       limited(() => get(`/targets/${enc(targetId)}/assignedDS`)).catch(() => null),
     ]);
-    return phaseFrom(st.content || [], ds && ds.type);
+    const ph = phaseFrom(st.content || [], ds && ds.type);
+    const dl = await downloads();
+    return refine(ph, dl && dl.get(a.id));
   } catch (_) { return null; }
+}
+
+/* ---- Qawk: how far a download really is ---------------------------------
+ *
+ * hawkBit only knows what the device says, and SWUpdate says nothing between
+ * asking for a file and having written it. Qawk serves the bytes itself and
+ * counts them (/qawk/v1/downloads), so the phase can say how much has gone
+ * and -- once the last byte is out and the device has not reported -- that it
+ * is installing. One request for every row, at most every two seconds.
+ */
+let DL = { at: 0, byAction: null, pending: null };
+
+async function downloads() {
+  const info = serverInfo();
+  if (!info || !(info.features || []).includes('download-progress')) return null;
+  if (DL.byAction && Date.now() - DL.at < 2000) return DL.byAction;
+  if (!DL.pending) {
+    DL.pending = get('/qawk/v1/downloads', { abs: true }).then(r => {
+      const m = new Map();
+      for (const d of r.content || []) {
+        if (!m.has(d.actionId)) m.set(d.actionId, []);
+        m.get(d.actionId).push(d);
+      }
+      DL = { at: Date.now(), byAction: m, pending: null };
+      return m;
+    }).catch(() => { DL.pending = null; return null; });
+  }
+  return DL.pending;
+}
+
+const mb = n => (n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0) + ' MB';
+
+function refine(ph, dls) {
+  if (!ph || !dls || !dls.length || !/^downloading/.test(ph.label)) return ph;
+  // the part under way is the one that started last
+  const d = dls.slice().sort((a, b) => b.startedAt - a.startedAt)[0];
+  const part = ph.label.slice('downloading'.length);   // " (part 2)" or ""
+  if (d.completedAt)
+    return { label: 'installing' + part, cls: 'live',
+             why: `all ${mb(d.size)} delivered at ${new Date(d.completedAt).toLocaleTimeString()}; `
+                + 'the device is writing it and has not reported yet' };
+  return Object.assign({}, ph, {
+    detail: d.percent != null ? `${d.percent}%` : mb(d.bytes),
+    why: (d.ranged ? `a delta: ${mb(d.bytes)} of the parts it needs so far`
+                   : `${mb(d.bytes)} of ${mb(d.size)} delivered`)
+       + ' -- counted by Qawk as it sends them' });
 }
 
 /* Draws a phase into a pill. Separate from the asking so a caller that already
@@ -263,8 +316,10 @@ function paintPhase(p, ph) {
   }
   p.className = 'pill ' + ph.cls;
   p.replaceChildren(ph.label);
+  if (ph.detail) p.append(h('span.faint', { style: 'margin-left:5px' }, '\u00b7 ' + ph.detail));
   p.title = (ph.why ? ph.why + '. ' : '')
-          + 'hawkBit calls this "pending"; the phase is read from what the device last reported';
+          + 'the server calls this "pending"; the phase is read from what the device last reported'
+          + ' and, with Qawk, from what it has been sent';
   return p;
 }
 

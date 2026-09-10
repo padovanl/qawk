@@ -246,6 +246,7 @@ directly.
 | Feature | Status |
 |---|---|
 | `GET /qawk/v1/info` — what the server is and what it offers | done |
+| Download progress and an "installing" phase: Qawk counts the bytes it serves (`/qawk/v1/downloads`); the console shows "downloading · 63%", then "installing" from the last byte until the device reports. The percentage is bytes handed to the network, so it runs a few MB ahead of the device; a delta, read in ranges, shows megabytes instead | done |
 | A deleted name and version can be uploaded again | done |
 | Background jobs on one instance among many, elected through PostgreSQL | done |
 | Target groups (hawkBit 1.1's `/targetgroups`), stored as a column, filterable as `group==` | done |

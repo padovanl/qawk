@@ -6,7 +6,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -18,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"qawk/internal/api/ddi"
+	"qawk/internal/api/qawkapi"
 	"qawk/internal/api/mgmt"
 	"qawk/internal/artifact"
 	"qawk/internal/config"
@@ -61,20 +61,8 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 	r.Use(middleware.Recoverer)
 	r.Use(requestLog(log))
 
-	// Qawk's own surface: what this server is and what it offers beyond
-	// hawkBit. The console asks this first; hawkBit answers 404, and the
-	// console then behaves exactly as it does with hawkBit.
-	r.Get("/qawk/v1/info", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"name":     "Qawk",
-			"version":  Version,
-			"api":      "v1",
-			"hawkbit":  "1.1.0",
-			"tenant":   cfg.Tenant,
-			"features": []string{},
-		})
-	})
+	qawkapi.New(svc, cfg, Version).Routes(r)
+
 	// /live says the process is up; /health that it can serve (the database
 	// answers). Kubernetes restarts on the first and routes on the second: a
 	// database outage takes every instance out of the load balancer, it does

@@ -290,3 +290,22 @@ type RolloutGroup struct {
 	TotalTargets         int64
 	Audit
 }
+
+// ------------------------------------------------------------- downloads
+
+// Download is how far a device has got with one artifact of an action (a
+// Qawk addition: hawkBit does not know).
+type Download struct {
+	ActionID     int64
+	ControllerID string
+	ArtifactID   int64
+	Filename     string
+	Size         int64
+	Bytes        int64
+	// Ranged: fetched in ranges, as a delta is. Only the needed parts are
+	// read, so the bytes say how much came, not how much is left.
+	Ranged      bool
+	StartedAt   int64
+	UpdatedAt   int64
+	CompletedAt *int64
+}

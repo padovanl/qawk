@@ -203,12 +203,21 @@ func handling(a model.Action, now int64) (download, update string) {
 	return "forced", "forced"
 }
 
-// Downloading records a device fetching an artifact of an open action. Only
-// the start of a download is recorded: a delta update reads one file in
-// hundreds of ranges, and hawkBit writing an entry for each one is what
-// forced our start script to lift its limit on status entries.
-func (s *Service) Downloading(ctx context.Context, t model.Target, smID int64, path string) error {
-	return s.st.Tx(ctx, t.ControllerID, func(tx pgx.Tx, now int64) error {
+// BeginDownload records a device starting to fetch an artifact of an open
+// action, and returns that action (0 if the artifact belongs to none).
+//
+// Only the start of a download is written into the history, as hawkBit's
+// "Update Server: Target downloads ..." line: a delta update reads one file in
+// hundreds of ranges, and hawkBit writing an entry for each is what forced our
+// start script to lift its limit on status entries.
+//
+// With track, the download's progress is counted too (a Qawk addition): from
+// the start for a whole file, added to for a range. The .MD5SUM is not
+// tracked -- fetched after the file, it would reset the count.
+func (s *Service) BeginDownload(ctx context.Context, t model.Target, smID int64, art model.Artifact, path string,
+	ranged, fromStart, track bool) (int64, error) {
+	var actionID int64
+	err := s.st.Tx(ctx, t.ControllerID, func(tx pgx.Tx, now int64) error {
 		actives, err := s.st.ActiveActions(ctx, tx, t.ID)
 		if err != nil {
 			return err
@@ -222,16 +231,31 @@ func (s *Service) Downloading(ctx context.Context, t model.Target, smID int64, p
 				if m.ID != smID {
 					continue
 				}
-				if err := s.st.SetAction(ctx, tx, a.ID, model.StatusDownload, true, nil, t.ControllerID, now); err != nil {
-					return err
+				actionID = a.ID
+				if fromStart {
+					if err := s.st.SetAction(ctx, tx, a.ID, model.StatusDownload, true, nil, t.ControllerID, now); err != nil {
+						return err
+					}
+					if _, err := s.st.AddStatus(ctx, tx, model.ActionStatus{ActionID: a.ID, Status: model.StatusDownload,
+						OccurredAt: now, ReportedAt: now, Messages: []string{MsgDownloads + path}}); err != nil {
+						return err
+					}
 				}
-				_, err := s.st.AddStatus(ctx, tx, model.ActionStatus{ActionID: a.ID, Status: model.StatusDownload,
-					OccurredAt: now, ReportedAt: now, Messages: []string{MsgDownloads + path}})
-				return err
+				if !track {
+					return nil
+				}
+				return s.st.StartDownload(ctx, tx, a.ID, art.ID, art.Size, ranged, fromStart, now)
 			}
 		}
 		return nil
 	})
+	return actionID, err
+}
+
+// DownloadProgress adds bytes served to a download, and marks it complete:
+// from that moment until the device reports, it is installing.
+func (s *Service) DownloadProgress(ctx context.Context, actionID, artifactID, n int64, complete bool) error {
+	return s.st.Downloaded(ctx, s.st.DB(), actionID, artifactID, n, complete, httpx.Now())
 }
 
 // ModuleOfTarget checks that the module belongs to a set the target has been
