@@ -24,6 +24,7 @@ import (
 	"qawk/internal/openapi"
 	"qawk/internal/service"
 	"qawk/internal/store"
+	"qawk/internal/users"
 )
 
 // Version is set at build time (-ldflags "-X qawk/internal/server.Version=...").
@@ -55,6 +56,11 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 		return nil, err
 	}
 	svc := service.New(st, art, log)
+	dir := users.New(st, cfg.AdminUser, cfg.AdminPassword, cfg.AuditDays, log)
+	if err := dir.Seed(ctx); err != nil {
+		return nil, err
+	}
+	svc.SetDirectory(dir)
 
 	r := chi.NewRouter()
 	r.Use(keepSemicolons)

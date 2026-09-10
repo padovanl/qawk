@@ -16,12 +16,14 @@ import (
 	"qawk/internal/artifact"
 	"qawk/internal/httpx"
 	"qawk/internal/store"
+	"qawk/internal/users"
 )
 
 type Service struct {
 	st  *store.Store
 	art artifact.Store
 	log *slog.Logger
+	dir *users.Directory
 }
 
 func New(st *store.Store, art artifact.Store, log *slog.Logger) *Service {
@@ -30,6 +32,11 @@ func New(st *store.Store, art artifact.Store, log *slog.Logger) *Service {
 
 func (s *Service) Store() *store.Store        { return s.st }
 func (s *Service) Artifacts() artifact.Store { return s.art }
+
+// SetDirectory gives the service who may sign in; the APIs authenticate
+// through it.
+func (s *Service) SetDirectory(d *users.Directory) { s.dir = d }
+func (s *Service) Directory() *users.Directory   { return s.dir }
 
 // ------------------------------------------------------------------ errors
 //

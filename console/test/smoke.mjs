@@ -34,7 +34,7 @@ try {
 /* --- 2. the view registry and the menu agree --------------------------- */
 const { VIEWS } = await import(JS + 'router.js');
 const ids = Object.keys(VIEWS).sort();
-ok('le viste si registrano da sole', ids.length === 10, ids.join(' '));
+ok('le viste si registrano da sole', ids.length === 13, ids.join(' '));
 const routerSrc = await readFile(JS + 'router.js', 'utf8');
 const navBlock = routerSrc.slice(routerSrc.indexOf('const NAV'), routerSrc.indexOf('];', routerSrc.indexOf('const NAV')));
 const navIds = [...navBlock.matchAll(/id: '([^']+)'/g)].map(m => m[1]);

@@ -86,8 +86,9 @@ Everything is an environment variable; nothing is read after startup.
 | `QAWK_DB_MAX_CONNS` | `20` | this instance's connection pool; across all instances keep it under PostgreSQL's `max_connections` |
 | `QAWK_ARTIFACT_DIR` | `/var/lib/qawk/artifacts` | where artifact bytes are stored |
 | `QAWK_TENANT` | `DEFAULT` | the tenant this instance serves (the `{tenant}` of the device URL) |
-| `QAWK_ADMIN_USER` | `admin` | Management API user |
+| `QAWK_ADMIN_USER` | `admin` | the administrator: every permission, never stored, always works (other users live in the database) |
 | `QAWK_ADMIN_PASSWORD` | `admin` | its password; must not be empty |
+| `QAWK_AUDIT_DAYS` | `180` | how long the audit log is kept; `0` keeps it for ever |
 | `QAWK_PUBLIC_URL` | *(empty)* | base of every link Qawk hands out; empty means "the address the client used", which is right unless a proxy rewrites it |
 | `QAWK_POLLING_TIME` | `00:05:00` | device polling interval until one is set through the API |
 | `QAWK_LOG_LEVEL` | `info` | `debug` logs every request |
@@ -251,9 +252,9 @@ directly.
 | Background jobs on one instance among many, elected through PostgreSQL | done |
 | Target groups (hawkBit 1.1's `/targetgroups`), stored as a column, filterable as `group==` | done |
 | Fleets — beta, production, a customer site: devices join by hand or by a rule, a fleet's release reaches every member, one fleet is promoted from another (see below) | done |
-| Users and roles in the database, with hawkBit's permissions — hawkBit only has users in its configuration | planned |
-| Personal API tokens, so scripts do not hold a password | planned |
-| An audit log: who did what, when | planned |
+| Users and roles in the database, with hawkBit's permissions — hawkBit only has users in its configuration (see below) | done |
+| Personal API tokens, so scripts do not hold a password | done |
+| An audit log: who changed what, when, from where, and every refused sign-in | done |
 | Live events for the console (server-sent events), instead of polling | planned |
 | Prometheus metrics | planned |
 | Artifacts in an S3-compatible object store | planned |
@@ -298,6 +299,60 @@ it — it still speaks plain DDI, and the image is unchanged.
 The console shows a **Fleets** page when the server lists `fleets` in
 `/qawk/v1/info`: each fleet with its rule, release and a bar of how many
 members run it, the members in a side panel, and edit / promote / delete.
+
+### Users, roles, API tokens and the audit log
+
+hawkBit keeps its users in its configuration file. Qawk keeps them in the
+database, managed from the console and shared by every instance.
+
+**Who can sign in**, checked in this order:
+
+1. The administrator from the environment (`QAWK_ADMIN_USER` /
+   `QAWK_ADMIN_PASSWORD`), with every permission. It is never stored and
+   always works: a new server can be set up, and a lost password is fixed by
+   a restart.
+2. An API token, `qawk_` followed by 48 hex digits, sent as
+   `Authorization: Bearer <token>` or as the password of basic authentication
+   (`curl -u alice:qawk_…`, for tools that only speak that). A token acts with
+   its owner's permissions *at the time of use*: take a role away from
+   someone and their tokens lose it too. Only the token's SHA-256 is stored;
+   the token is shown once, when it is made. Expiry is optional.
+3. A user stored in the database, with a password (PBKDF2-SHA256, 600,000
+   iterations) and any number of roles. A disabled user cannot sign in.
+
+**Roles** are named sets of hawkBit's own permissions, so every route keeps
+the permission hawkBit gives it. Three are built in and rewritten at every
+start: `admin` (everything), `operator` (targets, fleets, software, rollouts;
+deletes nothing, configures nothing, approves nothing), `viewer` (reads
+everything). Others are made from the console with any set of permissions.
+Deleting a role takes it away from whoever had it. `SYSTEM_ADMIN` is what
+manages users and roles and reads the audit log.
+
+Checking a password costs about half a second on purpose, and the console
+sends it with every request, so a successful check is remembered for thirty
+seconds. Any change to a user, role or token forgets them all at once on the
+instance that made it; other instances catch up within the thirty seconds.
+
+**The audit log** records every request that changes something (method,
+path, result, user, how they signed in, their address — the first
+`X-Forwarded-For` behind a proxy) and every refused sign-in. Reads are not
+recorded: a console refreshing every two seconds would bury the rest. It is
+kept for `QAWK_AUDIT_DAYS` (180 by default), and is filtered like any
+hawkBit list: `?q=user==alice;status=ge=400`.
+
+| Route | Who |
+|---|---|
+| `GET /qawk/v1/me` — who you are, your roles and permissions | anyone signed in |
+| `PUT /qawk/v1/me/password` — `{current, password}` | a database user |
+| `GET /qawk/v1/permissions` — every permission a role can hold | anyone signed in |
+| `GET` / `POST /qawk/v1/tokens`, `DELETE /qawk/v1/tokens/{id}` — your own tokens (`?all=true` and anyone's revocation with `SYSTEM_ADMIN`) | anyone signed in |
+| `GET` / `POST /qawk/v1/users`, `GET` / `PUT` / `DELETE /qawk/v1/users/{id}`, `PUT /qawk/v1/users/{id}/password` | `SYSTEM_ADMIN` |
+| `GET` / `POST /qawk/v1/roles`, `PUT` / `DELETE /qawk/v1/roles/{name}` | `SYSTEM_ADMIN` |
+| `GET /qawk/v1/audit` — paged, newest first, `q` on `user`, `via`, `method`, `path`, `status`, `address`, `at` | `SYSTEM_ADMIN` |
+
+In the console: **Users and roles** and **Audit log** appear for those with
+`SYSTEM_ADMIN`; **My account** (password, tokens) for everyone. The header
+shows who you are signed in as, with your roles.
 
 ---
 

@@ -3,6 +3,8 @@
 import './notices.js';
 import './idle.js';
 import './views/about.js';
+import './views/account.js';
+import './views/audit.js';
 import './views/config.js';
 import './views/dashboard.js';
 import './views/deploy.js';
@@ -12,6 +14,7 @@ import './views/fleets.js';
 import './views/rollouts.js';
 import './views/sm.js';
 import './views/tags.js';
+import './views/users.js';
 import './views/target-detail.js';
 import './views/targets.js';
 

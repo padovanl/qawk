@@ -37,7 +37,7 @@ func New(svc *service.Service, cfg config.Config, log *slog.Logger) *API {
 // needs; auth.Require enforces it (see auth for who has which).
 func (a *API) Routes(r chi.Router) {
 	r.Route("/rest/v1", func(r chi.Router) {
-		r.Use(auth.Basic(a.cfg.AdminUser, a.cfg.AdminPassword))
+		r.Use(a.svc.Directory().Middleware)
 		a.targetRoutes(r)
 		a.actionRoutes(r)
 		a.softwareRoutes(r)

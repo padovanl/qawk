@@ -63,6 +63,9 @@ func (s *Service) lead(ctx context.Context, alive func(context.Context) bool) {
 				s.log.Warn("fleets", "err", err)
 			}
 		}
+		if n%720 == 1 && s.dir != nil { // hourly
+			s.dir.PruneAudit(ctx)
+		}
 	}
 }
 

@@ -51,6 +51,9 @@ type Config struct {
 	// "pollingTime" tenant configuration.
 	DefaultPollingTime string
 
+	// AuditDays is how long the audit log is kept; 0 keeps it for ever.
+	AuditDays int
+
 	LogLevel string
 }
 
@@ -86,5 +89,10 @@ func Load() (Config, error) {
 		return c, fmt.Errorf("QAWK_DB_WAIT must be a duration such as 90s or 5m")
 	}
 	c.DBWait = w
+	d, err := strconv.Atoi(env("QAWK_AUDIT_DAYS", "180"))
+	if err != nil || d < 0 {
+		return c, fmt.Errorf("QAWK_AUDIT_DAYS must be a number of days, 0 for for ever")
+	}
+	c.AuditDays = d
 	return c, nil
 }

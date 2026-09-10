@@ -17,6 +17,10 @@ async function whoIsServer() {
   try {
     const i = await get('/qawk/v1/info', { abs: true });
     INFO = { name: i.name || 'Qawk', version: i.version || '', qawk: true, features: i.features || [] };
+    // who am I, with what permissions: the menu hides what would be a 403
+    if (INFO.features.includes('users')) {
+      try { INFO.me = await get('/qawk/v1/me', { abs: true }); } catch (_) {}
+    }
   } catch (_) {
     INFO = { name: 'hawkBit', version: '', qawk: false, features: [] };
   }
@@ -25,7 +29,12 @@ async function whoIsServer() {
   if (v) v.textContent = INFO.version ? `console · ${INFO.version}` : 'console';
   if (b) b.title = `talking to ${INFO.name}${INFO.version ? ' ' + INFO.version : ''} at ${location.host}`;
   const c = $('#conn');
-  if (c && c.textContent.endsWith('@ hawkBit')) c.textContent = c.textContent.replace(/@ hawkBit$/, '@ ' + INFO.name);
+  if (c && INFO.me) {
+    c.textContent = `${INFO.me.username} (${INFO.me.roles.join(', ') || 'no role'}) @ ${INFO.name}`;
+    c.title = `${INFO.me.permissions.length} permissions, signed in with ${INFO.me.via}`;
+  } else if (c && c.textContent.endsWith('@ hawkBit')) {
+    c.textContent = c.textContent.replace(/@ hawkBit$/, '@ ' + INFO.name);
+  }
   return INFO;
 }
 

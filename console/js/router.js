@@ -21,6 +21,9 @@ const NAV = [
   { id: 'sm', label: 'Modules', count: 'sm', ico: 'module' },
   { sep: 'Server' },
   { id: 'cfg', label: 'Configuration', ico: 'cfg' },
+  { id: 'users', label: 'Users and roles', ico: 'user', feature: 'users', perm: 'SYSTEM_ADMIN' },
+  { id: 'audit', label: 'Audit log', ico: 'eye', feature: 'audit', perm: 'SYSTEM_ADMIN' },
+  { id: 'account', label: 'My account', ico: 'lock', feature: 'tokens' },
   { id: 'about', label: 'About', ico: 'info' },
 ];
 
@@ -49,7 +52,12 @@ async function refreshCounts() {
 
 // An entry with a feature is a page of Qawk's own: shown only once the server
 // has said it has that feature (server.js asks, then draws the menu again).
-const offered = n => !n.feature || (serverInfo()?.features || []).includes(n.feature);
+// One with a permission only to someone who has it: the page would be a 403.
+const offered = n => {
+  const i = serverInfo();
+  if (n.feature && !(i?.features || []).includes(n.feature)) return false;
+  return !n.perm || (i?.me?.permissions || []).includes(n.perm);
+};
 
 function drawNav() {
   $('#nav').replaceChildren(...NAV.filter(offered).map(n => n.sep
