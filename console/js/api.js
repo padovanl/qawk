@@ -58,6 +58,14 @@ const post = (p, json) => api(p, { method: 'POST', json });
 const put = (p, json) => api(p, { method: 'PUT', json });
 const del = p => api(p, { method: 'DELETE' });
 const fiql = s => encodeURIComponent(s);
+// Qawk's own API, /qawk/v1: what hawkBit has no equivalent for (fleets, ...).
+const qawk = {
+  get: p => api('/qawk/v1' + p, { abs: true }),
+  post: (p, json) => api('/qawk/v1' + p, { abs: true, method: 'POST', json }),
+  put: (p, json) => api('/qawk/v1' + p, { abs: true, method: 'PUT', json }),
+  del: p => api('/qawk/v1' + p, { abs: true, method: 'DELETE' }),
+  delJSON: (p, json) => api('/qawk/v1' + p, { abs: true, method: 'DELETE', json }),
+};
 const enc = encodeURIComponent;
 
 async function upload(smId, file, onProgress) {
@@ -120,5 +128,5 @@ function noteConnection(ok) {
 }
 
 export {
-  S, busy, del, distributionSets, enc, fiql, get, limited, post, put, upload, waiting,
+  S, busy, del, distributionSets, enc, fiql, get, limited, post, put, qawk, upload, waiting,
 };

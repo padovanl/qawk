@@ -25,6 +25,7 @@ var targetFields = &fiql.Fields{
 		"name":          {Column: "t.name"},
 		"description":   {Column: "t.description"},
 		"group":         {Column: "t.target_group"},
+		"fleet":         {Column: "(SELECT fl.name FROM fleets fl WHERE fl.id = t.fleet_id)"},
 		"updatestatus":  {Column: "t.update_status", Kind: fiql.Enum, Values: []string{"registered", "pending", "in_sync", "error", "unknown"}},
 		"ipaddress":     {Column: "regexp_replace(coalesce(t.address, ''), '^[a-z]+://', '')"},
 		"address":       {Column: "t.address"},

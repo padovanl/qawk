@@ -30,6 +30,8 @@ const FIELDS = {
     { f: 'ipaddress', d: 'last address it polled from' },
     { f: 'attribute.', d: 'anything the device reports about itself', dyn: 'attr' },
     { f: 'tag', d: 'a target tag', dyn: 'tag' },
+    { f: 'fleet', d: 'the fleet it belongs to (Qawk)' },
+    { f: 'group', d: 'its target group (Qawk)' },
     { f: 'targettype.name', d: 'target type' },
     { f: 'targettype.key', d: 'target type key' },
     { f: 'assignedds.name', d: 'set it was told to install', dyn: 'ds' },

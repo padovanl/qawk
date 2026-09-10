@@ -39,6 +39,7 @@ const ICONS = {
   dash:    'M3 3h7v7H3zM14 3h7v4h-7zM14 11h7v10h-7zM3 14h7v7H3z',
   target:  'M3 5h18v11H3zM8 20h8M12 16v4',
   filter:  'M3 5h18l-7 8v6l-4 2v-8z',
+  fleet:   'M3 7h6v5H3zM15 7h6v5h-6zM9 15h6v5H9zM6 12v1.5h12V12M12 13.5V15',
   tag:     'M3 12V4h8l9 9-8 8-9-9zM7.5 7.5h.01',
   rollout: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17l9 5 9-5',
   package: 'M21 8l-9-5-9 5 9 5zM3 8v8l9 5 9-5V8M12 13v8',

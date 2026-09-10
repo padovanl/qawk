@@ -8,6 +8,7 @@ import './views/dashboard.js';
 import './views/deploy.js';
 import './views/ds.js';
 import './views/filters.js';
+import './views/fleets.js';
 import './views/rollouts.js';
 import './views/sm.js';
 import './views/tags.js';

@@ -21,7 +21,7 @@ async function start() {
   // Asked once, in the background: it costs one request and must never hold
   // up the first screen.
   checkCompat();
-  whoIsServer();
+  whoIsServer().then(drawNav);
 }
 
 /* Sign-in dressing: the field icons, a reveal for the password, and a theme

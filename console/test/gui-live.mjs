@@ -159,5 +159,23 @@ console.log(`  console: ${BASE}\n`);
      `${S.counts.sm} contro ${sm.total}`);
 }
 
+/* ---- fleets (Qawk): the page shows every fleet the server holds -------- */
+{
+  const { whoIsServer } = await mod('server.js');
+  const info = await whoIsServer();
+  if (info.features.includes('fleets')) {
+    const { qawk } = await mod('api.js');
+    const fl = (await qawk.get('/fleets')).content;
+    const { text } = await renderView('fleets');
+    await settle();
+    ok('la pagina flotte elenca ogni flotta', fl.every(f => text.includes(f.name)),
+       fl.map(f => f.name).join(' ') || 'nessuna flotta');
+    ok('e per ognuna quanti device sono sulla sua release',
+       fl.filter(f => f.distributionSet).every(f => text.includes(`${f.onRelease}/${f.members}`)));
+  } else {
+    console.log('  --   flotte: il server non le ha (hawkBit), salto');
+  }
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);

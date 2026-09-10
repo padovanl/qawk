@@ -250,6 +250,7 @@ directly.
 | A deleted name and version can be uploaded again | done |
 | Background jobs on one instance among many, elected through PostgreSQL | done |
 | Target groups (hawkBit 1.1's `/targetgroups`), stored as a column, filterable as `group==` | done |
+| Fleets — beta, production, a customer site: devices join by hand or by a rule, a fleet's release reaches every member, one fleet is promoted from another (see below) | done |
 | Users and roles in the database, with hawkBit's permissions — hawkBit only has users in its configuration | planned |
 | Personal API tokens, so scripts do not hold a password | planned |
 | An audit log: who did what, when | planned |
@@ -260,6 +261,43 @@ directly.
 Every route already declares the hawkBit permission it needs (`READ_TARGET`,
 `UPDATE_REPOSITORY`, `HANDLE_ROLLOUT`, ...); today the one administrator has
 all of them, and users with subsets will need no route to change.
+
+### Fleets
+
+A fleet is a set of devices that should run the same release. A device is in
+at most one fleet (`targets.fleet_id`); the device itself knows nothing about
+it — it still speaks plain DDI, and the image is unchanged.
+
+- **Membership.** By hand (`PUT /qawk/v1/fleets/{id}/targets` with a list of
+  controller ids; `DELETE` with the same body takes them out), or by the
+  fleet's **rule**: a target query (`attribute.device_type==besx2`,
+  `controllerId==lane-*`, ...). Every ten seconds the instance running the
+  background jobs puts the devices that match a rule *and are in no fleet*
+  into that fleet, so a device registering for the first time lands in the
+  right one from what it reports. A device already in a fleet is never moved
+  by a rule; move it by hand.
+- **Release.** A fleet may carry a distribution set and a mode (`forced` or
+  `soft`). Every member that has not been assigned it and has never had an
+  action for it gets it — the same rule as auto-assignment, so a device where
+  it failed is not sent it again every ten seconds. `distributionSetId: 0`
+  removes the release and leaves the members alone.
+- **Promotion.** `POST /qawk/v1/fleets/{prod}/promote {"from": <beta>}` gives
+  production the release beta has: the beta → production step in one call.
+- **Queries.** `fleet==beta` works in every target query, in the console's
+  editor too.
+
+| Route | Permission |
+|---|---|
+| `GET /qawk/v1/fleets` — every fleet, with `members`, `onRelease` (members running its release), `updating` (members with an open action), `failed` | `READ_TARGET` |
+| `POST /qawk/v1/fleets` — `{name, description, colour, rule, distributionSetId, actionType}` | `CREATE_TARGET` |
+| `GET` / `PUT` / `DELETE /qawk/v1/fleets/{id}` — deleting leaves the devices in no fleet | `READ_` / `UPDATE_` / `DELETE_TARGET` |
+| `GET /qawk/v1/fleets/{id}/targets` — members, with what each runs and should run | `READ_TARGET` |
+| `PUT` / `DELETE /qawk/v1/fleets/{id}/targets` — add / remove members | `UPDATE_TARGET` |
+| `POST /qawk/v1/fleets/{id}/promote` | `UPDATE_TARGET` |
+
+The console shows a **Fleets** page when the server lists `fleets` in
+`/qawk/v1/info`: each fleet with its rule, release and a bar of how many
+members run it, the members in a side panel, and edit / promote / delete.
 
 ---
 

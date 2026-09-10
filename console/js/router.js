@@ -1,6 +1,7 @@
 import { S, get } from './api.js';
 import { closeDrawer, drawer, modal } from './chrome.js';
 import { $, h, icon, skeleton } from './dom.js';
+import { serverInfo } from './server.js';
 import { compact } from './util.js';
 
 /* ---------------------------------------------------------------- views */
@@ -11,6 +12,7 @@ const NAV = [
   { id: 'dash', label: 'Dashboard', ico: 'dash' },
   { sep: 'Fleet' },
   { id: 'targets', label: 'Targets', count: 'targets', ico: 'target' },
+  { id: 'fleets', label: 'Fleets', ico: 'fleet', feature: 'fleets' },
   { id: 'filters', label: 'Filters', ico: 'filter' },
   { id: 'tags', label: 'Tags', ico: 'tag' },
   { id: 'ro', label: 'Rollouts', count: 'ro', ico: 'rollout' },
@@ -45,8 +47,12 @@ async function refreshCounts() {
   drawNav();
 }
 
+// An entry with a feature is a page of Qawk's own: shown only once the server
+// has said it has that feature (server.js asks, then draws the menu again).
+const offered = n => !n.feature || (serverInfo()?.features || []).includes(n.feature);
+
 function drawNav() {
-  $('#nav').replaceChildren(...NAV.map(n => n.sep
+  $('#nav').replaceChildren(...NAV.filter(offered).map(n => n.sep
     ? h('div.sep', h('span.lbl', n.sep))
     : h('button', { class: S.view === n.id ? 'on' : '', title: n.label, onclick: () => go(n.id) },
         icon(n.ico), h('span.lbl', n.label),
