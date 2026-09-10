@@ -1,6 +1,6 @@
 import { signOut } from './auth.js';
 import { serverGate, toast } from './chrome.js';
-import { noticeOn } from './notices.js';
+import { noticeOn } from './prefs.js';
 import { $, h } from './dom.js';
 import { render } from './router.js';
 

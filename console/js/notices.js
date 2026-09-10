@@ -1,5 +1,6 @@
 import { S, enc, get, waiting } from './api.js';
 import { toast } from './chrome.js';
+import { noticeOn } from './prefs.js';
 import { $, h, icon } from './dom.js';
 import { go } from './router.js';
 
@@ -23,29 +24,8 @@ import { go } from './router.js';
  *   3. a target registering for the first time. That is the factory-device
  *      moment: it is the arrival you are waiting for and there is nothing else
  *      on screen that announces it. */
-/* WHICH OF THESE ARE WANTED.
- *
- * All of them, until someone says otherwise: a notification you did not ask
- * for is easy to turn off, one you never saw is not. The choice is per browser
- * -- two people watching the same server want different things from it -- and
- * lives in Configuration.
- */
-const NOTICES = [
-  ['deploy',     'Deployments',      'when one starts, and how it ended'],
-  ['catalogue',  'Modules and sets', 'uploaded, created or deleted, by anyone'],
-  ['rollout',    'Rollouts',         'created, deleted, and every status change'],
-  ['devices',    'Devices',          'arriving and leaving the fleet'],
-  ['watched',    'What you deployed', 'the result of a deployment started here'],
-  ['connection', 'The server',       'when it comes back after being unreachable'],
-];
-const noticeOn = id => {
-  try { return localStorage.getItem('hb-notice-' + id) !== '0'; } catch (_) { return true; }
-};
-const setNotice = (id, on) => {
-  try { localStorage.setItem('hb-notice-' + id, on ? '1' : '0'); } catch (_) {}
-};
-/* Every toast raised by a watcher goes through here, so turning one off turns
-   off all of it and not merely most of it. */
+/* Every toast raised by a watcher goes through here, so turning a kind off
+   turns off all of it and not merely most of it. */
 const notify = (kind, ...args) => { if (noticeOn(kind)) toast(...args); };
 
 S.watched = new Map();      // actionId -> {target, label}
@@ -258,5 +238,5 @@ buildTick();
 setInterval(buildTick, 15000);
 
 export {
-  NOTICES, noticeOn, setNotice, noteTargets, watchAction,
+  noteTargets, watchAction,
 };

@@ -331,7 +331,7 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
 
 /* --- 14. notifications can be turned off, and are all on by default ---- */
 {
-  const { NOTICES, noticeOn, setNotice } = await import(JS + 'notices.js');
+  const { NOTICES, noticeOn, setNotice } = await import(JS + 'prefs.js');
   ok('ci sono sei categorie', NOTICES.length === 6, String(NOTICES.length));
   ok('tutte attive senza aver scelto nulla', NOTICES.every(([id]) => noticeOn(id)));
   setNotice('deploy', false);

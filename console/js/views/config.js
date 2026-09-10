@@ -3,7 +3,7 @@ import { fail, toast } from '../chrome.js';
 import { $, h, icon } from '../dom.js';
 import { IDLE_CHOICES, idleMin, setIdleMin } from '../idle.js';
 import { toggle } from '../inputs.js';
-import { NOTICES, noticeOn, setNotice } from '../notices.js';
+import { NOTICES, noticeOn, setNotice } from '../prefs.js';
 import { REFRESH_CHOICES, VIEWS, refreshMs, render, setRefreshMs } from '../router.js';
 import { THEMES, applyTheme, theme } from '../theme.js';
 import { when } from '../util.js';
