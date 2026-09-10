@@ -144,5 +144,20 @@ console.log(`  console: ${BASE}\n`);
      !globalThis.document.__has('#compat'));
 }
 
+/* ---- the menu counts follow the server, not the view you are in -------- */
+{
+  const { S, get } = await mod('api.js');
+  const { cataloguesTick } = await mod('notices.js');
+  // pretend a stale count, as it would be after looking at another page
+  S.counts.ds = -1; S.counts.sm = -1;
+  if (cataloguesTick) { await cataloguesTick(); await cataloguesTick(); }
+  const ds = await get('/distributionsets?limit=1');
+  const sm = await get('/softwaremodules?limit=1');
+  ok('il badge dei set si aggiorna da solo', S.counts.ds === ds.total,
+     `${S.counts.ds} contro ${ds.total}`);
+  ok('e quello dei moduli pure', S.counts.sm === sm.total,
+     `${S.counts.sm} contro ${sm.total}`);
+}
+
 console.log(`\n  ${pass} ok, ${failed} falliti`);
 process.exit(failed ? 1 : 0);

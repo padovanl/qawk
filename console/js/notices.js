@@ -2,7 +2,7 @@ import { S, enc, get, waiting } from './api.js';
 import { toast } from './chrome.js';
 import { noticeOn } from './prefs.js';
 import { $, h, icon } from './dom.js';
-import { go } from './router.js';
+import { drawNav, go } from './router.js';
 
 /* ------------------------------------------------------- background notices */
 /* THE TOASTS WORTH HAVING ARE THE ONES YOU DID NOT ASK FOR.
@@ -140,14 +140,28 @@ S.catalogueSeen = null;        // { sm:Set, ds:Set } or null before the first lo
 
 async function cataloguesTick() {
   if (!S.auth) return;
-  let sm, ds, ro;
+  let sm, ds, ro, tg;
   try {
-    [sm, ds, ro] = await Promise.all([
+    [sm, ds, ro, tg] = await Promise.all([
       get('/softwaremodules?limit=50&sort=id:DESC'),
       get('/distributionsets?limit=50&sort=id:DESC'),
       get('/rollouts?limit=25&sort=id:DESC').catch(() => ({ content: [] })),
+      get('/targets?limit=1').catch(() => null),
     ]);
   } catch (_) { return; }
+
+  /* THE COUNTS BESIDE THE MENU, kept honest from here.
+   *
+   * Each view used to set only its own: open Targets and the Targets badge was
+   * right while Distribution sets stayed at whatever it said when you last
+   * looked at it. Since this already asks for the totals every few seconds,
+   * they cost nothing extra -- only the target count is an added request, and
+   * it is limit=1. */
+  S.counts.sm = sm.total;
+  S.counts.ds = ds.total;
+  if (ro && ro.total !== undefined) S.counts.ro = ro.total;
+  if (tg && tg.total !== undefined) S.counts.targets = tg.total;
+  drawNav();
 
   const seenOf = r => new Map((r.content || []).map(x => [x.id, x]));
   const now = { sm: seenOf(sm), ds: seenOf(ds), ro: seenOf(ro) };
@@ -238,5 +252,5 @@ buildTick();
 setInterval(buildTick, 15000);
 
 export {
-  noteTargets, watchAction,
+  cataloguesTick, noteTargets, watchAction,
 };
