@@ -18,15 +18,15 @@
 // comma-separated list; "broken" by default) fails, as does a random share
 // -fail-rate of the others; a device that fails says it rolled back.
 //
-// With -system name:count:component=n,... it runs systems instead -- a
-// bowling centre of lane computers and the terminals attached to them:
+// With -system name:count:component=n,... it runs systems instead -- a 6hd
+// and the two st05 and the hyper under it, sixteen times as in a centre:
 //
-//	qawk-sim -token <t> -system center:16:st05=2,hyper=1,hd=6
+//	qawk-sim -token <t> -system 6hd:16:6hd=1,st05=2,hyper=1
 //
-// makes 16 systems, center-01 to center-16, each of 2 st05, 1 hyper and 6 hd;
-// every device reports device_type=<component> and center=<its system>, which
-// a system type matches (attribute.device_type==hd, key attribute.center).
-// -fail-where center=center-03,device_type=hyper makes the devices with those
+// makes 16 systems, 6hd-01 to 6hd-16, each of one 6hd, 2 st05 and 1 hyper;
+// every device reports device_type=<component> and 6hd=<its system>, which
+// a system type matches (attribute.device_type==st05, key attribute.6hd).
+// -fail-where 6hd=6hd-03,device_type=hyper makes the devices with those
 // attributes fail whatever they are given (repeatable); with set=2.0 among
 // them, only what names 2.0 -- a module name or version containing it.
 //

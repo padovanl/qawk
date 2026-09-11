@@ -55,7 +55,7 @@ func (s *Service) SaveSystemType(ctx context.Context, user string, t model.Syste
 		return 0, httpx.Validation("a system type needs a name")
 	}
 	if !keyFieldRE.MatchString(t.KeyField) {
-		return 0, httpx.Validation("the system key is attribute.<key> or metadata.<key>, such as metadata.center")
+		return 0, httpx.Validation("the system key is attribute.<key> or metadata.<key>, such as metadata.system")
 	}
 	if len(t.Components) == 0 {
 		return 0, httpx.Validation("a system type needs at least one component")
@@ -67,7 +67,7 @@ func (s *Service) SaveSystemType(ctx context.Context, user string, t model.Syste
 		}
 		seen[c.ComponentType] = true
 		if strings.TrimSpace(c.Match) == "" {
-			return 0, httpx.Validation(c.ComponentType + ": say which devices it is, such as attribute.device_type==hd")
+			return 0, httpx.Validation(c.ComponentType + ": say which devices it is, such as attribute.device_type==6hd")
 		}
 		if err := s.st.CheckQuery(c.Match); err != nil {
 			return 0, err

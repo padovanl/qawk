@@ -275,7 +275,7 @@ directly.
 | Live events for the console (server-sent events), instead of polling | planned |
 | Prometheus metrics at `/metrics`: requests and latency by API, targets by status, open actions, each fleet's progress, halted and pending releases, the leader, the database pool (see below) | done |
 | The release pipeline: upstreams, gates, four-eyes approval, waves, error thresholds, freezes, temporary fleets; `qawk-sim` for simulated devices | done |
-| Systems, after Mender Orchestrator: devices that work together (a bowling centre) updated as a whole, components in order, the whole system rolled back when one device fails; Mender's topology and manifest YAML in and out (see below) | done |
+| Systems, after Mender Orchestrator: devices that work together (a 6hd and the two st05 and the hyper under it) updated as a whole, components in order, the whole system rolled back when one device fails; Mender's topology and manifest YAML in and out (see below) | done |
 | Every open deployment in one request (`/qawk/v1/deployments`), and a page's worth of target state in one (`/qawk/v1/targets/state`, `/qawk/v1/targets/attributes`) | done |
 | Artifacts in an S3-compatible object store | planned |
 
@@ -405,11 +405,11 @@ the real device among 188 simulated ones.
 
 ### Systems: updated as a whole, after Mender Orchestrator
 
-Some devices only make sense together. A bowling centre has lane computers
-(hd) and the terminals attached to them (st05, hyper); the terminals must be
-on the new version before the lanes, and a centre left half on one version
-and half on the other is worse than a centre not updated at all. There are
-sixteen such centres. [Mender Orchestrator](https://docs.mender.io/orchestrate-updates/overview)
+Some devices only make sense together. A 6hd has two st05 and a hyper
+attached under it; the st05 and the hyper must be on the new version before
+the 6hd, and a group left half on one version and half on the other is worse
+than one not updated at all. A centre has sixteen such groups; a neo-intel
+stands alone and belongs to none. [Mender Orchestrator](https://docs.mender.io/orchestrate-updates/overview)
 solves this with a *topology* (what a system is made of), a *manifest* (what
 each component should run, and in which order) and an orchestrator running
 on one device of each system. Qawk keeps the first two, in Mender's own YAML,
@@ -418,7 +418,7 @@ and the image does not change.
 
 | Mender | Qawk | |
 |---|---|---|
-| topology | system type | its components, each recognised by a target query (`attribute.device_type==hd`), and the field that says which system a device is in (`attribute.center` reported by the device, or `metadata.center` set on it) |
+| topology | system type | its components, each recognised by a target query (`attribute.device_type==6hd`), and the field that says which system a device is in (`attribute.system` reported by the device, or `metadata.system` set on it) |
 | system | a value of that field | found from the devices; nothing to register |
 | manifest | manifest | a distribution set per component, and an `order`: lower first, equal together |
 | artifact_name | `name:version` of a distribution set | |
@@ -452,28 +452,28 @@ on a topology (default `metadata.system`) and `qawk_match` on a component
 ```yaml
 api_version: mender/v1
 kind: topology
-system_type: bowling-center
-qawk_system_key: attribute.center
+system_type: 6hd-system
+qawk_system_key: metadata.system
 components:
+  - component_type: 6hd
   - component_type: st05
   - component_type: hyper
-  - component_type: hd
 ---
 api_version: mender/v1
 kind: manifest
-name: bowling-center-2026.09
-system_types_compatible: [bowling-center]
+name: 6hd-system-2026.09
+system_types_compatible: [6hd-system]
 component_types:
   st05:  {artifact_name: "st05-fw:2.0",   update_strategy: {order: 10}}
   hyper: {artifact_name: "hyper-fw:2.0",  update_strategy: {order: 10}}
-  hd:    {artifact_name: "app-full:1.2.0", update_strategy: {order: 20}}
+  6hd:   {artifact_name: "app-full:1.2.0", update_strategy: {order: 20}}
 ```
 
 (Two documents, imported one at a time.) Permissions follow hawkBit's: system
 types are targets (`READ_TARGET`, `CREATE_TARGET`...), manifests and
 deployments are rollouts (`CREATE_ROLLOUT`, `HANDLE_ROLLOUT`...). The console
-has a Systems page for all of it. `qawk-sim -system center:16:st05=2,hyper=1,hd=6`
-runs such centres; `test/systems.py` is the end-to-end test.
+has a Systems page for all of it. `qawk-sim -system 6hd:16:6hd=1,st05=2,hyper=1`
+runs such systems; `test/systems.py` is the end-to-end test.
 
 ### OpenTelemetry
 
