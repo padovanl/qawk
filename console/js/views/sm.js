@@ -58,7 +58,7 @@ async function openSm(m) {
         return null;
       }
     };
-    const bar = h('i.run', { style: 'width:0%' });
+    const bar = h('i.up', { style: 'width:0%' });
     const pct = h('b', '0%');
     const prog = h('div.upl', { style: 'display:none' }, h('div.bars', bar), pct);
     body.replaceChildren(h('div.stack',

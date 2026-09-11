@@ -14,6 +14,9 @@ WORKDIR /app
 COPY serve.py index.html style.css fonts.css logo.png favicon.png favicon.ico /app/
 COPY fonts/ /app/fonts/
 COPY js/ /app/js/
+# which build this is: an open console reads it and reloads itself when a new
+# one is deployed (router.js), so a change reaches the screens without an F5
+RUN date +%s > /app/build-id
 
 # Not root. The console reads a handful of files and opens one socket; nothing
 # here needs more than that.

@@ -126,6 +126,23 @@ async function render(opts = {}) {
  * merged in place, the open drawer too, and every third beat the counts in
  * the menu. Every number, badge, bar and relative time moves by itself, with
  * the pointer on it or not, a dialog open or not; only a hidden tab waits. */
+/* A new console deployed reaches the screens already open: the build id the
+ * image carries (Dockerfile) is read every 30 s, and when it changes the page
+ * reloads itself -- the same page, the same sign-in (sessionStorage). Without
+ * a build id (the console run from a checkout) nothing happens. */
+let buildId = null, buildAt = 0;
+async function checkBuild() {
+  if (Date.now() - buildAt < 30000) return;
+  buildAt = Date.now();
+  try {
+    const r = await fetch('/build-id', { cache: 'no-store' });
+    if (!r.ok) return;
+    const v = (await r.text()).trim();
+    if (buildId === null) buildId = v;
+    else if (v && v !== buildId) location.reload();
+  } catch (_) { /* the next beat tries again */ }
+}
+
 const LIVE_MS = 5000;
 let liveT = null, beats = 0;
 function live() {
@@ -136,6 +153,7 @@ function live() {
     if (!S.auth || S.view !== view) return;
     if (document.hidden) { live(); return; }
     if (++beats % 3 === 0) refreshCounts();
+    checkBuild();
     refreshDrawer();
     render({ silent: true });
   }, (VIEWS[view] || {}).live || LIVE_MS);
