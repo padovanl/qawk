@@ -110,7 +110,7 @@ def make_set(name, version, module):
 
 def main():
     print(f"  server {BASE}, run {R}\n")
-    token = "pipe-" + R
+    token = os.environ.get("QAWK_GATEWAY_TOKEN") or "pipe-" + R   # the server's own, on a server devices use
     must("PUT", "/rest/v1/system/configs/authentication.gatewaytoken.enabled", {"value": True})
     must("PUT", "/rest/v1/system/configs/authentication.gatewaytoken.key", {"value": token})
 

@@ -4,7 +4,7 @@ import { PHASE_WORDS, TARGET_PILL, pill } from '../badges.js';
 import { ask, modal, toast } from '../chrome.js';
 import { typeBadge } from '../chips.js';
 import { T_COLS, attrsOf, cols, columnsDialog, headsFor, loadPhases, prefetchAttrs } from '../columns.js';
-import { $, h, icon } from '../dom.js';
+import { $, h, icon, live } from '../dom.js';
 import { fiqlEditor } from '../fiql.js';
 import { noteTargets } from '../notices.js';
 import { VIEWS, debounceRender, drawNav, render } from '../router.js';
@@ -272,6 +272,7 @@ VIEWS.targets = {
     SELECT_HEAD = selectHead(pageIds);
 
     const rows = data.content.map(t => ({
+      key: t.controllerId,
       sel: S.sel === t.controllerId || S.picked.has(t.controllerId),
       onclick: () => openTarget(t.controllerId),
       cells: [h('input', {
@@ -283,11 +284,13 @@ VIEWS.targets = {
         },
       })].concat(chosen.map(id => {
         if (id.startsWith('attr:')) {
-          const key = id.slice(5), c = h('span.mono.faint', '…');
+          const key = id.slice(5), c = h('span.mono.faint', { 'data-pending': '' }, '…');
           attrsOf(t.controllerId).then(a => {
-            const v = (a && a[key]) || '';
+            const v = (a && a[key]) || '', el = live(c);   // the cell on screen
+            el.removeAttribute('data-pending');
             // the device type as a badge, in its own colour
-            if (key === 'device_type' && v) { c.className = ''; c.replaceChildren(typeBadge(v)); } else c.textContent = v || '—';
+            if (key === 'device_type' && v) { el.className = ''; el.replaceChildren(typeBadge(v)); }
+            else { el.className = 'mono faint'; el.textContent = v || '—'; }
           });
           return c;
         }

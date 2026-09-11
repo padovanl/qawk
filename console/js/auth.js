@@ -2,7 +2,7 @@ import { S, get } from './api.js';
 import { checkCompat } from './compat.js';
 import { whoIsServer } from './server.js';
 import { $, h, icon } from './dom.js';
-import { VIEWS, drawNav, refreshCounts, render, tick } from './router.js';
+import { VIEWS, drawNav, refreshCounts, render } from './router.js';
 import { theme } from './theme.js';
 
 /* ---------------------------------------------------------------- auth */
@@ -24,7 +24,7 @@ async function start() {
   // In progress said "not Qawk", the Fleet column stayed empty. It is one
   // request, answered in milliseconds, and says hawkBit when it fails.
   await whoIsServer(); drawNav();
-  await render(); tick();
+  await render();   // from here every page keeps itself up to date (router.js, live)
   // Asked once, in the background: it must never hold up the first screen.
   checkCompat();
 }

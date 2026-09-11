@@ -36,7 +36,8 @@ TENANT = "DEFAULT"
 HERE = os.path.dirname(os.path.abspath(__file__))
 SAMPLES = os.path.join(HERE, "..", "reference", "samples")
 AUTH = "Basic " + base64.b64encode(f"{USER}:{PASS}".encode()).decode()
-TOKEN = os.environ.get("QAWK_CONTRACT_TOKEN") or ("qawk-contract-" + uuid.uuid4().hex[:8])
+TOKEN = (os.environ.get("QAWK_CONTRACT_TOKEN") or os.environ.get("QAWK_GATEWAY_TOKEN")
+         or ("qawk-contract-" + uuid.uuid4().hex[:8]))
 RUN = uuid.uuid4().hex[:6]           # names are unique per run
 PROBE = "contract-probe-" + RUN
 

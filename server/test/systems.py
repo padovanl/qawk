@@ -35,7 +35,7 @@ IMAGE = os.environ.get("QAWK_IMAGE", "qawk:next")
 R = uuid.uuid4().hex[:4]
 SYS = "ctr" + R                    # the attribute naming each device's system
 SIM = f"qawk-sim-sys-{R}"
-TOKEN = "sys-" + R
+TOKEN = os.environ.get("QAWK_GATEWAY_TOKEN") or "sys-" + R   # the server's own, on a server devices use
 ok = bad = 0
 
 

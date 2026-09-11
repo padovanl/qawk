@@ -2,9 +2,9 @@ import { S, del, enc, get, post, put } from '../api.js';
 import { actionPill, pill } from '../badges.js';
 import { fleetBadge } from '../chips.js';
 import { hasBatch, statesOf } from '../batch.js';
-import { ask, closeDrawer, drawer, fail, toast } from '../chrome.js';
+import { ask, closeDrawer, drawer, fail, refreshDrawer, toast } from '../chrome.js';
 import { loadAssignedInstalled } from '../columns.js';
-import { $, h, icon } from '../dom.js';
+import { h, icon, live } from '../dom.js';
 import { toggle } from '../inputs.js';
 import { go, render } from '../router.js';
 import { ago, download, when } from '../util.js';
@@ -30,65 +30,89 @@ async function actionLogText(id, a) {
   return head.concat(body.length ? body : ['(no feedback recorded)']).join('\n') + '\n';
 }
 
+/* A device's drawer follows the device. It is built from what the server says
+ * now and rebuilt every few seconds in place (chrome.js, refreshDrawer): the
+ * status, the last poll, a new action, its log -- each changes where it
+ * stands, while the tab you are on, the actions you opened and the attribute
+ * filter you typed stay. What costs a request per action (how it ended, its
+ * log) is asked once, and again only while the action is still moving. */
+const T = { id: null, tab: 'overview', open: null, attrQ: '', summaries: new Map(), logs: new Map() };
 
 async function openTarget(id) {
+  if (T.id !== id) Object.assign(T, { id, tab: 'overview', open: null, attrQ: '', summaries: new Map(), logs: new Map() });
   S.sel = id;
-  const body = h('div', h('div.empty', h('span.spin')));
-  drawer(id, body);
+  const build = () => buildTarget(id);
+  drawer(id, h('div.empty', h('span.spin')), build);
   try {
-    const [t, attrs, acts, tags, autoc] = await Promise.all([
-      get('/targets/' + enc(id)),
-      get(`/targets/${enc(id)}/attributes`).catch(() => ({})),
-      get(`/targets/${enc(id)}/actions?limit=30&sort=id:DESC`).catch(() => ({ content: [] })),
-      get(`/targets/${enc(id)}/tags`).catch(() => []),
-      get(`/targets/${enc(id)}/autoConfirm`).catch(() => null),
-    ]);
-    const tabs = h('div.tabs'); const pane = h('div');
-    const mk = (label, fn) => {
-      const b = h('button', { onclick: () => {
-        [...tabs.children].forEach(x => x.classList.remove('on')); b.classList.add('on');
-        pane.replaceChildren(fn());
-      } }, label);
-      tabs.append(b); return b;
-    };
-    mk('Overview', () => overviewPane(t, attrs, autoc, id));
-    mk(`Actions (${acts.content.length})`, () => actionsPane(id, acts.content));
-    mk(`Tags (${(tags || []).length})`, () => tagsPane(id, tags || []));
-    tabs.firstChild.classList.add('on');
-    pane.replaceChildren(overviewPane(t, attrs, autoc, id));
-    body.replaceChildren(
-      h('div.wrap', { style: 'margin-bottom:12px' },
-        h('button.btn.primary.sm', { onclick: () => assignDialog(id) }, icon('deploy', 14), 'deploy'),
-        h('button.btn.sm.danger', { onclick: () => cancelLatest(id, false) }, 'cancel action'),
-        h('button.btn.sm.danger', { onclick: () => cancelLatest(id, true) }, 'force cancel'),
-        h('button.btn.sm.danger', { onclick: async () => {
-            if (!await ask('Delete target', `${id}\n\nIts history goes with it.`, { danger: true })) return;
-            try {
-              await del('/targets/' + enc(id));
-              S.picked.delete(id);        // or the bulk bar counts a device that is gone
-              toast('Deleted', id, 'ok'); closeDrawer(); render();
-            }
-            catch (e) { fail(e); }
-          } }, 'delete')),
-      tabs, pane);
-  } catch (e) { body.replaceChildren(h('div.empty', e.message)); }
+    const node = await build();
+    if (T.id === id) drawer(id, node, build);
+  } catch (e) { drawer(id, h('div.empty', e.message), build); }
 }
 
-function overviewPane(t, attrs, autoc, id) {
-  const dsBox = h('span.faint', '…');
-  loadAssignedInstalled(t.controllerId, dsBox);
-  // Its fleet, in the fleet's colour (Qawk): a click shows the fleet's devices.
-  const fleetBox = h('span.faint', hasBatch() ? '…' : '—');
-  if (hasBatch()) {
-    statesOf([t.controllerId]).then(m => {
-      const f = (m.get(t.controllerId) || {}).fleet;
-      fleetBox.replaceChildren(f
-        ? h('span.flex', { style: 'gap:6px;cursor:pointer', title: 'its fleet\'s devices',
-            onclick: () => { closeDrawer(); S.fleet = f.name; S.status = ''; S.q = ''; go('targets'); } },
-          fleetBadge(f.name, f.colour))
-        : 'none');
-    }).catch(() => { fleetBox.textContent = '—'; });
+async function buildTarget(id) {
+  const [t, attrs, acts, tags, autoc, state, allTags] = await Promise.all([
+    get('/targets/' + enc(id)),
+    get(`/targets/${enc(id)}/attributes`).catch(() => ({})),
+    get(`/targets/${enc(id)}/actions?limit=30&sort=id:DESC`).catch(() => ({ content: [] })),
+    get(`/targets/${enc(id)}/tags`).catch(() => []),
+    get(`/targets/${enc(id)}/autoConfirm`).catch(() => null),
+    hasBatch() ? statesOf([id]).then(m => m.get(id) || null).catch(() => null) : Promise.resolve(null),
+    T.tab === 'tags' ? get('/targettags?limit=100').then(r => r.content || []).catch(() => []) : Promise.resolve([]),
+  ]);
+  const actions = acts.content || [];
+  // open the newest one and anything still moving, the first time; then what you choose
+  if (T.open === null) T.open = new Set(actions.filter((a, i) => i === 0 || a.active).map(a => a.id));
+  if (T.tab === 'actions') {
+    await Promise.all(actions.map(async a => {
+      if (!T.summaries.has(a.id) || a.active) {
+        try {
+          const r = await get(`/targets/${enc(id)}/actions/${a.id}/status?limit=1&sort=id:DESC`);
+          const e = (r.content || [])[0];
+          T.summaries.set(a.id, e ? ((e.messages || []).filter(Boolean).join(' | ') || e.type || '').slice(0, 90) : '');
+        } catch (_) { /* no summary: the header still says the status */ }
+      }
+      if (T.open.has(a.id) && (!T.logs.has(a.id) || a.active)) {
+        try {
+          const r = await get(`/targets/${enc(id)}/actions/${a.id}/status?limit=30&sort=id:DESC`);
+          T.logs.set(a.id, r.content || []);
+        } catch (e) { T.logs.set(a.id, e.message); }
+      }
+    }));
   }
+  const tab = (key, label) => h('button' + (T.tab === key ? '.on' : ''),
+    { onclick: () => { T.tab = key; refreshDrawer(); } }, label);
+  const pane = T.tab === 'actions' ? actionsPane(id, actions)
+    : T.tab === 'tags' ? tagsPane(id, tags || [], allTags)
+    : overviewPane(t, attrs, autoc, id, state);
+  return h('div',
+    h('div.wrap', { style: 'margin-bottom:12px' },
+      h('button.btn.primary.sm', { onclick: () => assignDialog(id) }, icon('deploy', 14), 'deploy'),
+      h('button.btn.sm.danger', { onclick: () => cancelLatest(id, false) }, 'cancel action'),
+      h('button.btn.sm.danger', { onclick: () => cancelLatest(id, true) }, 'force cancel'),
+      h('button.btn.sm.danger', { onclick: async () => {
+          if (!await ask('Delete target', `${id}\n\nIts history goes with it.`, { danger: true })) return;
+          try {
+            await del('/targets/' + enc(id));
+            S.picked.delete(id);        // or the bulk bar counts a device that is gone
+            toast('Deleted', id, 'ok'); closeDrawer(); render();
+          }
+          catch (e) { fail(e); }
+        } }, 'delete')),
+    h('div.tabs', tab('overview', 'Overview'), tab('actions', `Actions (${actions.length})`),
+      tab('tags', `Tags (${(tags || []).length})`)),
+    pane);
+}
+
+function overviewPane(t, attrs, autoc, id, state) {
+  const dsBox = h('span.faint', { 'data-pending': '' }, '…');
+  loadAssignedInstalled(t.controllerId, dsBox);
+  // its fleet, in the fleet's colour (Qawk): a click shows the fleet's devices
+  const f = state && state.fleet;
+  const fleetBox = !hasBatch() ? h('span.faint', '—') : f
+    ? h('span.flex', { style: 'gap:6px;cursor:pointer', title: 'its fleet\'s devices',
+        onclick: () => { closeDrawer(); S.fleet = f.name; S.status = ''; S.q = ''; go('targets'); } },
+      fleetBadge(f.name, f.colour))
+    : h('span.faint', 'none');
   const kv = [
     ['controller id', t.controllerId], ['name', t.name], ['fleet', fleetBox],
     ['description', t.description || '—'], ['status', t.updateStatus],
@@ -108,7 +132,7 @@ function overviewPane(t, attrs, autoc, id) {
         // it switched on, which reads as a control that does nothing.
         await post(`/targets/${enc(id)}/autoConfirm/${v ? 'activate' : 'deactivate'}`, {});
         toast('Auto-confirmation', v ? 'on' : 'off', 'ok');
-        openTarget(id);
+        refreshDrawer();
       }),
       h('span.faint', 'off means an update that needs confirmation waits for a human'))) : null,
     attrPanel(rows));
@@ -124,18 +148,18 @@ function attrPanel(rows) {
       h('div.body', h('span.faint', 'none yet — the device sends these on its next poll')));
   }
   const list = h('dl.kv.attrs');
-  const paint = q => {
+  const paint = (el, q) => {
     const f = q ? rows.filter(([k, v]) =>
       (k + ' ' + v).toLowerCase().includes(q.toLowerCase())) : rows;
-    list.replaceChildren(...(f.length
+    el.replaceChildren(...(f.length
       ? f.flatMap(([k, v]) => [h('dt', { title: k }, k), h('dd', { title: v }, v)])
       : [h('dt', ''), h('dd', h('span.faint', 'nothing matches'))]));
   };
-  paint('');
+  paint(list, T.attrQ);
   const search = rows.length > 8
     ? h('div.search', { style: 'flex:1;margin-bottom:8px' },
-        h('input', { type: 'text', placeholder: 'filter attributes',
-                     oninput: e => paint(e.target.value) }))
+        h('input', { type: 'text', placeholder: 'filter attributes', value: T.attrQ,
+                     oninput: e => { T.attrQ = e.target.value; paint(live(list), T.attrQ); } }))
     : null;
   return h('div.panel', h('h3', `Attributes reported by the device (${rows.length})`),
     h('div.body', search, list));
@@ -157,8 +181,6 @@ function windowPill(a) {
 
 function actionsPane(id, actions) {
   if (!actions.length) return h('div.empty', 'no deployment has ever been sent here');
-  const wrap = h('div.stack');
-
   const all = h('button.btn.sm', { onclick: async e => {
     const b = e.currentTarget; b.classList.add('loading');
     try {
@@ -168,33 +190,19 @@ function actionsPane(id, actions) {
     } catch (er) { fail(er); } finally { b.classList.remove('loading'); }
   } }, icon('save', 13), 'download all logs');
   const expand = h('button.btn.sm', { onclick: () => {
-    const shut = [...wrap.querySelectorAll('.acc:not(.open) .ahead')];
-    if (shut.length) shut.forEach(x => x.click());
-    else [...wrap.querySelectorAll('.acc.open .ahead')].forEach(x => x.click());
+    if (actions.some(a => !T.open.has(a.id))) actions.forEach(a => T.open.add(a.id));
+    else T.open.clear();
+    refreshDrawer();
   } }, 'expand / collapse all');
-  wrap.append(h('div.wrap', all, expand));
 
-  actions.forEach((a, idx) => {
+  return h('div.stack', h('div.wrap', all, expand), actions.map(a => {
     const st = String(a.status || '').toLowerCase();
-    // Open the newest one and anything still moving; the rest stay shut. Thirty
-    // expanded logs is not a history, it is a wall, and it also meant thirty
-    // requests every time a target was opened.
-    const openByDefault = idx === 0 || a.active;
-
-    const chev = h('span.chev', '▸');
-    const summary = h('span.faint.sum', '');
-    const head = h('div.ahead',
-      chev, h('span.mono', '#' + a.id), actionPill(a, id),
+    const open = T.open.has(a.id);
+    const head = h('div.ahead', { onclick: () => { if (open) T.open.delete(a.id); else T.open.add(a.id); refreshDrawer(); } },
+      h('span.chev', open ? '▾' : '▸'), h('span.mono', '#' + a.id), actionPill(a, id),
       a.active ? h('span.pill.live', 'active') : null,
-      h('span.faint', a.type || ''), windowPill(a), summary,
+      h('span.faint', a.type || ''), windowPill(a), h('span.faint.sum', T.summaries.get(a.id) || ''),
       h('span.faint.nowrap.when', when(a.lastModifiedAt || a.createdAt)));
-
-    const cancelOne = async () => {
-      try {
-        await del(`/targets/${enc(id)}/actions/${a.id}`);
-        toast('Cancelled', '#' + a.id, 'ok'); openTarget(id);
-      } catch (e) { fail(e); }
-    };
     const acts = h('div.wrap',
       // Send the same thing again. The action does not carry its distribution
       // set in the body, but _links does, and the id is the tail of that URL.
@@ -210,50 +218,24 @@ function actionsPane(id, actions) {
       h('button.btn.sm', { onclick: async () => {
           try { download(`action-${a.id}-${id}.log`, await actionLogText(id, a)); }
           catch (e) { fail(e); } } }, icon('save', 13), 'download log'),
-      a.active ? h('button.btn.sm.danger', { onclick: cancelOne }, 'cancel') : null,
+      a.active ? h('button.btn.sm.danger', { onclick: async () => {
+          try { await del(`/targets/${enc(id)}/actions/${a.id}`); toast('Cancelled', '#' + a.id, 'ok'); refreshDrawer(); }
+          catch (e) { fail(e); } } }, 'cancel') : null,
       st === 'wait_for_confirmation'
         ? [h('button.btn.sm.primary', { onclick: () => confirmAction(id, a.id, 'confirmed') }, 'confirm'),
            h('button.btn.sm.danger', { onclick: () => confirmAction(id, a.id, 'denied') }, 'deny')]
         : null);
-
-    const log = h('div.log', 'loading…');
-    const guts = h('div.abody.stack', acts, log);
-    const panel = h('div.panel.acc', head, guts);
-    wrap.append(panel);
-
-    let loaded = false;
-    const load = async () => {
-      if (loaded) return; loaded = true;
-      try {
-        const r = await get(`/targets/${enc(id)}/actions/${a.id}/status?limit=30&sort=id:DESC`);
-        const lines = (r.content || []).map(e => {
+    const lines = T.logs.get(a.id);
+    const log = h('div.log', lines === undefined ? 'loading…'
+      : typeof lines === 'string' ? lines
+      : lines.length ? lines.map(e => {
           const m = (e.messages || []).filter(Boolean);
           return h('div', h('span.t', when(e.reportedAt) + '  '), e.type, m.length ? '  ' + m.join(' | ') : '');
-        });
-        log.replaceChildren(...lines);
-        if (!lines.length) log.textContent = 'no feedback recorded';
-      } catch (e) { log.textContent = e.message; }
-    };
-
-    // The collapsed header still says how it ended, so the history reads at a
-    // glance without opening anything.
-    get(`/targets/${enc(id)}/actions/${a.id}/status?limit=1&sort=id:DESC`)
-      .then(r => {
-        const e = (r.content || [])[0];
-        if (!e) return;
-        const m = (e.messages || []).filter(Boolean).join(' | ');
-        summary.textContent = (m || e.type || '').slice(0, 90);
-      }).catch(() => {});
-
-    const toggle = () => {
-      const open = panel.classList.toggle('open');
-      chev.textContent = open ? '▾' : '▸';
-      if (open) load();
-    };
-    head.addEventListener('click', toggle);
-    if (openByDefault) toggle();
-  });
-  return wrap;
+        })
+      : 'no feedback recorded');
+    return h('div.panel.acc' + (open ? '.open' : ''), { 'data-key': 'a' + a.id }, head,
+      h('div.abody.stack', acts, log));
+  }));
 }
 
 async function confirmAction(id, aid, decision) {
@@ -262,38 +244,31 @@ async function confirmAction(id, aid, decision) {
     // autoConfirm/activate is a POST, which is what made this easy to get
     // wrong -- test/compat.mjs --live catches it against the server.
     await put(`/targets/${enc(id)}/actions/${aid}/confirmation`, { confirmation: decision });
-    toast('Action ' + decision, '#' + aid, 'ok'); openTarget(id);
+    toast('Action ' + decision, '#' + aid, 'ok'); refreshDrawer();
   } catch (e) { fail(e); }
 }
 
-function tagsPane(id, tags) {
-  const wrap = h('div.stack');
-  const list = h('div.wrap');
-  const draw = () => list.replaceChildren(...(tags.length
-    ? tags.map(t => h('span.pill', { style: t.colour ? `color:${t.colour}` : '' }, t.name,
-        h('button.btn.sm', { style: 'margin-left:6px;padding:0 5px', onclick: async () => {
-            try { await del(`/targettags/${t.id}/assigned/${enc(id)}`); toast('Untagged', t.name, 'ok'); openTarget(id); }
-            catch (e) { fail(e); } } }, '×')))
-    : [h('span.faint', 'no tags')]));
-  draw();
-  wrap.append(h('div.panel', h('h3', 'Tags on this target'), h('div.body', list)));
-
-  const sel = h('select');
-  get('/targettags?limit=100').then(r => {
-    const have = new Set(tags.map(t => t.id));
-    const free = r.content.filter(t => !have.has(t.id));
-    sel.replaceChildren(...(free.length
-      ? free.map(t => h('option', { value: t.id }, t.name))
-      : [h('option', { value: '' }, '— no other tags —')]));
-  }).catch(() => {});
-  wrap.append(h('div.panel', h('h3', 'Add a tag'), h('div.body.flex',
-    sel,
-    h('button.btn', { onclick: async () => {
-        if (!sel.value) return;
-        try { await post(`/targettags/${sel.value}/assigned`, [id]); toast('Tagged', '', 'ok'); openTarget(id); }
-        catch (e) { fail(e); } } }, 'assign'),
-    h('button.btn', { onclick: () => newTagDialog(() => openTarget(id)) }, 'new tag'))));
-  return wrap;
+function tagsPane(id, tags, allTags) {
+  const have = new Set(tags.map(t => t.id));
+  const free = allTags.filter(t => !have.has(t.id));
+  const sel = h('select', free.length
+    ? free.map(t => h('option', { value: t.id }, t.name))
+    : h('option', { value: '' }, '— no other tags —'));
+  return h('div.stack',
+    h('div.panel', h('h3', 'Tags on this target'), h('div.body', h('div.wrap', tags.length
+      ? tags.map(t => h('span.pill', { style: t.colour ? `color:${t.colour}` : '', 'data-key': 't' + t.id }, t.name,
+          h('button.btn.sm', { style: 'margin-left:6px;padding:0 5px', onclick: async () => {
+              try { await del(`/targettags/${t.id}/assigned/${enc(id)}`); toast('Untagged', t.name, 'ok'); refreshDrawer(); }
+              catch (e) { fail(e); } } }, '×')))
+      : h('span.faint', 'no tags')))),
+    h('div.panel', h('h3', 'Add a tag'), h('div.body.flex',
+      sel,
+      h('button.btn', { onclick: async () => {
+          const v = live(sel).value;
+          if (!v) return;
+          try { await post(`/targettags/${v}/assigned`, [id]); toast('Tagged', '', 'ok'); refreshDrawer(); }
+          catch (e) { fail(e); } } }, 'assign'),
+      h('button.btn', { onclick: () => newTagDialog(() => refreshDrawer()) }, 'new tag'))));
 }
 
 async function cancelLatest(id, force) {
@@ -304,7 +279,7 @@ async function cancelLatest(id, force) {
     if (!act.active) return toast('Nothing to cancel', `action #${act.id} is already closed`, 'info');
     await del(`/targets/${enc(id)}/actions/${act.id}` + (force ? '?force=true' : ''));
     toast('Cancelled', `action #${act.id}${force ? ' (forced)' : ''}`, 'ok');
-    openTarget(id); render();
+    refreshDrawer(); render();
   } catch (e) { fail(e); }
 }
 

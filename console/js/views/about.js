@@ -199,7 +199,7 @@ const TROUBLE = [
    'It used to: a local install removed the daemon’s IPC sockets. Fixed — qamf-ota install goes through swupdate-client now. If it happens on an old image, restart swupdate.',
    "ssh ale@<ip> 'sudo ls /run/swupdate/'"],
   ['A row says pending but the action is finished',
-   'Two separate reads with the action closing between them. It settles at the next refresh; the console marks it "just closed".', ''],
+   'Two separate reads with the action closing between them. It settles by itself a moment later; the console marks it "just closed".', ''],
   ['SSH refuses the host key after a system update',
    'Expected: each slot carries its own /etc/ssh, so an A/B swap changes the key.',
    'ssh-keygen -R <ip> && ssh-keyscan -t ed25519,ecdsa <ip> >> ~/.ssh/known_hosts'],
@@ -240,7 +240,6 @@ async function typesTab(root) {
 /* ------------------------------------------------------------- keyboard */
 const SHORTCUTS = [
   ['/', 'focus the search box'],
-  ['r', 'reload the current view'],
   ['?', 'this list, as a dialog'],
   ['Esc', 'close the panel, or leave a field'],
   ['g then d / t / s / m', 'go to dashboard, targets, distribution sets, modules'],

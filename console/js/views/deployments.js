@@ -38,6 +38,7 @@ function row(d, compact) {
   }, h('span.pill.' + cls, `${label} · ${fmt(n)}`)) : null);
   const stCls = bad ? '.err' : d.status === 'waiting_for_approval' ? '.amber' : '.live';
   return h('div', {
+    'data-key': `${d.kind}:${d.title}`,
     style: 'cursor:pointer;padding:10px 12px;border:1px solid color-mix(in srgb, var(--fg) 14%, transparent);border-radius:10px'
       + (bad ? ';border-color:var(--err)' : ''),
     title: 'open its devices',

@@ -1,7 +1,7 @@
 import { S, distributionSets, qawk } from '../api.js';
 import { bars } from '../bars.js';
 import { fleetBadge } from '../chips.js';
-import { ask, drawer, fail, modal, toast } from '../chrome.js';
+import { ask, drawer, fail, modal, refreshDrawer, toast } from '../chrome.js';
 import { h, icon } from '../dom.js';
 import { check as fiqlCheck } from '../fiql.js';
 import { VIEWS, render } from '../router.js';
@@ -136,15 +136,15 @@ function commands(d) {
 }
 
 async function runsDrawer(id) {
-  const box = h('div.stack');
   const load = async () => {
     const d = await qawk.get('/systemdeployments/' + id);
-    box.replaceChildren(
+    return h('div.stack',
       h('div.flex', { style: 'gap:8px;flex-wrap:wrap' }, h('span.pill.' + (SD_CLS[d.status] || 'mute'), d.status),
         h('span.faint', `${d.manifest} · ${d.maxParallel} at a time · up to ${d.maxFailed} may fail`)),
       d.reason ? h('div.faint', { style: 'font-size:12px' }, d.reason) : null,
       systemsBar(d),
       tableOf(['System', 'Status', 'Components', ''], (d.runs || []).map(r => ({
+        key: r.system,
         cells: [h('b.mono', { style: 'white-space:nowrap' }, r.system),
           h('span', h('span.pill.' + (RUN_CLS[r.status] || 'mute'), r.status.replace(/_/g, ' ')),
             r.currentOrder != null && r.status === 'running' ? h('span.faint', { style: 'margin-left:6px;font-size:11px' }, `order ${r.currentOrder}`) : null,
@@ -161,17 +161,13 @@ async function runsDrawer(id) {
           ['running', 'succeeded'].includes(r.status) ? h('button.btn.sm.danger', { onclick: async () => {
             if (!await ask('Roll back ' + r.system, 'Every device of this system the deployment updated goes back to what it ran before.',
               { okLabel: 'Roll back', danger: true })) return;
-            try { await qawk.post(`/systemdeployments/${id}/runs/${r.id}/rollback`, {}); await load(); } catch (e) { fail(e); }
+            try { await qawk.post(`/systemdeployments/${id}/runs/${r.id}/rollback`, {}); refreshDrawer(); } catch (e) { fail(e); }
           } }, 'roll back') : null],
       }))));
   };
-  drawer('Deployment', box);
-  try { await load(); } catch (e) { fail(e); return; }
-  // Follow it while it is open: a centre's orders go by in minutes.
-  const t = setInterval(async () => {
-    if (!box.isConnected || !document.querySelector('#drawer.open')) { clearInterval(t); return; }
-    try { await load(); } catch (_) { /* the next tick tries again */ }
-  }, 4000);
+  // it follows the deployment while it is open (chrome.js, refreshDrawer)
+  drawer('Deployment', h('div.empty', h('span.spin')), load);
+  try { drawer('Deployment', await load(), load); } catch (e) { fail(e); }
 }
 
 // A system's channel: the one all its devices are in, in its colour.

@@ -45,7 +45,8 @@ function tableOf(heads, rows, filters) {
   return h('table.t',
     h('thead', h('tr', heads.map(headCell)), filters || null),
     h('tbody', rows.map(r =>
-      h('tr', { onclick: r.onclick, class: r.sel ? 'sel' : null }, r.cells.map(c => h('td', c))))));
+      h('tr', { onclick: r.onclick, class: r.sel ? 'sel' : null, 'data-key': r.key ?? null },
+        r.cells.map(c => h('td', c))))));
 }
 const card = (k, v, sub) => h('div.card', h('div.k', k), h('div.v', v ?? '—'), sub ? h('div.sub', sub) : null);
 

@@ -51,6 +51,7 @@ VIEWS.centres = {
         onclick: e => { shown.forEach(c => (e.target.checked ? picked.add(c.centre) : picked.delete(c.centre))); drawTable(); drawBulk(); } });
       tableBox.replaceChildren(shown.length
         ? tableOf([all, 'Centre', 'Channel', 'Devices', 'In its channel'], shown.map(c => ({
+            key: c.centre,
             sel: picked.has(c.centre),
             onclick: () => { S.q = `${d.field}==${c.centre}`; S.status = ''; S.fleet = ''; go('targets'); },
             cells: [h('input', { type: 'checkbox', checked: picked.has(c.centre),

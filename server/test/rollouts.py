@@ -130,7 +130,7 @@ def installed(ds):
 
 def main():
     print(f"  server {BASE}, run {R}\n")
-    token = "ro-" + R
+    token = os.environ.get("QAWK_GATEWAY_TOKEN") or "ro-" + R   # the server's own, on a server devices use
     must("PUT", "/rest/v1/system/configs/authentication.gatewaytoken.enabled", {"value": True})
     must("PUT", "/rest/v1/system/configs/authentication.gatewaytoken.key", {"value": token})
     rm, op = ("ro-rm-" + R, "passw0rd-r"), ("ro-op-" + R, "passw0rd-o")

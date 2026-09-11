@@ -2,7 +2,7 @@ import { hasBatch, statesOf } from './batch.js';
 import { start } from './auth.js';
 import { serverInfo } from './server.js';
 import { enc, get, limited } from './api.js';
-import { h, icon } from './dom.js';
+import { h, icon, live } from './dom.js';
 import { download } from './util.js';
 
 /* ------------------------------------------------------------ status maps */
@@ -71,20 +71,24 @@ function actionPill(a, targetId) {
      one request, through the same concurrency gate as everything else -- and
      say what it actually was. */
   if (targetId) {
+    // pending: an update in place keeps what the pill on screen already found out
+    p.setAttribute('data-pending', '');
     limited(() => get(`/targets/${enc(targetId)}/actions/${a.id}/status`
                       + '?limit=50&sort=id:DESC'))
       .then(r => {
+        const q = live(p);
+        q.removeAttribute('data-pending');
         const hit = (r.content || [])
           .find(x => TERMINAL.has(String(x.type).toLowerCase()));
         if (!hit) return;
         const real = String(hit.type).toLowerCase();
-        p.className = 'pill ' + (ACTION_PILL[real] || 'mute');
-        p.replaceChildren(real);
-        p.title = `the device reported "${real}". hawkBit still shows "${st}" `
+        q.className = 'pill ' + (ACTION_PILL[real] || 'mute');
+        q.replaceChildren(real);
+        q.title = `the device reported "${real}". hawkBit still shows "${st}" `
                 + 'because it keeps the LAST status entry, and the device polled '
                 + 'again after closing the action';
       })
-      .catch(() => { /* leave the honest "closed": we simply could not ask */ });
+      .catch(() => { live(p).removeAttribute('data-pending'); /* leave the honest "closed": we could not ask */ });
   }
   return p;
 }
@@ -347,19 +351,23 @@ function paintPhase(p, ph) {
 
 /* The old asynchronous path, kept for callers that have no phase to hand. */
 function explainPending(p, targetId) {
+  // pending: an update in place keeps the phase the pill on screen already shows
+  p.setAttribute('data-pending', '');
+  const done = () => { const q = live(p); q.removeAttribute('data-pending'); return q; };
   limited(() => get(`/targets/${enc(targetId)}/actions?limit=1&sort=id:DESC`))
     .then(r => {
       const a = (r.content || [])[0];
-      if (!a) return null;
+      if (!a) { done(); return null; }
       /* The row said "pending" and the action is already closed. Not a
          contradiction, a race: the target list and the actions are two
          separate reads, and the action finished between them. Say so instead
          of leaving a stale word on screen. */
       if (a.active === false) {
-        p.classList.remove('live'); p.classList.add('mute');
-        p.append(h('span.faint', { style: 'margin-left:5px' }, '\u00b7 just closed'));
-        p.title = 'the last action has closed; this row was read a moment earlier. '
-                + 'It settles at the next refresh';
+        const q = done();
+        q.classList.remove('live'); q.classList.add('mute');
+        q.append(h('span.faint', { style: 'margin-left:5px' }, '\u00b7 just closed'));
+        q.title = 'the last action has closed; this row was read a moment earlier. '
+                + 'It settles in a moment';
         return null;
       }
       return limited(() => get(`/targets/${enc(targetId)}/actions/${a.id}/status`
@@ -367,15 +375,16 @@ function explainPending(p, targetId) {
     })
     .then(r => {
       if (!r) return;
+      const q = done();
       const ph = phaseFrom(r.content || []);
       if (!ph) return;
-      p.className = 'pill ' + ph.cls;
-      p.replaceChildren(ph.label);
-      p.title = (ph.why ? ph.why + '. ' : '')
+      q.className = 'pill ' + ph.cls;
+      q.replaceChildren(ph.label);
+      q.title = (ph.why ? ph.why + '. ' : '')
               + 'hawkBit calls this "pending"; the phase is read from what the '
               + 'device last reported';
     })
-    .catch(() => { /* leave the plain "pending" */ });
+    .catch(() => { done(); /* leave the plain "pending" */ });
   return p;
 }
 

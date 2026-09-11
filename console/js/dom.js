@@ -18,7 +18,9 @@ function h(tag, attrs, ...kids) {
     for (const [k, v] of Object.entries(attrs)) {
       if (v === null || v === undefined || v === false) continue;
       if (k === 'class') e.className += ' ' + v;
-      else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+      // a property, not addEventListener: an update in place (morph) hands the
+      // element on screen the handler of the new render, with its new data
+      else if (k.startsWith('on')) { e[k] = v; (e.__on || (e.__on = {}))[k.slice(2)] = v; }
       else if (k === 'value') e.value = v;
       else if (k === 'checked' || k === 'disabled' || k === 'selected') e[k] = !!v;
       else e.setAttribute(k, v);
@@ -89,6 +91,87 @@ function icon(name, size = 15) {
 
 const skeleton = (n = 7) => h('div.skel', Array.from({ length: n }, () => h('i')));
 
+/* ------- updating in place -------------------------------------------------
+ *
+ * A page is drawn once and then kept up to date where it stands: every few
+ * seconds it is built again from what the server says, and the new build is
+ * MERGED into what is on screen -- a number that changed is changed, a badge
+ * that changed colour changes colour, a bar's width changes (and slides), a
+ * row that appeared is inserted, one that went is removed. Nothing is redrawn:
+ * no flicker, the scroll stays, the field someone is typing in keeps what they
+ * typed, a panel they opened stays open. Rows carry data-key (a controller
+ * id, a centre) so a list that reorders moves its rows instead of rewriting
+ * them.
+ *
+ * A value that arrives after the build (data-pending: a cell filled by its
+ * own request) is not overwritten with its "…": the element on screen keeps
+ * what it shows, and the request, when it answers, writes to the element on
+ * screen -- live(node) -- not to the copy that was merged away. */
+const twin = new WeakMap();      // node of a later build -> node on screen it was merged into
+const FORM = new Set(['INPUT', 'SELECT', 'TEXTAREA', 'OPTION']);
+
+function live(n) {
+  let x = n;
+  while (twin.has(x)) x = twin.get(x);
+  return x;
+}
+
+const keyOf = n => (n.nodeType === 1 ? n.getAttribute('data-key') : null);
+
+function morph(from, to) {
+  if (from.nodeType !== to.nodeType || from.nodeName !== to.nodeName || keyOf(from) !== keyOf(to)) {
+    from.replaceWith(to);
+    return to;
+  }
+  twin.set(to, from);
+  if (from.nodeType !== 1) {
+    if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue;
+    return from;
+  }
+  if (to.hasAttribute('data-pending') && !from.hasAttribute('data-pending')) return from;
+  for (const { name } of [...from.attributes]) if (!to.hasAttribute(name)) from.removeAttribute(name);
+  for (const { name, value } of [...to.attributes]) if (from.getAttribute(name) !== value) from.setAttribute(name, value);
+  const on = to.__on || {};
+  for (const ev of Object.keys(from.__on || {})) if (!(ev in on)) from['on' + ev] = null;
+  for (const [ev, fn] of Object.entries(on)) from['on' + ev] = fn;
+  from.__on = to.__on;
+  patch(from, to);
+  if (FORM.has(from.nodeName)) {
+    // what someone is typing is theirs until they leave the field
+    if (from !== document.activeElement && from.value !== to.value) from.value = to.value;
+    if (from.checked !== to.checked) from.checked = to.checked;
+    if (from.disabled !== to.disabled) from.disabled = to.disabled;
+    if (from.nodeName === 'OPTION' && from.selected !== to.selected) from.selected = to.selected;
+  }
+  return from;
+}
+
+// patch(el, built): make el's children what built's children are, in place.
+function patch(from, to) {
+  const olds = [...from.childNodes], news = [...to.childNodes];
+  const keyed = new Map();
+  for (const o of olds) { const k = keyOf(o); if (k !== null) keyed.set(k, o); }
+  const used = new Set();
+  let oi = 0;
+  news.forEach((n, i) => {
+    let m = null;
+    const k = keyOf(n);
+    if (k !== null) {
+      const o = keyed.get(k);
+      if (o && !used.has(o) && o.nodeName === n.nodeName) m = o;
+    } else {
+      while (oi < olds.length && (used.has(olds[oi]) || keyOf(olds[oi]) !== null)) oi++;
+      const o = olds[oi];
+      if (o && o.nodeType === n.nodeType && o.nodeName === n.nodeName) { m = o; oi++; }
+    }
+    let node = n;
+    if (m) { used.add(m); node = morph(m, n); }
+    const at = from.childNodes[i];
+    if (at !== node) from.insertBefore(node, at || null);
+  });
+  for (const o of olds) if (!used.has(o) && o.parentNode === from) o.remove();
+}
+
 export {
-  $, h, icon, skeleton,
+  $, h, icon, live, morph, patch, skeleton,
 };

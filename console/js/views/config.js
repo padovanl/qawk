@@ -4,7 +4,7 @@ import { $, h, icon } from '../dom.js';
 import { IDLE_CHOICES, idleMin, setIdleMin } from '../idle.js';
 import { toggle } from '../inputs.js';
 import { NOTICES, noticeOn, setNotice } from '../prefs.js';
-import { REFRESH_CHOICES, VIEWS, refreshMs, render, setRefreshMs } from '../router.js';
+import { VIEWS, render } from '../router.js';
 import { THEMES, applyTheme, theme } from '../theme.js';
 import { when } from '../util.js';
 
@@ -49,10 +49,6 @@ VIEWS.cfg = {
             catch (e) { fail(e); } } }, icon('save', 13), 'save'));
     }).filter(Boolean);
 
-    const refresh = h('select', REFRESH_CHOICES.map(([v, l]) =>
-      h('option', { value: v, selected: v === refreshMs() }, l)));
-    refresh.onchange = e => { setRefreshMs(Number(e.target.value)); toast('Saved', 'refresh ' + e.target.selectedOptions[0].text, 'ok'); };
-
     const swatches = h('div.themes', THEMES.map(([v, l]) => {
       const chip = h('button.theme' + (v === theme() ? '.on' : ''),
         { 'data-t': v === 'auto' ? '' : v, title: l, onclick: () => { applyTheme(v); render(); } },
@@ -89,14 +85,8 @@ VIEWS.cfg = {
         h('div', { style: 'flex:0 0 320px' }, h('div.mono', 'idle timeout'),
           h('div.faint', { style: 'font-size:11px' },
             'the tab forgets the credentials after this long with no mouse or ' +
-            'keyboard. Auto-refresh does not count as activity.')),
+            'keyboard. The pages keeping themselves up to date do not count as activity.')),
         idle)),
-      h('div.panel', h('h3', 'This console'), h('div.body.flex',
-        h('div', { style: 'flex:0 0 320px' }, h('div.mono', 'auto-refresh'),
-          h('div.faint', { style: 'font-size:11px' },
-            'how often the tables reload — suspended anyway while a dialog is open ' +
-            'or the pointer is over the table')),
-        refresh)),
       h('div.panel', h('h3', 'Tenant configuration'), h('div.body.stack', rows)),
       h('div.panel', h('h3', 'Careful'), h('div.body.faint',
         'This hawkBit keeps its database in memory: restarting the container wipes targets, ' +

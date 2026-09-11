@@ -1,5 +1,5 @@
 import { S } from './api.js';
-import { $, h, icon } from './dom.js';
+import { $, h, icon, patch } from './dom.js';
 
 /* --------------------------------------------------------------- chrome */
 function toast(title, msg, kind = 'info', ms = 6000) {
@@ -118,16 +118,30 @@ function serverGate(reachable) {
   gateTimer = setInterval(tick, 4000);
 }
 
-function drawer(title, node) {
+/* A drawer given a build function follows what it shows: the live loop
+ * (router.js) calls refreshDrawer, which builds it again and merges it in
+ * place -- a device's status, a deployment's systems move while it is open. */
+let drawerBuild = null;
+function drawer(title, node, build) {
   $('#drawer-title').textContent = title;
   $('#drawer-body').replaceChildren(node);
+  drawerBuild = build || null;
   $('#drawer').classList.add('open'); $('#scrim').classList.add('open');
+}
+async function refreshDrawer() {
+  const build = drawerBuild;
+  if (!build || !$('#drawer').classList.contains('open')) return;
+  try {
+    const node = await build();
+    if (build === drawerBuild && node) patch($('#drawer-body'), h('div', node));
+  } catch (_) { /* the next beat tries again */ }
 }
 function closeDrawer() {
   $('#drawer').classList.remove('open'); $('#scrim').classList.remove('open');
+  drawerBuild = null;
   S.sel = null;
 }
 
 export {
-  ask, closeDrawer, drawer, fail, modal, serverGate, toast,
+  ask, closeDrawer, drawer, fail, modal, refreshDrawer, serverGate, toast,
 };

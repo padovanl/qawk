@@ -29,7 +29,6 @@ import { VIEWS, drawNav, go, render, setCollapsed } from './router.js';
 import { THEMES, applyTheme, theme } from './theme.js';
 import { shortcutsDialog } from './views/about.js';
 
-$('#refresh').replaceChildren(icon('refresh', 14), 'refresh');
 $('#logout').replaceChildren(icon('exit', 14), h('span.lbl', 'exit'));
 for (const id of ['#theme']) {
   $(id).replaceChildren(...THEMES.map(([v, l]) =>
@@ -42,7 +41,6 @@ for (const id of ['#theme']) {
 }
 $('#navtoggle').onclick = () => setCollapsed(!$('#app').classList.contains('collapsed'));
 setCollapsed(localStorage.getItem('hb-nav') === '1');
-$('#refresh').onclick = render;
 $('#logout').onclick = signOut;
 $('#drawer-close').onclick = closeDrawer;
 $('#scrim').onclick = closeDrawer;
@@ -60,7 +58,6 @@ document.addEventListener('keydown', e => {
   }
   if (e.key === '/') { e.preventDefault(); const i = $('#bar-extra input'); if (i) i.focus(); }
   else if (e.key === '?') { e.preventDefault(); shortcutsDialog(); }
-  else if (e.key === 'r') render();
   else if (e.key === 'Escape') closeDrawer();
   else if (e.key === 'g') { gPending = true; setTimeout(() => { gPending = false; }, 1200); }
 });

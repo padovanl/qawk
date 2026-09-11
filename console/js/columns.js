@@ -3,7 +3,7 @@ import { enc, get, limited } from './api.js';
 import { TARGET_PILL, explainPending, paintPhase, phaseFromState, phaseOf, pill, typePill } from './badges.js';
 import { modal } from './chrome.js';
 import { fleetBadge } from './chips.js';
-import { $, h } from './dom.js';
+import { $, h, live } from './dom.js';
 import { render } from './router.js';
 import { pg } from './table.js';
 import { ago, when } from './util.js';
@@ -42,7 +42,7 @@ const T_COLS = {
                     }
                     return p; } },
   ds:           { label: 'Assigned / installed', cell: t => {
-                    const c = h('span.faint', '…'); loadAssignedInstalled(t.controllerId, c); return c; } },
+                    const c = h('span.faint', { 'data-pending': '' }, '…'); loadAssignedInstalled(t.controllerId, c); return c; } },
   lastPoll:     { label: 'Last poll', s: 'lastControllerRequestAt', cell: t => h('span.faint.nowrap', ago(t.lastControllerRequestAt)) },
   nextPoll:     { label: 'Next', cell: t => t.pollStatus && t.pollStatus.overdue
                     ? h('span.pill.warn.pulse', 'overdue')
@@ -92,8 +92,9 @@ const M_COLS = {
   //
   // Showing both as "from X" made the second look like a requirement it is not.
   base:    { label: 'Delta base', cell: m => {
-              const c = h('span.faint', '');
+              const c0 = h('span.faint', { 'data-pending': '' }, ''), c = c0;
               deltaBase(m.id).then(v => {
+                const c = live(c0); c.removeAttribute('data-pending');
                 if (!v) { c.textContent = '—'; c.title = 'not a delta package'; return; }
                 if (v === 'the other slot') {
                   c.className = 'faint nowrap'; c.textContent = 'no base needed';
@@ -281,13 +282,16 @@ function renderAI(cell, a, i) {
   cell.title = same ? '' : 'assigned, not yet installed';
 }
 
+// The cell comes pending; whatever answers writes to the cell on screen
+// (live), and says it is no longer pending.
 async function loadAssignedInstalled(id, cell) {
+  const out = () => { const el = live(cell); el.removeAttribute('data-pending'); return el; };
   const seen = aiCache.get(id);
-  if (seen) renderAI(cell, seen.a, seen.i);      // no "…" on a refresh
+  if (seen) renderAI(out(), seen.a, seen.i);      // no "…" on a refresh
   const fresh = aiFresh.get(id);
   if (fresh && Date.now() - fresh.at < 15000) {  // read with the page: no request of its own
     const key = `${fresh.a && fresh.a.id}/${fresh.i && fresh.i.id}`;
-    if (!seen || seen.key !== key) { aiCache.set(id, { a: fresh.a, i: fresh.i, key }); renderAI(cell, fresh.a, fresh.i); }
+    if (!seen || seen.key !== key) { aiCache.set(id, { a: fresh.a, i: fresh.i, key }); renderAI(out(), fresh.a, fresh.i); }
     return;
   }
   try {
@@ -296,8 +300,8 @@ async function loadAssignedInstalled(id, cell) {
       get(`/targets/${enc(id)}/installedDS`).catch(() => null),
     ]));
     const key = `${a && a.id}/${i && i.id}`;
-    if (!seen || seen.key !== key) { aiCache.set(id, { a, i, key }); renderAI(cell, a, i); }
-  } catch (_) { if (!seen) cell.textContent = '—'; }
+    if (!seen || seen.key !== key) { aiCache.set(id, { a, i, key }); renderAI(out(), a, i); }
+  } catch (_) { if (!seen) out().textContent = '—'; }
 }
 
 
@@ -383,9 +387,10 @@ async function columnsDialog(view = 'targets') {
 }
 
 const baseCell = id => {
-  const c = h('span.faint', '…');
+  const c = h('span.faint', { 'data-pending': '' }, '…');
   deltaBase(id).then(v => {
-    c.textContent = !v ? 'not a delta'
+    const el = live(c); el.removeAttribute('data-pending');
+    el.textContent = !v ? 'not a delta'
       : v === 'the other slot'
         ? 'none — rebuilt against whatever is in the other slot; only the saving varies'
         : `only from ${v} — it fails on a device running anything else`;

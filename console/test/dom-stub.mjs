@@ -32,7 +32,9 @@ export class El {
       toggle: (c, on) => { on ? this._cls.add(c) : this._cls.delete(c); },
       contains: c => this._cls.has(c),
     };
-    this.handlers = {};
+    // h() sets handlers as properties (onclick…), so an update in place can
+    // hand them over; addEventListener ones are kept here too
+    this.handlers = new Proxy({}, { get: (o, k) => o[k] || this['on' + String(k)] });
   }
   // the console asks for childNodes as well as children
   get childNodes() { return this.children; }

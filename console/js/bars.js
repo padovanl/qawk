@@ -1,4 +1,4 @@
-import { h } from './dom.js';
+import { h, live } from './dom.js';
 
 /* ------- progress bars: one look everywhere ---------------------------
  *
@@ -24,12 +24,12 @@ function bars(segs, total, opts = {}) {
   const fill = h('div.fill', { style: `width:${from.toFixed(2)}%` },
     shown.map(([n, cls, title]) => h('i.' + cls, { style: `flex:${n} 1 0`, title: title || `${n} ${cls}` })));
   const full = want >= 99.95 && shown.length === 1 && shown[0][1] === 'ok';
-  const live = shown.some(([, cls]) => cls === 'run');
-  const bar = h('div.bars' + (full ? '.full' : '') + (live ? '.live' : ''),
+  const working = shown.some(([, cls]) => cls === 'run');
+  const bar = h('div.bars' + (full ? '.full' : '') + (working ? '.live' : ''),
     { style: opts.height ? `--bh:${opts.height}px` : '', title: `${Math.round(want)}%` }, fill);
   if (opts.key) last.set(opts.key, want);
   // two frames: the first paints the old length, the second slides to the new
-  raf(() => raf(() => { fill.style.width = want.toFixed(2) + '%'; }));
+  raf(() => raf(() => { live(fill).style.width = want.toFixed(2) + '%'; }));   // the bar on screen
   return bar;
 }
 

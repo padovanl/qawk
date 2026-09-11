@@ -33,7 +33,9 @@ ADMIN = ("admin", os.environ.get("QAWK_PASSWORD", "changeme"))
 IMAGE = os.environ.get("QAWK_IMAGE", "qawk:next")
 R = uuid.uuid4().hex[:4]
 KEY = "sys" + R                     # the attribute naming each device's system
-SIM, TOKEN, C = f"qawk-sim-centres-{R}", "centres-" + R, f"t{R}c"
+# QAWK_GATEWAY_TOKEN: the server's own token -- on a server real devices use,
+# the test writes back the key that is already there and locks nobody out
+SIM, TOKEN, C = f"qawk-sim-centres-{R}", os.environ.get("QAWK_GATEWAY_TOKEN") or "centres-" + R, f"t{R}c"
 ok = bad = 0
 
 

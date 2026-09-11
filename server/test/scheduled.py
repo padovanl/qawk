@@ -39,7 +39,7 @@ IMAGE = os.environ.get("QAWK_IMAGE", "qawk:next")
 R = uuid.uuid4().hex[:4]
 SIM = f"qawk-sim-sch-{R}"
 N = 10
-TOKEN = "sch-" + R
+TOKEN = os.environ.get("QAWK_GATEWAY_TOKEN") or "sch-" + R   # the server's own, on a server devices use
 ok = bad = 0
 
 

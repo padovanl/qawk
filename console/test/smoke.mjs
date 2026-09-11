@@ -116,7 +116,7 @@ const cp = colourPicker('#12a594');
 ok('il colore parte dal valore dato', cp.value === '#12a594', cp.value);
 const sw = cp.children[0].children;
 ok('la tavolozza ha dieci colori piu il custom', sw.length === 11, String(sw.length));
-sw[3].handlers.click({ preventDefault() {} });          // h() aggancia con addEventListener
+sw[3].handlers.click({ preventDefault() {} });          // h() aggancia come proprietà (onclick)
 ok('scegliere una tessera cambia il valore', cp.value === '#46a758', cp.value);
 ok('la tessera scelta si evidenzia', sw[3].classList.contains('on') && !sw[0].classList.contains('on'));
 ok('nessun input nativo di colore nel controllo',
