@@ -69,10 +69,24 @@ func (a *API) targetStates(w http.ResponseWriter, r *http.Request) {
 			}
 			out = append(out, map[string]any{"controllerId": id, "actionId": st.ActionID, "active": st.Active,
 				"dsType": st.DSType, "statuses": statuses, "downloads": dls,
-				"assigned": set(st.Assigned), "installed": set(st.Installed)})
+				"assigned": set(st.Assigned), "installed": set(st.Installed), "fleet": fleetRef(st.Fleet, st.FleetColour)})
 		}
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"content": out, "total": len(out)})
+}
+
+func fleetRef(name, colour *string) any {
+	if name == nil {
+		return nil
+	}
+	return map[string]any{"name": *name, "colour": deref(colour)}
+}
+
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // targetAttributes: ?ids=a,b,c -- the attributes of each, in one request.
@@ -110,7 +124,7 @@ func (a *API) deployments(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(ds))
 	for _, d := range ds {
 		out = append(out, map[string]any{
-			"kind": d.Kind, "title": d.Title, "distributionSetId": d.DSID, "distributionSet": d.DSLabel,
+			"kind": d.Kind, "title": d.Title, "colour": d.Colour, "distributionSetId": d.DSID, "distributionSet": d.DSLabel,
 			"dsType": d.DSType, "fleetId": d.FleetID, "rolloutId": d.RolloutID, "status": d.Status, "detail": d.Detail,
 			"total": d.Total, "done": d.Done, "failed": d.Failed,
 			"open": d.Open, "waiting": d.Waiting, "scheduled": d.Scheduled, "downloading": d.Downloading,

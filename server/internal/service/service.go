@@ -9,10 +9,10 @@ package service
 
 import (
 	"fmt"
-	"sync/atomic"
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"qawk/internal/artifact"
 	"qawk/internal/httpx"
@@ -33,13 +33,13 @@ func New(st *store.Store, art artifact.Store, log *slog.Logger) *Service {
 	return &Service{st: st, art: art, log: log}
 }
 
-func (s *Service) Store() *store.Store        { return s.st }
+func (s *Service) Store() *store.Store       { return s.st }
 func (s *Service) Artifacts() artifact.Store { return s.art }
 
 // SetDirectory gives the service who may sign in; the APIs authenticate
 // through it.
 func (s *Service) SetDirectory(d *users.Directory) { s.dir = d }
-func (s *Service) Directory() *users.Directory   { return s.dir }
+func (s *Service) Directory() *users.Directory     { return s.dir }
 
 // Leading: this instance runs the rollout engine, auto-assignment and fleets.
 func (s *Service) Leading() bool { return s.leading.Load() }

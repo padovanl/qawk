@@ -19,10 +19,12 @@ type TargetState struct {
 	DSType       *string
 	// what it was told to install and what it runs: name, version, type
 	Assigned, Installed *SetRef
-	ActionID            *int64
-	Active              bool
-	Statuses            []model.ActionStatus
-	Downloads           []model.Download
+	// the fleet it is in, and the colour the fleet is drawn in
+	Fleet, FleetColour *string
+	ActionID           *int64
+	Active             bool
+	Statuses           []model.ActionStatus
+	Downloads          []model.Download
 }
 
 // SetRef names a distribution set.
@@ -42,8 +44,10 @@ func (s *Store) TargetStates(ctx context.Context, ids []string, keep int) (map[s
 		       (SELECT y.type_key FROM distribution_sets d JOIN ds_types y ON y.id = d.type_id
 		        WHERE d.id = t.assigned_ds_id),
 		       la.id, coalesce(la.active, false),
-		       ad.id, ad.name, ad.version, ay.type_key, idd.id, idd.name, idd.version, iy.type_key
+		       ad.id, ad.name, ad.version, ay.type_key, idd.id, idd.name, idd.version, iy.type_key,
+		       fl.name, fl.colour
 		FROM targets t
+		LEFT JOIN fleets fl ON fl.id = t.fleet_id
 		LEFT JOIN distribution_sets ad ON ad.id = t.assigned_ds_id
 		LEFT JOIN ds_types ay ON ay.id = ad.type_id
 		LEFT JOIN distribution_sets idd ON idd.id = t.installed_ds_id
@@ -61,7 +65,7 @@ func (s *Store) TargetStates(ctx context.Context, ids []string, keep int) (map[s
 		var aID, iID *int64
 		var aN, aV, aT, iN, iV, iT *string
 		if err := rows.Scan(&st.ControllerID, &st.DSType, &st.ActionID, &st.Active,
-			&aID, &aN, &aV, &aT, &iID, &iN, &iV, &iT); err != nil {
+			&aID, &aN, &aV, &aT, &iID, &iN, &iV, &iT, &st.Fleet, &st.FleetColour); err != nil {
 			rows.Close()
 			return nil, err
 		}

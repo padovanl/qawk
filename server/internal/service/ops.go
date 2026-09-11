@@ -182,7 +182,7 @@ func (s *Service) RetryRollout(ctx context.Context, user string, id int64) (int6
 	return s.CreateRollout(ctx, user, RolloutDef{
 		Name: o.Name + "_retry", Description: o.Description, DSID: o.DSID,
 		TargetFilterQuery: "controllerId=in=(" + strings.Join(quoted, ",") + ")",
-		ActionType: o.ActionType, ForceTime: o.ForcedTime, Weight: o.Weight, AmountGroups: 1,
+		ActionType:        o.ActionType, ForceTime: o.ForcedTime, Weight: o.Weight, AmountGroups: 1,
 		ConfirmationRequired: o.ConfirmationRequired,
 	})
 }

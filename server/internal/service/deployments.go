@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"qawk/internal/model"
 	"qawk/internal/store"
@@ -14,7 +15,8 @@ import (
 // Qawk addition). The console's "In progress" is a list of these, read in one
 // request whatever the size of the fleet.
 type Ongoing struct {
-	Kind      string // fleet, rollout, manual
+	Kind      string // fleet, rollout, manual, system
+	Colour    string // a fleet's colour
 	Title     string
 	DSID      int64
 	DSLabel   string
@@ -88,7 +90,7 @@ func (s *Service) Deployments(ctx context.Context) ([]Ongoing, error) {
 		r := st.Release
 		switch {
 		case st.Pending != nil:
-			d := &Ongoing{Kind: "fleet", Title: f.Name, DSLabel: st.Pending.DSLabel, FleetID: &st.Fleet.ID,
+			d := &Ongoing{Kind: "fleet", Title: f.Name, Colour: deref(f.Colour), DSLabel: st.Pending.DSLabel, FleetID: &st.Fleet.ID,
 				Status: model.ReleasePending, Total: f.Members, Done: f.OnRelease, Since: st.Pending.RequestedAt,
 				Detail: fmt.Sprintf("waiting for approval, asked by %s", st.Pending.RequestedBy)}
 			if st.Pending.DSID != nil {
@@ -96,7 +98,7 @@ func (s *Service) Deployments(ctx context.Context) ([]Ongoing, error) {
 			}
 			out = append(out, d)
 		case r != nil && r.DSID != nil && (r.Status == model.ReleaseActive || r.Status == model.ReleaseHalted):
-			d := &Ongoing{Kind: "fleet", Title: f.Name, DSID: *r.DSID, DSLabel: r.DSLabel, FleetID: &st.Fleet.ID,
+			d := &Ongoing{Kind: "fleet", Title: f.Name, Colour: deref(f.Colour), DSID: *r.DSID, DSLabel: r.DSLabel, FleetID: &st.Fleet.ID,
 				Status: r.Status, Total: f.Members, Since: since(r)}
 			if p := st.Progress; p != nil {
 				d.Total, d.Done, d.Failed = p.Members, p.OnRelease, p.Failed
@@ -141,9 +143,46 @@ func (s *Service) Deployments(ctx context.Context) ([]Ongoing, error) {
 		}
 	}
 
+	// system deployments: how many of their systems are done
+	bySys := map[string]*Ongoing{}
+	if sds, err := s.st.SystemDeployments(ctx, []string{model.SDRunning, model.SDPaused}); err == nil {
+		for _, d := range sds {
+			runs, err := s.st.Runs(ctx, s.st.DB(), d.ID)
+			if err != nil {
+				continue
+			}
+			c := map[string]int64{}
+			for _, r := range runs {
+				c[r.Status]++
+			}
+			o := &Ongoing{Kind: "system", Title: d.Name, DSLabel: d.Manifest, Status: d.Status,
+				Total: int64(len(runs)), Done: c[model.RunSucceeded], Failed: c[model.RunRolledBack],
+				Detail: fmt.Sprintf("systems: %d updated, %d updating, %d rolling back, %d rolled back, %d waiting",
+					c[model.RunSucceeded], c[model.RunRunning], c[model.RunRollingBack], c[model.RunRolledBack],
+					c[model.RunPending])}
+			if d.StartedAt != nil {
+				o.Since = *d.StartedAt
+			}
+			bySys[d.Name] = o
+			out = append(out, o)
+		}
+	}
+	sysOf := func(g store.DeploymentGroup) *Ongoing {
+		for _, b := range g.By {
+			if n, ok := strings.CutPrefix(b, sysUser); ok {
+				if d := bySys[strings.TrimSuffix(n, " (rollback)")]; d != nil {
+					return d
+				}
+			}
+		}
+		return nil
+	}
+
 	byManual := map[int64]*Ongoing{}
 	for _, g := range groups {
 		switch {
+		case sysOf(g) != nil:
+			sysOf(g).add(g)
 		case g.RolloutID != nil && byRollout[*g.RolloutID] != nil:
 			byRollout[*g.RolloutID].add(g)
 		case g.FleetID != nil && byFleet[*g.FleetID] != nil && byFleet[*g.FleetID].DSID == g.DSID:
@@ -163,8 +202,8 @@ func (s *Service) Deployments(ctx context.Context) ([]Ongoing, error) {
 
 	// halted first, then what is moving, newest first
 	sort.SliceStable(out, func(i, j int) bool {
-		hi, hj := out[i].Status == model.ReleaseHalted || out[i].Status == "paused",
-			out[j].Status == model.ReleaseHalted || out[j].Status == "paused"
+		bad := func(s string) bool { return s == model.ReleaseHalted || s == "paused" || s == "rolling_back" }
+		hi, hj := bad(out[i].Status), bad(out[j].Status)
 		if hi != hj {
 			return hi
 		}

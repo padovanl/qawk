@@ -156,10 +156,10 @@ func (s *Service) CreateRollout(ctx context.Context, user string, d RolloutDef) 
 			grp := model.RolloutGroup{
 				RolloutID: id, Position: i, Name: g.Name, Description: g.Description, Status: model.GroupReady,
 				TargetFilterQuery: g.TargetFilterQuery, TargetPercentage: pct,
-				SuccessCondition: pick(g.SuccessCondition, d.SuccessCondition, model.Condition{Condition: "THRESHOLD", Expression: "100"}),
-				SuccessAction:    pick(g.SuccessAction, d.SuccessAction, model.Condition{Condition: "NEXTGROUP"}),
-				ErrorCondition:   pickPtr(g.ErrorCondition, d.ErrorCondition),
-				ErrorAction:      pickPtr(g.ErrorAction, d.ErrorAction),
+				SuccessCondition:     pick(g.SuccessCondition, d.SuccessCondition, model.Condition{Condition: "THRESHOLD", Expression: "100"}),
+				SuccessAction:        pick(g.SuccessAction, d.SuccessAction, model.Condition{Condition: "NEXTGROUP"}),
+				ErrorCondition:       pickPtr(g.ErrorCondition, d.ErrorCondition),
+				ErrorAction:          pickPtr(g.ErrorAction, d.ErrorAction),
 				ConfirmationRequired: g.ConfirmationRequired, TotalTargets: int64(len(chosen)),
 			}
 			if grp.Name == "" {

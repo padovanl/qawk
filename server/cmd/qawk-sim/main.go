@@ -18,6 +18,18 @@
 // comma-separated list; "broken" by default) fails, as does a random share
 // -fail-rate of the others; a device that fails says it rolled back.
 //
+// With -system name:count:component=n,... it runs systems instead -- a
+// bowling centre of lane computers and the terminals attached to them:
+//
+//	qawk-sim -token <t> -system center:16:st05=2,hyper=1,hd=6
+//
+// makes 16 systems, center-01 to center-16, each of 2 st05, 1 hyper and 6 hd;
+// every device reports device_type=<component> and center=<its system>, which
+// a system type matches (attribute.device_type==hd, key attribute.center).
+// -fail-where center=center-03,device_type=hyper makes the devices with those
+// attributes fail whatever they are given (repeatable); with set=2.0 among
+// them, only what names 2.0 -- a module name or version containing it.
+//
 // It runs until interrupted, or for -duration, and prints what the devices
 // did every ten seconds.
 package main
@@ -59,6 +71,38 @@ func (s *specs) Set(v string) error {
 	return nil
 }
 
+// sysSpec is a kind of system to simulate: name:count:component=n,...
+type sysSpec struct {
+	name  string
+	count int
+	comps [][2]string // component, how many
+}
+
+type sysSpecs []sysSpec
+
+func (s *sysSpecs) String() string { return fmt.Sprint(*s) }
+
+func (s *sysSpecs) Set(v string) error {
+	parts := strings.SplitN(v, ":", 3)
+	if len(parts) != 3 {
+		return fmt.Errorf("-system takes name:count:component=n,..., such as center:16:st05=2,hyper=1,hd=6")
+	}
+	n, err := strconv.Atoi(parts[1])
+	if err != nil || n < 1 {
+		return fmt.Errorf("-system: %q is not a count", parts[1])
+	}
+	sp := sysSpec{name: parts[0], count: n}
+	for _, c := range strings.Split(parts[2], ",") {
+		k, m, ok := strings.Cut(c, "=")
+		if _, err := strconv.Atoi(m); !ok || err != nil || k == "" {
+			return fmt.Errorf("-system: %q is not component=n", c)
+		}
+		sp.comps = append(sp.comps, [2]string{k, m})
+	}
+	*s = append(*s, sp)
+	return nil
+}
+
 type counters struct {
 	polls, errors, installing, succeeded, failed, canceled atomic.Int64
 }
@@ -77,6 +121,9 @@ type sim struct {
 type device struct {
 	id, ring string
 	s        *sim
+	attrs    map[string]string // reported besides the usual ones
+	doomed   bool              // fails whatever it is given (-fail-where)
+	failOn   []string          // fails what names one of these (-fail-where ...,set=)
 	busy     atomic.Bool
 	told     atomic.Bool // has sent its attributes
 	done     sync.Map    // deployment ids already answered
@@ -132,8 +179,14 @@ func (d *device) poll(ctx context.Context) {
 	// the server asks -- hawkBit does not ask a device that registered itself
 	// -- and again whenever it does.
 	if _, ok := r.Links["configData"]; ok || !d.told.Load() {
-		attrs, _ := json.Marshal(map[string]any{"mode": "merge", "data": map[string]string{
-			"device_type": "neo-sim", "sim": "true", "ring": d.ring, "os_version": "25.7.2", "slot": "A"}})
+		data := map[string]string{"device_type": "neo-sim", "sim": "true", "os_version": "25.7.2", "slot": "A"}
+		if d.ring != "" {
+			data["ring"] = d.ring
+		}
+		for k, v := range d.attrs {
+			data[k] = v
+		}
+		attrs, _ := json.Marshal(map[string]any{"mode": "merge", "data": data})
 		if code, _ := d.req(ctx, "PUT", root+"/configData", string(attrs)); code/100 == 2 {
 			d.told.Store(true)
 		}
@@ -222,7 +275,10 @@ func (d *device) install(ctx context.Context, root, id, what string) {
 	if !sleep(ctx, total*3/5) {
 		return
 	}
-	fail := rand.Float64() < d.s.failRate
+	fail := d.doomed || rand.Float64() < d.s.failRate
+	for _, m := range d.failOn {
+		fail = fail || strings.Contains(what, m)
+	}
 	for _, m := range d.s.fail {
 		if m != "" && strings.Contains(what, m) {
 			fail = true
@@ -254,10 +310,25 @@ func sleep(ctx context.Context, d time.Duration) bool {
 
 func main() {
 	var fleets specs
+	var systems sysSpecs
+	var failWhere []map[string]string
 	url := flag.String("url", "http://localhost:8080", "server")
 	tenant := flag.String("tenant", "DEFAULT", "tenant")
 	token := flag.String("token", os.Getenv("QAWK_GATEWAY_TOKEN"), "gateway token")
 	flag.Var(&fleets, "fleet", "name:count -- that many devices with ring=name (repeatable)")
+	flag.Var(&systems, "system", "name:count:component=n,... -- that many systems of those components (repeatable)")
+	flag.Func("fail-where", "key=value,... -- devices with those attributes fail everything (repeatable)", func(v string) error {
+		m := map[string]string{}
+		for _, kv := range strings.Split(v, ",") {
+			k, val, ok := strings.Cut(kv, "=")
+			if !ok {
+				return fmt.Errorf("-fail-where takes key=value,...")
+			}
+			m[k] = val
+		}
+		failWhere = append(failWhere, m)
+		return nil
+	})
 	prefix := flag.String("prefix", "sim", "controller ids are <prefix>-<fleet>-<n>")
 	interval := flag.Duration("interval", 10*time.Second, "polling interval of each device")
 	installMin := flag.Duration("install-min", 5*time.Second, "shortest pretend installation")
@@ -266,8 +337,8 @@ func main() {
 	failRate := flag.Float64("fail-rate", 0, "share of the other deployments that fail (0 to 1)")
 	duration := flag.Duration("duration", 0, "how long to run (0: until interrupted)")
 	flag.Parse()
-	if *token == "" || len(fleets) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: qawk-sim -token <gateway token> -fleet name:count [-fleet ...]")
+	if *token == "" || (len(fleets) == 0 && len(systems) == 0) {
+		fmt.Fprintln(os.Stderr, "usage: qawk-sim -token <gateway token> -fleet name:count [-fleet ...] | -system name:count:component=n,...")
 		os.Exit(2)
 	}
 
@@ -279,10 +350,41 @@ func main() {
 		defer cancel()
 	}
 
-	total := 0
+	var devices []*device
 	for _, f := range fleets {
-		total += f.n
+		for i := 1; i <= f.n; i++ {
+			devices = append(devices, &device{id: fmt.Sprintf("%s-%s-%03d", *prefix, f.name, i), ring: f.name})
+		}
 	}
+	for _, sp := range systems {
+		for c := 1; c <= sp.count; c++ {
+			key := fmt.Sprintf("%s-%02d", sp.name, c)
+			for _, comp := range sp.comps {
+				n, _ := strconv.Atoi(comp[1])
+				for i := 1; i <= n; i++ {
+					d := &device{id: fmt.Sprintf("%s-%s-%s-%d", *prefix, key, comp[0], i),
+						attrs: map[string]string{"device_type": comp[0], sp.name: key}}
+					for _, w := range failWhere {
+						match := true
+						for k, v := range w {
+							if k != "set" && d.attrs[k] != v {
+								match = false
+							}
+						}
+						switch {
+						case !match:
+						case w["set"] != "":
+							d.failOn = append(d.failOn, w["set"])
+						default:
+							d.doomed = true
+						}
+					}
+					devices = append(devices, d)
+				}
+			}
+		}
+	}
+	total := len(devices)
 	s := &sim{
 		client: &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{
 			MaxIdleConns: total, MaxIdleConnsPerHost: total, IdleConnTimeout: 90 * time.Second}},
@@ -290,28 +392,26 @@ func main() {
 		token: *token, installMin: *installMin, installMax: *installMax,
 		fail: strings.Split(*fail, ","), failRate: *failRate,
 	}
-	fmt.Printf("qawk-sim: %d devices (%s) on %s, polling every %v\n", total, fleets.String(), *url, *interval)
+	fmt.Printf("qawk-sim: %d devices (%s %s) on %s, polling every %v\n", total, fleets.String(), systems.String(), *url, *interval)
 
 	var wg sync.WaitGroup
-	for _, f := range fleets {
-		for i := 1; i <= f.n; i++ {
-			d := &device{id: fmt.Sprintf("%s-%s-%03d", *prefix, f.name, i), ring: f.name, s: s}
-			start := time.Duration(rand.Int63n(int64(*interval) + 1))
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				if !sleep(ctx, start) {
+	for _, d := range devices {
+		d.s = s
+		start := time.Duration(rand.Int63n(int64(*interval) + 1))
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if !sleep(ctx, start) {
+				return
+			}
+			for {
+				d.poll(ctx)
+				jitter := time.Duration(rand.Int63n(int64(*interval)/5 + 1))
+				if !sleep(ctx, *interval-*interval/10+jitter) {
 					return
 				}
-				for {
-					d.poll(ctx)
-					jitter := time.Duration(rand.Int63n(int64(*interval)/5 + 1))
-					if !sleep(ctx, *interval-*interval/10+jitter) {
-						return
-					}
-				}
-			}()
-		}
+			}
+		}()
 	}
 
 	done := make(chan struct{})

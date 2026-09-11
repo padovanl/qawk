@@ -42,8 +42,8 @@ func (d *Docs) build() {
 	})
 	d.docs = map[string][]byte{}
 	for name, src := range map[string][]byte{
-		"Management API":                     reference.ManagementAPI,
-		"Direct Device Integration API":      reference.DDIAPI,
+		"Management API":                reference.ManagementAPI,
+		"Direct Device Integration API": reference.DDIAPI,
 	} {
 		var doc map[string]any
 		if err := json.Unmarshal(src, &doc); err != nil {

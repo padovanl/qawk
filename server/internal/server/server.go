@@ -78,6 +78,7 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 	r.Use(keepSemicolons)
 	r.Use(middleware.Recoverer)
 	r.Use(requestLog(log, m))
+	r.Use(ddiGate(cfg.DBMaxConns))
 	// Prometheus: open, or behind QAWK_METRICS_TOKEN as a bearer token
 	r.Handle("/metrics", m.Handler(cfg.MetricsToken))
 
@@ -110,6 +111,38 @@ func (s *Server) Handler() http.Handler { return s.handler }
 
 // RunBackground runs the rollout engine and auto-assignment until ctx ends.
 func (s *Server) RunBackground(ctx context.Context) { s.svc.Run(ctx) }
+
+// ddiGate keeps a quarter of the database connections for everyone but the
+// devices.
+//
+// Ten thousand devices coming online together -- after a power cut, or a
+// crowd of simulated ones -- queue for the connection pool, and so did the
+// console: pgx hands connections out in turn, and a Fleets page asked for
+// behind thousands of polls waited 53 s. Now the device requests wait in a
+// queue of their own for three quarters of the pool; the Management API, the
+// console and the background engine always find a connection. Downloads are
+// not held back: they touch the database once and then stream a file.
+func ddiGate(conns int32) func(http.Handler) http.Handler {
+	keep := conns / 4
+	if keep < 1 {
+		keep = 1
+	}
+	slots := make(chan struct{}, conns-keep)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if metrics.Surface(r.URL.Path) != "ddi" || strings.Contains(r.URL.Path, "/artifacts/") {
+				next.ServeHTTP(w, r)
+				return
+			}
+			select {
+			case slots <- struct{}{}:
+				defer func() { <-slots }()
+				next.ServeHTTP(w, r)
+			case <-r.Context().Done():
+			}
+		})
+	}
+}
 
 // keepSemicolons protects FIQL's ";" (AND) in a query string.
 //

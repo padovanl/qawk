@@ -175,17 +175,17 @@ func (a *API) root(w http.ResponseWriter, r *http.Request) {
 // ------------------------------------------------------------- deployments
 
 type ddiArtifact struct {
-	Filename string            `json:"filename"`
-	Hashes   map[string]string `json:"hashes"`
-	Size     int64             `json:"size"`
+	Filename string                `json:"filename"`
+	Hashes   map[string]string     `json:"hashes"`
+	Size     int64                 `json:"size"`
 	Links    map[string]httpx.Link `json:"_links"`
 }
 
 type ddiChunk struct {
-	Part      string         `json:"part"`
-	Version   string         `json:"version"`
-	Name      string         `json:"name"`
-	Artifacts []ddiArtifact  `json:"artifacts"`
+	Part      string              `json:"part"`
+	Version   string              `json:"version"`
+	Name      string              `json:"name"`
+	Artifacts []ddiArtifact       `json:"artifacts"`
 	Metadata  []map[string]string `json:"metadata,omitempty"`
 }
 

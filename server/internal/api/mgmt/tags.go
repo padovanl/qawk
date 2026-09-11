@@ -209,7 +209,7 @@ func (a *API) members(w http.ResponseWriter, r *http.Request, kind store.TagKind
 		var s string
 		var n int64
 		var obj struct {
-			ControllerID string `json:"controllerId"`
+			ControllerID string   `json:"controllerId"`
 			ID           json_raw `json:"id"`
 		}
 		var key string

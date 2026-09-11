@@ -64,6 +64,9 @@ func (s *Service) lead(ctx context.Context, alive func(context.Context) bool) {
 			if err := s.tickFleets(ctx); err != nil && ctx.Err() == nil {
 				s.log.Warn("fleets", "err", err)
 			}
+			if err := s.tickSystems(ctx); err != nil && ctx.Err() == nil {
+				s.log.Warn("system deployments", "err", err)
+			}
 		}
 		if n%720 == 1 && s.dir != nil { // hourly
 			s.dir.PruneAudit(ctx)

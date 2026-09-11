@@ -71,11 +71,11 @@ func (a *API) listSets(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) createSets(w http.ResponseWriter, r *http.Request) {
 	var body []struct {
-		Name                  string   `json:"name"`
-		Version               string   `json:"version"`
-		Type                  string   `json:"type"`
-		Description           string   `json:"description"`
-		RequiredMigrationStep bool     `json:"requiredMigrationStep"`
+		Name                  string `json:"name"`
+		Version               string `json:"version"`
+		Type                  string `json:"type"`
+		Description           string `json:"description"`
+		RequiredMigrationStep bool   `json:"requiredMigrationStep"`
 		Modules               []struct {
 			ID int64 `json:"id"`
 		} `json:"modules"`
