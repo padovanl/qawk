@@ -34,7 +34,7 @@ try {
 /* --- 2. the view registry and the menu agree --------------------------- */
 const { VIEWS } = await import(JS + 'router.js');
 const ids = Object.keys(VIEWS).sort();
-ok('le viste si registrano da sole', ids.length === 14, ids.join(' '));
+ok('le viste si registrano da sole', ids.length === 15, ids.join(' '));
 const routerSrc = await readFile(JS + 'router.js', 'utf8');
 const navBlock = routerSrc.slice(routerSrc.indexOf('const NAV'), routerSrc.indexOf('];', routerSrc.indexOf('const NAV')));
 const navIds = [...navBlock.matchAll(/id: '([^']+)'/g)].map(m => m[1]);
@@ -51,8 +51,8 @@ ok('bytes legge le dimensioni', bytes(622000000).endsWith('MiB'), bytes(62200000
 const { pg, fiqlOf, pagedPath, filterRow } = await import(JS + 'table.js');
 const { cols, headsFor } = await import(JS + 'columns.js');
 const { pill, typePill } = await import(JS + 'badges.js');
-ok('le colonne di default esistono', cols('targets').length === 7, cols('targets').join(','));
-ok('le intestazioni seguono le colonne scelte', headsFor('targets', cols('targets')).length === 7);
+ok('le colonne di default esistono', cols('targets').length === 8, cols('targets').join(','));
+ok('le intestazioni seguono le colonne scelte', headsFor('targets', cols('targets')).length === 8);
 ok('i badge di tipo sono coerenti', typePill('os_app').className.includes('ty-both'));
 ok('i pill di stato prendono la classe', pill('in_sync', 'ok').className.includes('ok'));
 ok('pagedPath impagina', pagedPath('/targets', pg('targets'), '', 'id:DESC').includes('offset=0'));

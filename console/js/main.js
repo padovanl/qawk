@@ -14,6 +14,7 @@ import './views/filters.js';
 import './views/fleets.js';
 import './views/rollouts.js';
 import './views/sm.js';
+import './views/systems.js';
 import './views/tags.js';
 import './views/users.js';
 import './views/target-detail.js';
@@ -29,13 +30,13 @@ import { shortcutsDialog } from './views/about.js';
 
 $('#refresh').replaceChildren(icon('refresh', 14), 'refresh');
 $('#logout').replaceChildren(icon('exit', 14), h('span.lbl', 'exit'));
-for (const id of ['#theme', '#theme-login']) {
+for (const id of ['#theme']) {
   $(id).replaceChildren(...THEMES.map(([v, l]) =>
     h('option', { value: v, selected: v === theme() }, l)));
   $(id).onchange = e => {
     applyTheme(e.target.value);
     // Two pickers for one setting: keep the other honest.
-    for (const o of ['#theme', '#theme-login']) $(o).value = e.target.value;
+    $('#theme').value = e.target.value;
   };
 }
 $('#navtoggle').onclick = () => setCollapsed(!$('#app').classList.contains('collapsed'));

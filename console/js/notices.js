@@ -1,4 +1,5 @@
-import { S, enc, fiql, get, waiting } from './api.js';
+import { S, enc, fiql, get, qawk, waiting } from './api.js';
+import { serverInfo } from './server.js';
 import { toast } from './chrome.js';
 import { noticeOn } from './prefs.js';
 import { $, h, icon } from './dom.js';
@@ -26,7 +27,7 @@ import { drawNav, go } from './router.js';
  *      on screen that announces it. */
 /* Every toast raised by a watcher goes through here, so turning a kind off
    turns off all of it and not merely most of it. */
-const notify = (kind, ...args) => { if (noticeOn(kind)) toast(...args); };
+const notify = (kind, ...args) => (noticeOn(kind) ? toast(...args) : null);
 
 S.watched = new Map();      // actionId -> {target, label}
 S.offline = false;
@@ -88,48 +89,87 @@ function noteTargets(list) {
   }
 }
 
-/* EVERY deployment, not only the ones started from this tab.
+/* EVERY DEPLOYMENT, AS AN OPERATOR THINKS OF ONE -- not every action.
  *
- * S.watched above follows what this browser assigned. During a rollout, or
- * when someone else is driving, the interesting things happen elsewhere --
- * and a console that says nothing while the fleet moves is not much of a
- * console. This watches the server's own action list.
+ * This used to announce each new action: "Deployment started #4127" --
+ * nothing about which devices, which set or why -- and a wave of two thousand
+ * devices buried the screen in two thousand of them. Against Qawk it follows
+ * /qawk/v1/deployments instead: a fleet release, a rollout, a set assigned by
+ * hand, a system deployment, each announced once when it starts, again when
+ * its status changes (halted, paused, rolling back, waiting for approval),
+ * when more of its devices fail, and when it is done -- with what it is and
+ * how far it got. A click opens "In progress". Against hawkBit, one summary
+ * toast per look, never one per action.
  *
- * The first pass only records what is already there: announcing a deployment
- * that started before the page was opened would be noise, and on a busy server
- * it would be a wall of it. */
-S.actionsSeen = null;          // id -> active, or null before the first look
+ * The first look only records what is there: opening the page announces
+ * nothing. */
+S.deploySeen = null;
+S.actionsSeen = null;
+const fmtN = n => Number(n || 0).toLocaleString('en-US');
+const KIND_WORD = { fleet: 'fleet', rollout: 'rollout', manual: 'assigned by hand:', system: 'system deployment' };
+
+function openable(t) {
+  if (t) { t.style.cursor = 'pointer'; t.title = 'open In progress'; t.addEventListener('click', () => go('inprog')); }
+  return t;
+}
 
 async function deploymentsTick() {
   if (!S.auth) return;
+  if (((serverInfo() || {}).features || []).includes('deployments')) return deploymentsTickQawk();
   let list;
-  try {
-    list = await get('/actions?limit=25&sort=id:DESC');
-  } catch (_) { return; }
-
+  try { list = await get('/actions?limit=100&sort=id:DESC'); } catch (_) { return; }
   const now = new Map((list.content || []).map(a => [a.id, a]));
-  if (S.actionsSeen === null) {
-    S.actionsSeen = new Map([...now].map(([id, a]) => [id, a.active]));
-    return;
-  }
-
+  if (S.actionsSeen === null) { S.actionsSeen = new Map([...now].map(([id, a]) => [id, a.active])); return; }
+  let started = 0, finished = 0, failed = 0;
   for (const [id, a] of now) {
     const before = S.actionsSeen.get(id);
-    if (before === undefined) {
-      if (a.active) notify('deploy', 'Deployment started', `#${id} · ${a.type || 'update'}`, 'info', 6000);
-    } else if (before === true && a.active === false) {
-      // 'finished' only means it closed; a failure closes too, and the verdict
-      // is the last thing the device said.
-      const bad = ['error', 'canceled', 'cancel_rejected'].includes(String(a.status).toLowerCase());
-      notify('deploy', bad ? 'Deployment ' + a.status : 'Deployment finished',
-             `#${id}`, bad ? 'err' : 'ok', bad ? 20000 : 7000);
+    if (before === undefined && a.active) started++;
+    else if (before === true && a.active === false) {
+      if (['error', 'canceled', 'cancel_rejected'].includes(String(a.status).toLowerCase())) failed++; else finished++;
     }
     S.actionsSeen.set(id, a.active);
   }
-  // keep the map from growing for ever on a long-lived tab
-  if (S.actionsSeen.size > 400) {
-    S.actionsSeen = new Map([...S.actionsSeen].slice(-200));
+  if (started) notify('deploy', 'Deployments started', `${fmtN(started)} device${started === 1 ? '' : 's'} given an update`, 'info', 7000);
+  if (finished || failed) {
+    notify('deploy', failed ? 'Deployments closed, some failed' : 'Deployments finished',
+      `${fmtN(finished)} finished${failed ? `, ${fmtN(failed)} failed` : ''}`, failed ? 'err' : 'ok', failed ? 15000 : 7000);
   }
+  if (S.actionsSeen.size > 1000) S.actionsSeen = new Map([...S.actionsSeen].slice(-500));
+}
+
+async function deploymentsTickQawk() {
+  let list;
+  try { list = (await qawk.get('/deployments')).content || []; } catch (_) { return; }
+  const key = d => `${d.kind}|${d.title}|${d.distributionSet}`;
+  const now = new Map(list.map(d => [key(d), d]));
+  if (S.deploySeen === null) { S.deploySeen = now; return; }
+  const what = d => `${KIND_WORD[d.kind] || d.kind} ${d.title}`
+    + (d.kind !== 'manual' && d.distributionSet ? ` · ${d.distributionSet}` : '');
+  for (const [k, d] of now) {
+    const was = S.deploySeen.get(k);
+    if (!was) {
+      openable(notify('deploy', d.status === 'waiting_for_approval' ? 'Waiting for approval' : 'Started',
+        `${what(d)} — ${fmtN(d.total)} device${d.total === 1 ? '' : 's'}`
+        + (d.detail && d.status === 'waiting_for_approval' ? ` (${d.detail})` : ''),
+        d.status === 'waiting_for_approval' ? 'warn' : 'info', 9000));
+      continue;
+    }
+    if (was.status !== d.status) {
+      const bad = ['halted', 'paused', 'rolling_back', 'failed'].includes(d.status);
+      openable(notify('deploy', bad ? `${what(d)}: ${String(d.status).replace(/_/g, ' ')}` : `Now ${String(d.status).replace(/_/g, ' ')}`,
+        bad ? (d.detail || '').split('\n').pop() : what(d), bad ? 'err' : 'info', bad ? 30000 : 8000));
+    }
+    if ((d.failed || 0) > (was.failed || 0)) {
+      openable(notify('deploy', `${fmtN(d.failed - was.failed)} more failed`,
+        `${what(d)} — ${fmtN(d.failed)} of ${fmtN(d.total)} failed so far`, 'err', 15000));
+    }
+  }
+  for (const [k, was] of S.deploySeen) {
+    if (now.has(k)) continue;
+    openable(notify('deploy', 'Done', `${what(was)} — ${fmtN(was.done)} of ${fmtN(was.total)} on it`
+      + (was.failed ? `, ${fmtN(was.failed)} failed` : ''), was.failed ? 'warn' : 'ok', 9000));
+  }
+  S.deploySeen = now;
 }
 
 /* THE CATALOGUE FILLING UP, from wherever it is being filled.

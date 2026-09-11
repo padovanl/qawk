@@ -1,10 +1,11 @@
 import { S, del, enc, get, post, put } from '../api.js';
 import { actionPill, pill } from '../badges.js';
+import { hasBatch, statesOf } from '../batch.js';
 import { ask, closeDrawer, drawer, fail, toast } from '../chrome.js';
 import { loadAssignedInstalled } from '../columns.js';
 import { $, h, icon } from '../dom.js';
 import { toggle } from '../inputs.js';
-import { render } from '../router.js';
+import { go, render } from '../router.js';
 import { ago, download, when } from '../util.js';
 import { assignDialog } from './deploy.js';
 import { newTagDialog } from './tags.js';
@@ -75,8 +76,20 @@ async function openTarget(id) {
 function overviewPane(t, attrs, autoc, id) {
   const dsBox = h('span.faint', '…');
   loadAssignedInstalled(t.controllerId, dsBox);
+  // Its fleet, in the fleet's colour (Qawk): a click shows the fleet's devices.
+  const fleetBox = h('span.faint', hasBatch() ? '…' : '—');
+  if (hasBatch()) {
+    statesOf([t.controllerId]).then(m => {
+      const f = (m.get(t.controllerId) || {}).fleet;
+      fleetBox.replaceChildren(f
+        ? h('span.flex', { style: 'gap:6px;cursor:pointer', title: 'its fleet\'s devices',
+            onclick: () => { closeDrawer(); S.fleet = f.name; S.status = ''; S.q = ''; go('targets'); } },
+          h('span.swatch-dot', { style: `--sw:${f.colour || '#8b8f98'}` }), h('b', f.name))
+        : 'none');
+    }).catch(() => { fleetBox.textContent = '—'; });
+  }
   const kv = [
-    ['controller id', t.controllerId], ['name', t.name],
+    ['controller id', t.controllerId], ['name', t.name], ['fleet', fleetBox],
     ['description', t.description || '—'], ['status', t.updateStatus],
     ['ip', t.ipAddress || '—'], ['security token', t.securityToken || '—'],
     ['last poll', `${when(t.lastControllerRequestAt)}  (${ago(t.lastControllerRequestAt)})`],

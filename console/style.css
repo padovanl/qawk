@@ -1336,3 +1336,47 @@ pre.cmd {
 .notice-row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
 .notice-row > label { flex: 0 0 auto; min-width: 210px; }
 .notice-row > .faint { font-size: 12px; }
+
+
+/* THE SIGN-IN PAGE HAS ONE LOOK OF ITS OWN.
+ *
+ * It followed the chosen theme, which it could only learn once the script had
+ * run: every load drew it in the default theme and then redrew it in the
+ * chosen one. It no longer asks. Its palette is set here, on #login itself,
+ * so every rule below that reads a variable reads these, whatever theme the
+ * console is in. */
+#login {
+  --bg: #080b12; --bg-2: #0f1420; --bg-3: #171e2e; --line: #252e44;
+  --fg: #eef2f8; --fg-dim: #c7cfdc; --fg-faint: #8c97aa;
+  --accent: #2fb3a8; --accent-2: #6fdad0; --err: #ff6b6b; --info: #7aa7ff;
+  color-scheme: dark;
+  color: var(--fg);
+  min-height: 100vh;
+  background:
+    radial-gradient(900px 520px at 12% -8%, rgba(47, 179, 168, .28), transparent 62%),
+    radial-gradient(760px 520px at 108% 112%, rgba(110, 86, 255, .22), transparent 60%),
+    radial-gradient(520px 320px at 85% 8%, rgba(122, 167, 255, .10), transparent 70%),
+    #080b12;
+}
+#login .login-glow { opacity: .55; }
+#login form {
+  background: linear-gradient(180deg, rgba(23, 30, 46, .82), rgba(15, 20, 32, .86));
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 18px;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .05);
+  backdrop-filter: blur(16px);
+}
+#login h1 { font-size: 23px; font-weight: 650; letter-spacing: -.4px; color: #fff; }
+#login .sub { color: var(--fg-faint); letter-spacing: .6px; text-transform: uppercase; font-size: 11px; }
+#login input {
+  background: rgba(255, 255, 255, .04); border-color: rgba(255, 255, 255, .10); color: var(--fg);
+}
+#login input::placeholder { color: #5d6778; }
+#login input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47, 179, 168, .22); }
+#login .btn.primary.lg {
+  background: linear-gradient(135deg, #2fb3a8 0%, #3f8cff 100%); border: 0; color: #fff; font-weight: 650;
+  box-shadow: 0 10px 28px rgba(47, 140, 200, .35);
+}
+#login .btn.primary.lg:hover:not(:disabled) { filter: brightness(1.08); color: #fff; }
+#login .login-foot { justify-content: center; text-align: center; }
+#login .login-foot p { color: #6f7a8d; }

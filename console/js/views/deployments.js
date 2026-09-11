@@ -15,11 +15,13 @@ import { ago } from '../util.js';
  * Clicking one opens its devices. */
 const has = () => ((serverInfo() || {}).features || []).includes('deployments');
 const fmt = n => Number(n || 0).toLocaleString('en-US');
-const KIND = { fleet: ['fleet', 'fleet release'], rollout: ['rollout', 'rollout'], manual: ['deploy', 'assigned by hand'] };
+const KIND = { fleet: ['fleet', 'fleet release'], rollout: ['rollout', 'rollout'], manual: ['deploy', 'assigned by hand'],
+  system: ['box', 'system deployment'] };
 
 function open(d, status) {
   S.q = ''; S.fleet = ''; S.status = status || '';
   if (d.kind === 'rollout') { go('ro'); return; }
+  if (d.kind === 'system') { go('systems'); return; }
   if (d.kind === 'fleet') S.fleet = d.title;
   else S.q = `assignedds.id==${d.distributionSetId}`;
   go('targets');
@@ -40,7 +42,8 @@ function row(d, compact) {
     onclick: () => open(d),
   },
   h('div.flex', { style: 'justify-content:space-between;gap:8px;flex-wrap:wrap' },
-    h('span.flex', { style: 'gap:8px;flex-wrap:wrap' }, icon(KIND[d.kind][0], 15), h('b', d.title),
+    h('span.flex', { style: 'gap:8px;flex-wrap:wrap' }, icon(KIND[d.kind][0], 15),
+      d.colour ? h('span.swatch-dot', { style: `--sw:${d.colour}` }) : null, h('b', d.title),
       h('span.faint', KIND[d.kind][1]),
       d.distributionSet && d.kind !== 'manual' ? h('span.pill.ok', d.distributionSet) : null,
       h('span.pill' + stCls, String(d.status).replace(/_/g, ' '))),
@@ -64,7 +67,10 @@ function row(d, compact) {
 // The dashboard's panel: the first few, and a way to all of them.
 async function inProgressPanel(max) {
   if (!has()) return null;
-  const list = (await qawk.get('/deployments')).content || [];
+  return inProgressPanelFrom((await qawk.get('/deployments')).content || [], max);
+}
+
+function inProgressPanelFrom(list, max) {
   return h('div.panel',
     h('h3', 'In progress', list.length > max
       ? h('button.btn.sm.ghost', { style: 'float:right', onclick: () => go('inprog') }, `all ${list.length}`) : null),
@@ -96,4 +102,4 @@ VIEWS.inprog = {
   },
 };
 
-export { inProgressPanel };
+export { KIND, has as hasDeployments, inProgressPanel, inProgressPanelFrom };

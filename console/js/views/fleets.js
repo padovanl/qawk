@@ -44,22 +44,33 @@ VIEWS.fleets = {
   },
 };
 
-/* The chains, each on its own line, then the fleets that stand alone. */
+/* The chains, each on its own line, then their branches -- a fleet taking
+ * releases from one that already has a follower (dev -> qa beside dev ->
+ * beta) -- each followed to its end and saying where it hangs from. */
 function lanes(fleets) {
   const byId = new Map(fleets.map(f => [f.id, f]));
-  const children = id => fleets.filter(f => f.upstreamId === id);
   const lines = [], seen = new Set();
-  for (const root of fleets.filter(f => !f.upstreamId || !byId.has(f.upstreamId))) {
+  const follow = start => {
     const line = [];
-    for (let f = root; f && !seen.has(f.id); f = children(f.id)[0]) { line.push(f); seen.add(f.id); }
-    lines.push(line);
-  }
-  for (const f of fleets) if (!seen.has(f.id)) lines.push([f]);   // a second branch
+    for (let f = start; f && !seen.has(f.id);
+      f = fleets.find(c => c.upstreamId === f.id && !seen.has(c.id))) { line.push(f); seen.add(f.id); }
+    return line;
+  };
+  for (const root of fleets.filter(f => !f.upstreamId || !byId.has(f.upstreamId))) lines.push(follow(root));
   lines.sort((a, b) => (b.length - a.length) || (a[0].temporary - b[0].temporary));
-  return h('div.stack', lines.map(line => h('div', {
-    style: 'display:flex;flex-wrap:wrap;gap:10px;align-items:stretch' },
-  line.flatMap((f, i) => [i ? h('div', { style: 'align-self:center;font-size:22px;opacity:.5' }, '→') : null,
-    card(f, fleets)]))));
+  for (let more = true; more;) {
+    more = false;
+    for (const f of fleets) if (!seen.has(f.id) && seen.has(f.upstreamId)) { lines.push(follow(f)); more = true; }
+  }
+  return h('div.stack', lines.map(line => {
+    const from = byId.get(line[0].upstreamId);
+    return h('div', { style: 'display:flex;flex-wrap:wrap;gap:10px;align-items:stretch' },
+      from ? h('div.faint', { style: 'align-self:center;display:flex;gap:6px;align-items:center;font-size:12px' },
+        '↳ from', h('span.swatch-dot', { style: `--sw:${from.colour || '#8b8f98'}` }), h('b', from.name),
+        h('span', { style: 'font-size:22px;opacity:.5' }, '→')) : null,
+      line.flatMap((f, i) => [i ? h('div', { style: 'align-self:center;font-size:22px;opacity:.5' }, '→') : null,
+        card(f, fleets)]));
+  }));
 }
 
 function statusPill(r) {
@@ -111,6 +122,8 @@ function card(f, fleets) {
       f.freeze ? h('button.btn.sm', { onclick: () => thaw(f) }, 'thaw') : h('button.btn.sm', { onclick: () => freezeDialog(f) }, 'freeze'),
       f.temporary ? h('button.btn.sm', { onclick: () => sendHome(f) }, 'send devices home') : null,
       h('button.btn.sm', { onclick: () => fleetDialog(f, fleets) }, 'edit'),
+      f.temporary ? null : h('button.btn.sm', { title: 'a new fleet that takes its releases from this one',
+        onclick: () => fleetDialog(null, fleets, { upstreamId: f.id }) }, icon('plus', 13), 'next'),
       h('button.btn.sm.danger', { onclick: async () => {
           if (!await ask('Delete fleet', `${f.name}\nIts ${f.members} devices stay, in no fleet.`, { danger: true })) return;
           try { await qawk.del('/fleets/' + f.id); render(); } catch (e) { fail(e); } } }, 'delete')));
@@ -225,9 +238,10 @@ async function sendHome(f, ids) {
   } catch (e) { fail(e); }
 }
 
-async function fleetDialog(existing, fleets) {
-  const f = existing || { gate: { minDevices: 1, minSuccess: 100, soakMinutes: 0, approvalRequired: false },
-    wavePercent: 0, waveTimeoutMinutes: 60, errorThreshold: 0, actionType: 'forced' };
+// preset: what a new fleet starts with -- "next" on a card presets its upstream.
+async function fleetDialog(existing, fleets, preset = {}) {
+  const f = existing || Object.assign({ gate: { minDevices: 1, minSuccess: 100, soakMinutes: 0, approvalRequired: false },
+    wavePercent: 0, waveTimeoutMinutes: 60, errorThreshold: 0, actionType: 'forced' }, preset);
   const num = (v, min, max) => h('input', { type: 'number', value: v, min, max, style: 'width:90px' });
   const name = h('input', { type: 'text', value: f.name || '' });
   const desc = h('input', { type: 'text', value: f.description || '' });

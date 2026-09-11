@@ -9,6 +9,11 @@
 <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
 <link rel="icon" type="image/png" href="favicon.png" sizes="64x64">
 <link rel="apple-touch-icon" href="favicon.png">
+<script>
+  /* the chosen theme before anything is drawn: set by a module, it arrived a
+     frame late and the page flashed in the default one first */
+  try { var t = localStorage.getItem('hb-theme'); if (t && t !== 'auto') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 </head>
 <body>
 
@@ -18,7 +23,7 @@
   <form id="login-form">
     <div class="login-head">
       <div class="logo-tile"><img src="logo.png" alt="QubicaAMF" class="logo-big"></div>
-      <h1>hawkBit console</h1>
+      <h1>Update console</h1>
       <p class="sub">QubicaAMF · over-the-air updates</p>
     </div>
 
@@ -39,12 +44,7 @@
     <p id="login-err" class="hidden banner-err"></p>
 
     <div class="login-foot">
-      <p>Credentials are held in this tab only and sent straight to hawkBit.
-         Nothing is stored on the server side.</p>
-      <label class="flex" title="colour theme">
-        <span class="lbl">theme</span>
-        <select id="theme-login"></select>
-      </label>
+      <p>Credentials stay in this tab and go straight to the update server.</p>
     </div>
   </form>
 </section>

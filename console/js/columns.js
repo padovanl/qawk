@@ -46,12 +46,19 @@ const T_COLS = {
   nextPoll:     { label: 'Next', cell: t => t.pollStatus && t.pollStatus.overdue
                     ? h('span.pill.warn.pulse', 'overdue')
                     : h('span.faint.nowrap', t.pollStatus ? ago(t.pollStatus.nextExpectedRequestAt) : '—') },
+  // the fleet, in its own colour -- the same dot as on the Fleets page and
+  // the Targets quick filters (Qawk; read with the page's batch)
+  fleet:        { label: 'Fleet', cell: t => {
+    const f = FLEET_OF.get(t.controllerId);
+    return f ? h('span.flex', { style: 'gap:6px;white-space:nowrap' },
+      h('span.swatch-dot', { style: `--sw:${f.colour || '#8b8f98'}` }), f.name) : h('span.faint', '—');
+  } },
   ip:           { label: 'IP', cell: t => h('span.mono.faint', t.ipAddress || '—') },
   targetType:   { label: 'Type', cell: t => h('span.dim', (t.targetType && (t.targetType.name || t.targetType)) || '—') },
   created:      { label: 'Registered', s: 'createdAt', cell: t => h('span.faint.nowrap', when(t.createdAt)) },
   security:     { label: 'Token', cell: t => h('span.mono.faint', t.securityToken || '—') },
 };
-const T_COLS_DEFAULT = ['controllerId', 'name', 'status', 'ds', 'lastPoll', 'nextPoll', 'ip'];
+const T_COLS_DEFAULT = ['controllerId', 'name', 'fleet', 'status', 'ds', 'lastPoll', 'nextPoll', 'ip'];
 
 const D_COLS = {
   id:      { label: 'Id', s: 'id', cell: x => h('span.mono', x.id) },
@@ -162,6 +169,7 @@ async function deltaBase(smId) {
    order instead of racing. */
 const PHASES = new Map();
 const aiFresh = new Map();   // controllerId -> {a, i, at}: read with the page's batch
+const FLEET_OF = new Map();  // controllerId -> {name, colour}: read with the page's batch
 async function loadPhases(targets) {
   PHASES.clear();
   const list = targets || [];
@@ -177,6 +185,7 @@ async function loadPhases(targets) {
         const s = st.get(t.controllerId);
         if (!s) continue;
         aiFresh.set(t.controllerId, { a: s.assigned, i: s.installed, at: now });
+        if (s.fleet) FLEET_OF.set(t.controllerId, s.fleet); else FLEET_OF.delete(t.controllerId);
         if (t.updateStatus === 'pending') {
           const ph = phaseFromState(s);
           if (ph) PHASES.set(t.controllerId, ph);

@@ -14,6 +14,7 @@ const NAV = [
   { sep: 'Fleet' },
   { id: 'targets', label: 'Targets', count: 'targets', ico: 'target' },
   { id: 'fleets', label: 'Fleets', ico: 'fleet', feature: 'fleets' },
+  { id: 'systems', label: 'Systems', ico: 'box', feature: 'systems' },
   { id: 'filters', label: 'Filters', ico: 'filter' },
   { id: 'tags', label: 'Tags', ico: 'tag' },
   { id: 'ro', label: 'Rollouts', count: 'ro', ico: 'rollout' },
