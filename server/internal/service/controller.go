@@ -40,6 +40,17 @@ type PollResult struct {
 func (s *Service) Poll(ctx context.Context, controllerID string, address *string) (PollResult, error) {
 	var res PollResult
 	err := s.st.Tx(ctx, PlugAndPlay, func(tx pgx.Tx, now int64) error {
+		// A poll writes only when the device was last seen, from where, and --
+		// the first time -- that it exists. None of it is worth waiting for the
+		// disk: with thousands of devices a commit that waits for its fsync is
+		// a thousand fsyncs a minute, and on a busy disk every poll waited for
+		// all of them (measured: 20-second stalls at 170 polls a second). Lost
+		// in a crash, it is written again at the next poll. hawkBit, too,
+		// writes poll times in the background. Everything else commits
+		// synchronously as before.
+		if _, err := tx.Exec(ctx, "SET LOCAL synchronous_commit TO OFF"); err != nil {
+			return err
+		}
 		t, err := s.st.Target(ctx, tx, controllerID)
 		var nf *httpx.Error
 		if errors.As(err, &nf) && nf.Status == 404 {

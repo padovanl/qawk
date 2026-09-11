@@ -533,12 +533,39 @@ What makes that work:
   request.
 - **Rows a device and an operator both change are locked in order.** A
   report and an assignment on the same target cannot interleave.
+- **A poll does not wait for the disk.** What it writes — when the device was
+  last seen, from where, and the first time that it exists — is committed
+  with `synchronous_commit = off`: lost in a crash, it is written again at
+  the next poll. Everything else (assignments, reports, releases) commits
+  synchronously. Without this, each poll waited for its own fsync, and on a
+  busy disk ten thousand devices meant twenty-second stalls.
 
 For more than one instance the artifacts must be shared: a volume every
 instance mounts (ReadWriteMany), or — planned — an S3-compatible store.
 
-Kubernetes manifests, and a load test that simulates the fleet and records
-what it measured, are the next step of this work.
+**Measured** with `qawk-load` — ten thousand simulated devices, each polling
+with the gateway token, answering config requests and installing what they
+are given — against one Qawk instance with the default pool of 20
+connections and PostgreSQL 16 in a container, on a lab machine whose disk
+was busy with other builds (Linux reported 17–21% of the time stalled on
+I/O during the runs):
+
+| Devices | Polling every | Requests | p50 | p99 | Max | Errors | Server time, mean |
+|---|---|---|---|---|---|---|---|
+| 10,000 | 60 s | 167/s | 1 ms | 2 ms | 1.1 s | 0 of 39,995 | 3.0 ms |
+| 10,000 | 30 s | 333/s | 1 ms | 2 ms | 1.2 s | 0 of 69,994 | 2.1 ms |
+| 10,000 | 60 s, *before* the asynchronous poll commit | 162/s | 841 ms | 23.4 s | 25.6 s | 0 of 38,941 | 4.4 s |
+
+The rare one-second maximum is the disk's; the process itself sat below
+200 MiB of memory. Row 22 of the device demonstration puts ten thousand
+devices behind the real console and moves a release through them; the
+Kubernetes manifests are in `deploy/kubernetes/`. To run the load test:
+
+```bash
+docker run --rm --network host --ulimit nofile=65536:65536 --entrypoint qawk-load \
+    qawk:local -url http://localhost:8080 -token <gateway token> \
+    -devices 10000 -interval 30s -ramp 30s -duration 180s -act
+```
 
 ---
 
