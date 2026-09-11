@@ -223,6 +223,11 @@ component_types:
         check("a system can be rolled back by hand", st == 200, st)
         back = until(lambda: installed(f"s{R}-{SYS}-01-6hd-1") == f"{comps['6hd']}:1.0", 120, 3)
         check("and its devices go back to 1.0", bool(back), installed(f"s{R}-{SYS}-01-6hd-1"))
+        # the deployment was over: it still follows that rollback to its end
+        end = until(lambda: (lambda d: d["counts"].get("rolling_back", 0) == 0 and d)(sd(d2)), 120, 3) or sd(d2)
+        check("the finished deployment follows the rollback to its end, and says so",
+              end["counts"].get("rolled_back") == 2 and "2 rolled back" in end["reason"],
+              f"{end['counts']} {end['reason']}")
         check("In progress showed the 2.0 deployment while it ran", shown)
     finally:
         subprocess.run(["docker", "rm", "-f", SIM], capture_output=True)

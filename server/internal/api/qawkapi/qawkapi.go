@@ -22,7 +22,7 @@ import (
 
 // Features is what /qawk/v1/info announces. The console turns a feature on
 // only when its name is here.
-var Features = []string{"download-progress", "fleets", "users", "tokens", "audit", "pipeline", "metrics", "batch", "deployments", "systems"}
+var Features = []string{"download-progress", "fleets", "users", "tokens", "audit", "pipeline", "metrics", "batch", "deployments", "systems", "centres"}
 
 type API struct {
 	svc     *service.Service
@@ -46,6 +46,7 @@ func (a *API) Routes(r chi.Router) {
 			r.With(auth.Require("READ_TARGET")).Get("/actions/{actionId}/downloads", a.actionDownloads)
 			a.fleetRoutes(r)
 			a.systemRoutes(r)
+			a.centreRoutes(r)
 			// one request for a page of targets, one for what is going on
 			r.With(auth.Require("READ_TARGET")).Get("/targets/state", a.targetStates)
 			r.With(auth.Require("READ_TARGET")).Get("/targets/attributes", a.targetAttributes)

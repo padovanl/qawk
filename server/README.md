@@ -276,6 +276,7 @@ directly.
 | Prometheus metrics at `/metrics`: requests and latency by API, targets by status, open actions, each fleet's progress, halted and pending releases, the leader, the database pool (see below) | done |
 | The release pipeline: upstreams, gates, four-eyes approval, waves, error thresholds, freezes, temporary fleets; `qawk-sim` for simulated devices | done |
 | Systems, after Mender Orchestrator: devices that work together (a 6hd and the two st05 and the hyper under it) updated as a whole, components in order, the whole system rolled back when one device fails; Mender's topology and manifest YAML in and out (see below) | done |
+| Centres: a device says its centre (`attribute.centerid`), a centre is in a channel, and every device of it follows; system deployments by channel and centre (see below) | done |
 | Every open deployment in one request (`/qawk/v1/deployments`), and a page's worth of target state in one (`/qawk/v1/targets/state`, `/qawk/v1/targets/attributes`) | done |
 | Artifacts in an S3-compatible object store | planned |
 
@@ -341,6 +342,16 @@ answers `202` and waits in the queue (`GET /qawk/v1/releases?status=waiting_for_
 until someone with `APPROVE_ROLLOUT` **other than who asked** approves it (four
 eyes) or denies it. The built-in role `release-manager` is an operator who can
 approve and force.
+
+**By hand, or by itself.** By default a fleet is promoted **by hand**: the gate
+does not promote anything, it only says whether someone may — a person looks
+at it, decides, and promotes (from the console or the API). A fleet can
+instead be set to **promote itself** (`"autoPromote": true`, "Promotion from
+it: by itself" in the console): as soon as its gate opens, the engine
+promotes it, as user `system`, through the same path — the same gate, the
+approval when the fleet asks for one (anyone may approve what `system`
+asked for), the history and the audit log. It asks once per release of its
+upstream: a promotion approved or denied is not asked for again.
 
 Inside a fleet a release goes out in **waves**: `wavePercent` of the members
 at a time (0: all at once); the next wave when the last has finished, or
@@ -474,6 +485,49 @@ types are targets (`READ_TARGET`, `CREATE_TARGET`...), manifests and
 deployments are rollouts (`CREATE_ROLLOUT`, `HANDLE_ROLLOUT`...). The console
 has a Systems page for all of it. `qawk-sim -system 6hd:16:6hd=1,st05=2,hyper=1`
 runs such systems; `test/systems.py` is the end-to-end test.
+
+### Centres, channels, and systems by channel
+
+A device says which centre it is in — `attribute.centerid` by default, a
+setting (`PUT /qawk/v1/centres/settings {"field": "metadata.site"}`). A
+**centre is put in a channel**, and every device of it follows: the 6hd with
+its st05 and hyper, and the neo-intel alike. Moving a centre from beta to prod
+moves all its devices, and they get what prod gets.
+
+- The engine checks every few seconds and moves the devices that are not in
+  their centre's channel, a hundred per transaction.
+- A single machine taken to a trade show is **lent to a temporary channel**
+  (expo) from Fleets → manage; it stays there until it is sent home. Moving
+  one device of a centre by hand into another, not temporary, channel is
+  refused: its centre would take it back within seconds.
+- A centre cannot be put in a temporary channel: a device is lent, not a
+  centre.
+- Devices with no centre, or in a centre not put anywhere, keep the old
+  rules: a fleet's rule, or by hand.
+
+**Channels and systems.** A channel's release is one set for every member,
+which a 6hd and the st05 under it cannot share. So a device that is part of a
+system is **updated by system deployments, not by its channel's release**:
+the release skips it, and the channel's progress, gates and waves count
+without it (the Fleets page says how many of a channel's devices are in
+systems). A system deployment takes a **channel** and, optionally, some
+**centres**: only the systems whose devices are all in that channel, in
+those centres. A system whose devices are in different channels is left out,
+and the deployment says so. Inside each system the manifest's order holds
+(hyper, then st05, then the 6hd, say), and a system that fails goes back on
+its own; the rest of the channel goes on.
+
+| | |
+|---|---|
+| `GET /qawk/v1/centres` | every centre the devices name or that was put somewhere: its channel, its devices, how many are in its channel |
+| `PUT /qawk/v1/centres` `{"centres": ["c01","c02"], "fleetId": 3}` | put centres in a channel (`0`: in none); their devices follow |
+| `PUT /qawk/v1/centres/settings` `{"field": "attribute.centerid"}` | where the devices say their centre |
+| `POST /qawk/v1/systemdeployments` `{..., "fleetId": 3, "groups": ["c03"]}` | a system deployment over one channel, some centres |
+
+A system type's centre is the centre field unless the type names another
+(`groupKey`, or `qawk_group_key` in the topology YAML). `qawk-sim -system
+6hd:16:6hd=1,st05=2,hyper=1:centers=4:ring=prod` shares simulated systems
+out among four centres; `test/centres.py` is the end-to-end test.
 
 ### OpenTelemetry
 
@@ -689,6 +743,13 @@ python3 ota/qawk/test/scheduled.py http://localhost:18080
 # systems: Mender YAML in and out, systems found, orders, maxParallel,
 # a whole system rolled back, maxFailed, rollback by hand
 python3 ota/qawk/test/systems.py http://localhost:18080
+
+# centres in channels, devices following their centre, a device lent to a
+# temporary channel, releases leaving systems alone, deployments by channel
+python3 ota/qawk/test/centres.py http://localhost:18080
+
+# promotion by hand (the default), by itself, by itself with approval
+python3 ota/qawk/test/autopromote.py http://localhost:18080
 ```
 
 The console's own live tests (`ota/hawkbit-ui/test/*-live.mjs`) run against

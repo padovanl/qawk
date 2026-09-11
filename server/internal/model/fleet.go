@@ -39,6 +39,11 @@ type Fleet struct {
 	OnRelease int64 // installed the fleet's release
 	Updating  int64 // an action open
 	Failed    int64 // update status error
+	InSystems int64 // members that are part of a system: system deployments update them
+
+	// AutoPromote: promoted by the engine as soon as its gate opens. False
+	// (the default): by hand, when someone decides.
+	AutoPromote bool
 }
 
 // Gate is what a fleet's upstream must show before a release may enter it.

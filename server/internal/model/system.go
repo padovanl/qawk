@@ -25,6 +25,7 @@ type SystemType struct {
 	Name        string
 	Description string
 	KeyField    string // attribute.<key> or metadata.<key>
+	GroupField  string // the same, saying which centre a system is in; "" none
 	Components  []SystemComponent
 	Audit
 }
@@ -59,6 +60,9 @@ type SystemDeployment struct {
 	ManifestID  int64
 	Manifest    string
 	Systems     []string // nil: every system of the type
+	FleetID     *int64   // only systems whose devices are all in this fleet (channel)
+	Fleet       *string
+	Groups      []string // only systems in these groups (centres); nil: any
 	MaxParallel int
 	MaxFailed   int
 	ActionType  string

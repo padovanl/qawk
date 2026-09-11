@@ -56,7 +56,7 @@ func systemTypeJSON(t model.SystemType) map[string]any {
 		comps = append(comps, map[string]any{"componentType": c.ComponentType, "match": c.Match})
 	}
 	return map[string]any{"id": t.ID, "name": t.Name, "description": t.Description, "systemKey": t.KeyField,
-		"components": comps, "createdAt": t.CreatedAt, "createdBy": t.CreatedBy,
+		"groupKey": t.GroupField, "components": comps, "createdAt": t.CreatedAt, "createdBy": t.CreatedBy,
 		"lastModifiedAt": t.LastModifiedAt, "lastModifiedBy": t.LastModifiedBy}
 }
 
@@ -64,6 +64,7 @@ type systemTypeBody struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	SystemKey   string `json:"systemKey"`
+	GroupKey    string `json:"groupKey"`
 	Components  []struct {
 		ComponentType string `json:"componentType"`
 		Match         string `json:"match"`
@@ -112,7 +113,8 @@ func (a *API) saveSystemType(update bool) http.HandlerFunc {
 			httpx.WriteError(w, e)
 			return
 		}
-		t := model.SystemType{ID: id, Name: b.Name, Description: b.Description, KeyField: strings.TrimSpace(b.SystemKey)}
+		t := model.SystemType{ID: id, Name: b.Name, Description: b.Description, KeyField: strings.TrimSpace(b.SystemKey),
+			GroupField: strings.TrimSpace(b.GroupKey)}
 		for _, c := range b.Components {
 			t.Components = append(t.Components, model.SystemComponent{ComponentType: strings.TrimSpace(c.ComponentType),
 				Match: strings.TrimSpace(c.Match)})
@@ -153,9 +155,19 @@ func (a *API) listSystems(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, err)
 		return
 	}
+	labels, err := a.st.FleetLabels(r.Context())
+	if err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
 	out := make([]map[string]any, 0, len(in))
 	for _, s := range in {
-		out = append(out, map[string]any{"system": s.Key, "devices": s.Devices, "components": s.Components})
+		e := map[string]any{"system": s.Key, "devices": s.Devices, "components": s.Components, "group": s.Group,
+			"fleetId": nil, "fleet": nil, "colour": nil, "mixed": s.Mixed}
+		if l, ok := labels[s.FleetID]; ok {
+			e["fleetId"], e["fleet"], e["colour"] = s.FleetID, l.Name, l.Colour
+		}
+		out = append(out, e)
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"content": out, "total": len(out)})
 }
@@ -168,6 +180,7 @@ type topologyYAML struct {
 	SystemType    string `yaml:"system_type"`
 	Description   string `yaml:"description,omitempty"`
 	QawkSystemKey string `yaml:"qawk_system_key"`
+	QawkGroupKey  string `yaml:"qawk_group_key,omitempty"`
 	Components    []struct {
 		ComponentType string   `yaml:"component_type"`
 		Interface     string   `yaml:"interface,omitempty"`
@@ -197,7 +210,8 @@ func (a *API) importTopology(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, httpx.Validation(`a topology has kind: "topology"`))
 		return
 	}
-	t := model.SystemType{Name: y.SystemType, Description: y.Description, KeyField: y.QawkSystemKey}
+	t := model.SystemType{Name: y.SystemType, Description: y.Description, KeyField: y.QawkSystemKey,
+		GroupField: y.QawkGroupKey}
 	if t.KeyField == "" {
 		t.KeyField = "metadata.system"
 	}
@@ -230,7 +244,7 @@ func (a *API) exportTopology(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	y := topologyYAML{APIVersion: "mender/v1", Kind: "topology", SystemType: t.Name, Description: t.Description,
-		QawkSystemKey: t.KeyField}
+		QawkSystemKey: t.KeyField, QawkGroupKey: t.GroupField}
 	for _, c := range t.Components {
 		y.Components = append(y.Components, struct {
 			ComponentType string   `yaml:"component_type"`
@@ -439,6 +453,7 @@ func (a *API) systemDeploymentJSON(r *http.Request, d model.SystemDeployment, wi
 	}
 	out := map[string]any{
 		"id": d.ID, "name": d.Name, "manifestId": d.ManifestID, "manifest": d.Manifest, "systems": d.Systems,
+		"fleetId": d.FleetID, "fleet": d.Fleet, "groups": d.Groups,
 		"maxParallel": d.MaxParallel, "maxFailed": d.MaxFailed, "actionType": d.ActionType, "status": d.Status,
 		"reason": d.Reason, "startedBy": d.StartedBy, "startedAt": d.StartedAt, "finishedAt": d.FinishedAt,
 		"createdAt": d.CreatedAt, "createdBy": d.CreatedBy, "total": len(runs), "counts": counts,
@@ -468,6 +483,8 @@ type systemDeploymentBody struct {
 	Name        string   `json:"name"`
 	ManifestID  int64    `json:"manifestId"`
 	Systems     []string `json:"systems"`
+	FleetID     *int64   `json:"fleetId"`
+	Groups      []string `json:"groups"`
 	MaxParallel int      `json:"maxParallel"`
 	MaxFailed   int      `json:"maxFailed"`
 	ActionType  string   `json:"actionType"`
@@ -511,10 +528,16 @@ func (a *API) createSystemDeployment(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, e)
 		return
 	}
-	d := model.SystemDeployment{Name: b.Name, ManifestID: b.ManifestID, Systems: b.Systems, MaxParallel: b.MaxParallel,
-		MaxFailed: b.MaxFailed, ActionType: b.ActionType}
+	d := model.SystemDeployment{Name: b.Name, ManifestID: b.ManifestID, Systems: b.Systems, FleetID: b.FleetID,
+		Groups: b.Groups, MaxParallel: b.MaxParallel, MaxFailed: b.MaxFailed, ActionType: b.ActionType}
 	if len(d.Systems) == 0 {
 		d.Systems = nil
+	}
+	if d.FleetID != nil && *d.FleetID == 0 {
+		d.FleetID = nil
+	}
+	if len(d.Groups) == 0 {
+		d.Groups = nil
 	}
 	id, err := a.svc.CreateSystemDeployment(r.Context(), auth.User(r.Context()), d)
 	if err != nil {

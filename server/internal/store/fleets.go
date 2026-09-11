@@ -15,7 +15,7 @@ import (
 
 const fleetCols = `f.id, f.name, f.description, f.colour, f.rule, f.ds_id,
 	(SELECT x.name || ':' || x.version FROM distribution_sets x WHERE x.id = f.ds_id), f.action_type,
-	f.upstream_id, (SELECT u.name FROM fleets u WHERE u.id = f.upstream_id), f.temporary,
+	f.upstream_id, (SELECT u.name FROM fleets u WHERE u.id = f.upstream_id), f.temporary, f.auto_promote,
 	f.gate_min_devices, f.gate_min_success, f.gate_soak_minutes, f.approval_required,
 	f.wave_percent, f.wave_timeout_minutes, f.error_threshold,
 	f.freeze_reason, f.freeze_from, f.freeze_until,
@@ -23,17 +23,18 @@ const fleetCols = `f.id, f.name, f.description, f.colour, f.rule, f.ds_id,
 	(SELECT count(*) FROM targets t WHERE t.fleet_id = f.id),
 	(SELECT count(*) FROM targets t WHERE t.fleet_id = f.id AND f.ds_id IS NOT NULL AND t.installed_ds_id = f.ds_id),
 	(SELECT count(*) FROM targets t WHERE t.fleet_id = f.id AND EXISTS (SELECT 1 FROM actions a WHERE a.target_id = t.id AND a.active)),
-	(SELECT count(*) FROM targets t WHERE t.fleet_id = f.id AND t.update_status = 'error')`
+	(SELECT count(*) FROM targets t WHERE t.fleet_id = f.id AND t.update_status = 'error'),
+	(SELECT count(*) FROM system_members sm JOIN targets t ON t.id = sm.target_id WHERE t.fleet_id = f.id)`
 
 func scanFleet(r pgx.Row) (model.Fleet, error) {
 	var f model.Fleet
 	err := r.Scan(&f.ID, &f.Name, &f.Description, &f.Colour, &f.Rule, &f.DSID, &f.DSLabel, &f.ActionType,
-		&f.UpstreamID, &f.UpstreamName, &f.Temporary,
+		&f.UpstreamID, &f.UpstreamName, &f.Temporary, &f.AutoPromote,
 		&f.Gate.MinDevices, &f.Gate.MinSuccess, &f.Gate.SoakMinutes, &f.Gate.ApprovalRequired,
 		&f.WavePercent, &f.WaveTimeoutMinutes, &f.ErrorThreshold,
 		&f.FreezeReason, &f.FreezeFrom, &f.FreezeUntil,
 		&f.CreatedAt, &f.CreatedBy, &f.LastModifiedAt, &f.LastModifiedBy,
-		&f.Members, &f.OnRelease, &f.Updating, &f.Failed)
+		&f.Members, &f.OnRelease, &f.Updating, &f.Failed, &f.InSystems)
 	return f, err
 }
 
@@ -66,12 +67,13 @@ func (s *Store) CreateFleet(ctx context.Context, tx pgx.Tx, user string, now int
 		INSERT INTO fleets (tenant, name, description, colour, rule, action_type,
 		                    upstream_id, temporary, gate_min_devices, gate_min_success, gate_soak_minutes,
 		                    approval_required, wave_percent, wave_timeout_minutes, error_threshold,
-		                    created_at, created_by, last_modified_at, last_modified_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $16, $17)
+		                    created_at, created_by, last_modified_at, last_modified_by, auto_promote)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $16, $17, $18)
 		RETURNING id`,
 		s.tenant, f.Name, f.Description, f.Colour, f.Rule, f.ActionType,
 		f.UpstreamID, f.Temporary, f.Gate.MinDevices, f.Gate.MinSuccess, f.Gate.SoakMinutes,
-		f.Gate.ApprovalRequired, f.WavePercent, f.WaveTimeoutMinutes, f.ErrorThreshold, now, user).Scan(&id)
+		f.Gate.ApprovalRequired, f.WavePercent, f.WaveTimeoutMinutes, f.ErrorThreshold, now, user,
+		f.AutoPromote).Scan(&id)
 	return id, err
 }
 
@@ -81,12 +83,12 @@ func (s *Store) UpdateFleet(ctx context.Context, tx pgx.Tx, user string, now int
 		       upstream_id = $8, temporary = $9, gate_min_devices = $10, gate_min_success = $11,
 		       gate_soak_minutes = $12, approval_required = $13, wave_percent = $14,
 		       wave_timeout_minutes = $15, error_threshold = $16,
-		       last_modified_at = $17, last_modified_by = $18
+		       last_modified_at = $17, last_modified_by = $18, auto_promote = $19
 		WHERE tenant = $1 AND id = $2`,
 		s.tenant, f.ID, f.Name, f.Description, f.Colour, f.Rule, f.ActionType,
 		f.UpstreamID, f.Temporary, f.Gate.MinDevices, f.Gate.MinSuccess,
 		f.Gate.SoakMinutes, f.Gate.ApprovalRequired, f.WavePercent,
-		f.WaveTimeoutMinutes, f.ErrorThreshold, now, user)
+		f.WaveTimeoutMinutes, f.ErrorThreshold, now, user, f.AutoPromote)
 	return err
 }
 
@@ -176,7 +178,10 @@ func InFleet(id int64) func(a *Args) []string {
 	return func(a *Args) []string { return []string{"t.fleet_id = " + a.Bind(id)} }
 }
 
-// Progress counts how a fleet's release ds is going since it started.
+// Progress counts how a fleet's release ds is going since it started. The
+// members that are part of a system are not counted: system deployments
+// update them, the release never reaches them, and a gate or a wave counted
+// over them would never open, or never end.
 func (s *Store) Progress(ctx context.Context, fleet, ds, since int64) (model.ReleaseProgress, error) {
 	var p model.ReleaseProgress
 	err := s.pool.QueryRow(ctx, `
@@ -190,7 +195,8 @@ func (s *Store) Progress(ctx context.Context, fleet, ds, since int64) (model.Rel
 		                        AND a.ds_id = $3 AND a.status = 'error' AND a.created_at >= $4)
 		                    AND NOT EXISTS (SELECT 1 FROM actions a WHERE a.target_id = t.id
 		                        AND a.ds_id = $3 AND a.status = 'finished' AND a.created_at >= $4))
-		FROM targets t WHERE t.tenant = $1 AND t.fleet_id = $2`,
+		FROM targets t WHERE t.tenant = $1 AND t.fleet_id = $2
+		  AND NOT EXISTS (SELECT 1 FROM system_members sm WHERE sm.target_id = t.id)`,
 		s.tenant, fleet, ds, since).Scan(&p.Members, &p.OnRelease, &p.Active, &p.Succeeded, &p.Failed)
 	return p, err
 }

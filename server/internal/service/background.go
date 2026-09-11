@@ -61,6 +61,9 @@ func (s *Service) lead(ctx context.Context, alive func(context.Context) bool) {
 			if err := s.tickAutoAssign(ctx); err != nil && ctx.Err() == nil {
 				s.log.Warn("auto-assignment", "err", err)
 			}
+			if err := s.tickCentres(ctx); err != nil && ctx.Err() == nil {
+				s.log.Warn("centres", "err", err)
+			}
 			if err := s.tickFleets(ctx); err != nil && ctx.Err() == nil {
 				s.log.Warn("fleets", "err", err)
 			}

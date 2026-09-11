@@ -472,6 +472,9 @@ func (s *Service) SetMembers(ctx context.Context, user string, controllerIDs []s
 		if err != nil {
 			return err
 		}
+		if err := s.checkCentreMove(ctx, tx, ids, fleet, temporary); err != nil {
+			return err
+		}
 		return s.st.SetFleet(ctx, tx, ids, fleet, now, temporary)
 	})
 }
@@ -507,6 +510,7 @@ func (s *Service) tickFleets(ctx context.Context) error {
 	now := httpx.Now()
 	for _, f := range fleets {
 		s.adopt(ctx, f)
+		s.autoPromote(ctx, f, now)
 		if f.DSID == nil || f.Frozen(now) {
 			continue
 		}
@@ -542,6 +546,48 @@ func (s *Service) adopt(ctx context.Context, f model.Fleet) {
 	s.log.Info("devices joined a fleet by its rule", "fleet", f.Name, "devices", len(ids))
 }
 
+// autoPromote promotes a fleet that is set to promote itself, as soon as its
+// gate opens -- once per release of its upstream: a promotion it already
+// asked for, approved or denied, is not asked for again. It goes through
+// Promote, as a person's would: the same gate, the approval when the fleet
+// asks for one (anyone may approve what "system" asked for), the history,
+// the audit log. By default fleets are promoted by hand: someone looks at the
+// gate, decides, and presses promote.
+func (s *Service) autoPromote(ctx context.Context, f model.Fleet, now int64) {
+	if !f.AutoPromote || f.UpstreamID == nil || f.Frozen(now) {
+		return
+	}
+	rel, err := s.st.CurrentRelease(ctx, s.st.DB(), *f.UpstreamID)
+	if err != nil || rel == nil || rel.DSID == nil || rel.Status == model.ReleaseHalted {
+		return
+	}
+	if f.DSID != nil && *f.DSID == *rel.DSID {
+		return
+	}
+	asked, err := s.st.Releases(ctx, f.ID, "", 20)
+	if err != nil {
+		return
+	}
+	for _, r := range asked {
+		if r.DSID != nil && *r.DSID == *rel.DSID && r.RequestedAt >= since(rel) {
+			return
+		}
+	}
+	src, err := s.st.Fleet(ctx, s.st.DB(), *f.UpstreamID)
+	if err != nil {
+		return
+	}
+	if _, open, err := s.gate(ctx, f, src, rel, now); err != nil || !open {
+		return
+	}
+	r, err := s.Promote(ctx, "system", false, f.ID, *f.UpstreamID, false, "promoted by itself: the gate opened")
+	if err != nil {
+		s.log.Warn("automatic promotion", "fleet", f.Name, "err", err)
+		return
+	}
+	s.log.Info("fleet promoted itself", "fleet", f.Name, "set", r.DSLabel, "status", r.Status)
+}
+
 // deliver sends a fleet's current release on: the next wave, or everyone.
 func (s *Service) deliver(ctx context.Context, f model.Fleet, now int64) error {
 	rel, err := s.st.CurrentRelease(ctx, s.st.DB(), f.ID)
@@ -570,6 +616,8 @@ func (s *Service) deliver(ctx context.Context, f model.Fleet, now int64) error {
 		d := a.Bind(dsID)
 		return append(compatible(ds.TypeID)(a),
 			"t.fleet_id = "+a.Bind(fid),
+			// a device of a system: system deployments update it, not the channel
+			"NOT EXISTS (SELECT 1 FROM system_members sm WHERE sm.target_id = t.id)",
 			"t.assigned_ds_id IS DISTINCT FROM "+d,
 			"NOT EXISTS (SELECT 1 FROM actions x WHERE x.target_id = t.id AND x.ds_id = "+d+
 				" AND x.created_at >= greatest("+a.Bind(from)+"::bigint, coalesce(t.fleet_joined_at, 0)))")

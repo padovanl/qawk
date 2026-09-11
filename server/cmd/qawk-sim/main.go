@@ -71,11 +71,16 @@ func (s *specs) Set(v string) error {
 	return nil
 }
 
-// sysSpec is a kind of system to simulate: name:count:component=n,...
+// sysSpec is a kind of system to simulate: name:count:component=n,...,
+// optionally :ring=<fleet> (every device reports it, so that fleet's rule takes
+// the systems into that channel) and :centers=<n> (the systems are shared out
+// among n centres, reported as centerid).
 type sysSpec struct {
-	name  string
-	count int
-	comps [][2]string // component, how many
+	name    string
+	count   int
+	comps   [][2]string // component, how many
+	ring    string
+	centers int
 }
 
 type sysSpecs []sysSpec
@@ -83,9 +88,9 @@ type sysSpecs []sysSpec
 func (s *sysSpecs) String() string { return fmt.Sprint(*s) }
 
 func (s *sysSpecs) Set(v string) error {
-	parts := strings.SplitN(v, ":", 3)
-	if len(parts) != 3 {
-		return fmt.Errorf("-system takes name:count:component=n,..., such as center:16:st05=2,hyper=1,hd=6")
+	parts := strings.Split(v, ":")
+	if len(parts) < 3 {
+		return fmt.Errorf("-system takes name:count:component=n,...[:ring=R][:centers=N], such as 6hd:16:6hd=1,st05=2,hyper=1:ring=prod:centers=4")
 	}
 	n, err := strconv.Atoi(parts[1])
 	if err != nil || n < 1 {
@@ -98,6 +103,19 @@ func (s *sysSpecs) Set(v string) error {
 			return fmt.Errorf("-system: %q is not component=n", c)
 		}
 		sp.comps = append(sp.comps, [2]string{k, m})
+	}
+	for _, o := range parts[3:] {
+		k, val, _ := strings.Cut(o, "=")
+		switch k {
+		case "ring":
+			sp.ring = val
+		case "centers":
+			if sp.centers, err = strconv.Atoi(val); err != nil || sp.centers < 1 {
+				return fmt.Errorf("-system: centers=%q is not a count", val)
+			}
+		default:
+			return fmt.Errorf("-system: %q is neither ring= nor centers=", o)
+		}
 	}
 	*s = append(*s, sp)
 	return nil
@@ -316,7 +334,8 @@ func main() {
 	tenant := flag.String("tenant", "DEFAULT", "tenant")
 	token := flag.String("token", os.Getenv("QAWK_GATEWAY_TOKEN"), "gateway token")
 	flag.Var(&fleets, "fleet", "name:count -- that many devices with ring=name (repeatable)")
-	flag.Var(&systems, "system", "name:count:component=n,... -- that many systems of those components (repeatable)")
+	flag.Var(&systems, "system", "name:count:component=n,...[:ring=R][:centers=N] -- that many systems of those components, "+
+		"in channel R, shared out among N centres (repeatable)")
 	flag.Func("fail-where", "key=value,... -- devices with those attributes fail everything (repeatable)", func(v string) error {
 		m := map[string]string{}
 		for _, kv := range strings.Split(v, ",") {
@@ -330,6 +349,7 @@ func main() {
 		return nil
 	})
 	prefix := flag.String("prefix", "sim", "controller ids are <prefix>-<fleet>-<n>")
+	centrePrefix := flag.String("centre-prefix", "c", "-system ...:centers=N names centres <prefix>01, <prefix>02, ...")
 	interval := flag.Duration("interval", 10*time.Second, "polling interval of each device")
 	installMin := flag.Duration("install-min", 5*time.Second, "shortest pretend installation")
 	installMax := flag.Duration("install-max", 20*time.Second, "longest pretend installation")
@@ -356,14 +376,25 @@ func main() {
 			devices = append(devices, &device{id: fmt.Sprintf("%s-%s-%03d", *prefix, f.name, i), ring: f.name})
 		}
 	}
+	// two -system of the same name go on numbering where the first stopped,
+	// and centres are numbered across all of them: keys and centres stay unique
+	next, centre := map[string]int{}, 0
 	for _, sp := range systems {
+		first := next[sp.name]
 		for c := 1; c <= sp.count; c++ {
-			key := fmt.Sprintf("%s-%02d", sp.name, c)
+			key := fmt.Sprintf("%s-%02d", sp.name, first+c)
+			attrs := map[string]string{sp.name: key}
+			if sp.centers > 0 {
+				attrs["centerid"] = fmt.Sprintf("%s%02d", *centrePrefix, centre+1+(c-1)*sp.centers/sp.count)
+			}
 			for _, comp := range sp.comps {
 				n, _ := strconv.Atoi(comp[1])
 				for i := 1; i <= n; i++ {
-					d := &device{id: fmt.Sprintf("%s-%s-%s-%d", *prefix, key, comp[0], i),
-						attrs: map[string]string{"device_type": comp[0], sp.name: key}}
+					d := &device{id: fmt.Sprintf("%s-%s-%s-%d", *prefix, key, comp[0], i), ring: sp.ring,
+						attrs: map[string]string{"device_type": comp[0]}}
+					for k, v := range attrs {
+						d.attrs[k] = v
+					}
 					for _, w := range failWhere {
 						match := true
 						for k, v := range w {
@@ -383,6 +414,8 @@ func main() {
 				}
 			}
 		}
+		next[sp.name] = first + sp.count
+		centre += sp.centers
 	}
 	total := len(devices)
 	s := &sim{

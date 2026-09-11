@@ -15,7 +15,8 @@ import (
 
 // ------------------------------------------------------------ system types
 
-const sysTypeCols = `y.id, y.name, y.description, y.key_field, y.created_at, y.created_by, y.last_modified_at, y.last_modified_by`
+const sysTypeCols = `y.id, y.name, y.description, y.key_field, y.group_field, y.created_at, y.created_by,
+	y.last_modified_at, y.last_modified_by`
 
 func (s *Store) systemComponents(ctx context.Context, q Q, id int64) ([]model.SystemComponent, error) {
 	rows, err := q.Query(ctx, `SELECT component_type, match_query FROM system_components
@@ -43,7 +44,7 @@ func (s *Store) SystemTypes(ctx context.Context) ([]model.SystemType, error) {
 	var out []model.SystemType
 	for rows.Next() {
 		var t model.SystemType
-		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &t.KeyField, &t.CreatedAt, &t.CreatedBy,
+		if err := rows.Scan(&t.ID, &t.Name, &t.Description, &t.KeyField, &t.GroupField, &t.CreatedAt, &t.CreatedBy,
 			&t.LastModifiedAt, &t.LastModifiedBy); err != nil {
 			rows.Close()
 			return nil, err
@@ -65,7 +66,8 @@ func (s *Store) SystemTypes(ctx context.Context) ([]model.SystemType, error) {
 func (s *Store) SystemType(ctx context.Context, q Q, id int64) (model.SystemType, error) {
 	var t model.SystemType
 	err := q.QueryRow(ctx, "SELECT "+sysTypeCols+" FROM system_types y WHERE y.tenant = $1 AND y.id = $2", s.tenant, id).
-		Scan(&t.ID, &t.Name, &t.Description, &t.KeyField, &t.CreatedAt, &t.CreatedBy, &t.LastModifiedAt, &t.LastModifiedBy)
+		Scan(&t.ID, &t.Name, &t.Description, &t.KeyField, &t.GroupField, &t.CreatedAt, &t.CreatedBy,
+			&t.LastModifiedAt, &t.LastModifiedBy)
 	if err != nil {
 		return t, notFound(err, "SystemType", id)
 	}
@@ -85,14 +87,14 @@ func (s *Store) SystemTypeByName(ctx context.Context, q Q, name string) (model.S
 func (s *Store) SaveSystemType(ctx context.Context, tx pgx.Tx, user string, now int64, t model.SystemType) (int64, error) {
 	id := t.ID
 	if id == 0 {
-		if err := tx.QueryRow(ctx, `INSERT INTO system_types (tenant, name, description, key_field,
-			created_at, created_by, last_modified_at, last_modified_by) VALUES ($1, $2, $3, $4, $5, $6, $5, $6) RETURNING id`,
-			s.tenant, t.Name, t.Description, t.KeyField, now, user).Scan(&id); err != nil {
+		if err := tx.QueryRow(ctx, `INSERT INTO system_types (tenant, name, description, key_field, group_field,
+			created_at, created_by, last_modified_at, last_modified_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $6, $7) RETURNING id`,
+			s.tenant, t.Name, t.Description, t.KeyField, t.GroupField, now, user).Scan(&id); err != nil {
 			return 0, err
 		}
 	} else if _, err := tx.Exec(ctx, `UPDATE system_types SET name = $3, description = $4, key_field = $5,
-		last_modified_at = $6, last_modified_by = $7 WHERE tenant = $1 AND id = $2`,
-		s.tenant, id, t.Name, t.Description, t.KeyField, now, user); err != nil {
+		group_field = $6, last_modified_at = $7, last_modified_by = $8 WHERE tenant = $1 AND id = $2`,
+		s.tenant, id, t.Name, t.Description, t.KeyField, t.GroupField, now, user); err != nil {
 		return 0, err
 	}
 	if _, err := tx.Exec(ctx, `DELETE FROM system_components WHERE system_type_id = $1`, id); err != nil {
@@ -140,6 +142,69 @@ func (s *Store) KeyValues(ctx context.Context, ids []int64, field string) (map[i
 			return nil, err
 		}
 		out[id] = v
+	}
+	return out, rows.Err()
+}
+
+// SetSystemMembers replaces the recorded members of a system type: target,
+// system, component. The fleets leave these to system deployments.
+func (s *Store) SetSystemMembers(ctx context.Context, typeID int64, ids []int64, keys, comps []string) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM system_members WHERE system_type_id = $1`, typeID); err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		_, err := tx.Exec(ctx, `INSERT INTO system_members (target_id, system_type_id, system_key, component_type)
+			SELECT u.id, $1, u.k, u.c FROM unnest($2::bigint[], $3::text[], $4::text[]) AS u(id, k, c)
+			ON CONFLICT DO NOTHING`, typeID, ids, keys, comps)
+		return err
+	})
+}
+
+// TargetFleets says which fleet each of these targets is in (absent: none).
+func (s *Store) TargetFleets(ctx context.Context, ids []int64) (map[int64]int64, error) {
+	out := map[int64]int64{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	rows, err := s.pool.Query(ctx, `SELECT id, fleet_id FROM targets WHERE id = ANY($1) AND fleet_id IS NOT NULL`, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, f int64
+		if err := rows.Scan(&id, &f); err != nil {
+			return nil, err
+		}
+		out[id] = f
+	}
+	return out, rows.Err()
+}
+
+// FleetLabel is a fleet's name and colour.
+type FleetLabel struct {
+	Name   string
+	Colour *string
+}
+
+// FleetLabels gives every fleet's name and colour, by id.
+func (s *Store) FleetLabels(ctx context.Context) (map[int64]FleetLabel, error) {
+	rows, err := s.pool.Query(ctx, `SELECT id, name, colour FROM fleets WHERE tenant = $1`, s.tenant)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]FleetLabel{}
+	for rows.Next() {
+		var id int64
+		var l FleetLabel
+		if err := rows.Scan(&id, &l.Name, &l.Colour); err != nil {
+			return nil, err
+		}
+		out[id] = l
 	}
 	return out, rows.Err()
 }
@@ -262,12 +327,14 @@ func (s *Store) SetByLabel(ctx context.Context, label string) (int64, error) {
 // ------------------------------------------------------------ deployments
 
 const sdCols = `d.id, d.name, d.manifest_id, (SELECT m.name FROM manifests m WHERE m.id = d.manifest_id), d.systems,
+	d.fleet_id, (SELECT f.name FROM fleets f WHERE f.id = d.fleet_id), d.groups,
 	d.max_parallel, d.max_failed, d.action_type, d.status, d.reason, d.started_by, d.started_at, d.finished_at,
 	d.created_at, d.created_by, d.last_modified_at, d.last_modified_by`
 
 func scanSD(r pgx.Row) (model.SystemDeployment, error) {
 	var d model.SystemDeployment
-	err := r.Scan(&d.ID, &d.Name, &d.ManifestID, &d.Manifest, &d.Systems, &d.MaxParallel, &d.MaxFailed, &d.ActionType,
+	err := r.Scan(&d.ID, &d.Name, &d.ManifestID, &d.Manifest, &d.Systems, &d.FleetID, &d.Fleet, &d.Groups,
+		&d.MaxParallel, &d.MaxFailed, &d.ActionType,
 		&d.Status, &d.Reason, &d.StartedBy, &d.StartedAt, &d.FinishedAt, &d.CreatedAt, &d.CreatedBy,
 		&d.LastModifiedAt, &d.LastModifiedBy)
 	return d, err
@@ -292,6 +359,27 @@ func (s *Store) SystemDeployments(ctx context.Context, statuses []string) ([]mod
 	return out, rows.Err()
 }
 
+// EndedWithRollbacks lists the deployments that are no longer running but
+// have a system still going back: one rolled back by hand after the end.
+func (s *Store) EndedWithRollbacks(ctx context.Context) ([]model.SystemDeployment, error) {
+	rows, err := s.pool.Query(ctx, "SELECT "+sdCols+" FROM system_deployments d WHERE d.tenant = $1 "+
+		"AND d.status <> 'running' AND EXISTS (SELECT 1 FROM system_runs r WHERE r.deployment_id = d.id "+
+		"AND r.status = 'rolling_back') ORDER BY d.id", s.tenant)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []model.SystemDeployment{}
+	for rows.Next() {
+		d, err := scanSD(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) SystemDeployment(ctx context.Context, q Q, id int64) (model.SystemDeployment, error) {
 	d, err := scanSD(q.QueryRow(ctx, "SELECT "+sdCols+" FROM system_deployments d WHERE d.tenant = $1 AND d.id = $2", s.tenant, id))
 	return d, notFound(err, "SystemDeployment", id)
@@ -299,10 +387,11 @@ func (s *Store) SystemDeployment(ctx context.Context, q Q, id int64) (model.Syst
 
 func (s *Store) CreateSystemDeployment(ctx context.Context, tx pgx.Tx, user string, now int64, d model.SystemDeployment) (int64, error) {
 	var id int64
-	err := tx.QueryRow(ctx, `INSERT INTO system_deployments (tenant, name, manifest_id, systems, max_parallel, max_failed,
-		action_type, created_at, created_by, last_modified_at, last_modified_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $8, $9) RETURNING id`,
-		s.tenant, d.Name, d.ManifestID, d.Systems, d.MaxParallel, d.MaxFailed, d.ActionType, now, user).Scan(&id)
+	err := tx.QueryRow(ctx, `INSERT INTO system_deployments (tenant, name, manifest_id, systems, fleet_id, groups,
+		max_parallel, max_failed, action_type, created_at, created_by, last_modified_at, last_modified_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $10, $11) RETURNING id`,
+		s.tenant, d.Name, d.ManifestID, d.Systems, d.FleetID, d.Groups, d.MaxParallel, d.MaxFailed, d.ActionType,
+		now, user).Scan(&id)
 	return id, err
 }
 

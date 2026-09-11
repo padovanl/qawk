@@ -56,13 +56,14 @@ func fleetJSON(st service.FleetState) map[string]any {
 	m := map[string]any{
 		"id": f.ID, "name": f.Name, "description": f.Description, "colour": f.Colour, "rule": f.Rule,
 		"distributionSetId": f.DSID, "distributionSet": f.DSLabel, "actionType": f.ActionType,
-		"upstreamId": f.UpstreamID, "upstream": f.UpstreamName, "temporary": f.Temporary,
+		"upstreamId": f.UpstreamID, "upstream": f.UpstreamName, "temporary": f.Temporary, "autoPromote": f.AutoPromote,
 		"gate": map[string]any{"minDevices": f.Gate.MinDevices, "minSuccess": f.Gate.MinSuccess,
 			"soakMinutes": f.Gate.SoakMinutes, "approvalRequired": f.Gate.ApprovalRequired},
 		"wavePercent": f.WavePercent, "waveTimeoutMinutes": f.WaveTimeoutMinutes, "errorThreshold": f.ErrorThreshold,
 		"freeze":  nil,
 		"members": f.Members, "onRelease": f.OnRelease, "updating": f.Updating, "failed": f.Failed,
-		"release": releaseJSON(st.Release), "pending": releaseJSON(st.Pending), "progress": nil,
+		"inSystems": f.InSystems,
+		"release":   releaseJSON(st.Release), "pending": releaseJSON(st.Pending), "progress": nil,
 		"createdAt": f.CreatedAt, "createdBy": f.CreatedBy, "lastModifiedAt": f.LastModifiedAt,
 		"lastModifiedBy": f.LastModifiedBy,
 	}
@@ -115,6 +116,7 @@ type fleetBody struct {
 	ActionType         *string   `json:"actionType"`
 	UpstreamID         *int64    `json:"upstreamId"`
 	Temporary          *bool     `json:"temporary"`
+	AutoPromote        *bool     `json:"autoPromote"`
 	Gate               *gateBody `json:"gate"`
 	WavePercent        *int      `json:"wavePercent"`
 	WaveTimeoutMinutes *int      `json:"waveTimeoutMinutes"`
@@ -152,6 +154,9 @@ func (b fleetBody) apply(f *model.Fleet) {
 	}
 	if b.Temporary != nil {
 		f.Temporary = *b.Temporary
+	}
+	if b.AutoPromote != nil {
+		f.AutoPromote = *b.AutoPromote
 	}
 	if g := b.Gate; g != nil {
 		setInt(&f.Gate.MinDevices, g.MinDevices)
