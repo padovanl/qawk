@@ -314,17 +314,67 @@ dl.kv dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: bre
 .tabs button.on { color: var(--fg); border-bottom-color: var(--accent); }
 
 /* ---------------------------------------------------------------- misc */
-.bars { display: flex; height: 7px; border-radius: 4px; overflow: hidden; background: var(--bg-3); min-width: 90px; }
-.bars i { display: block; height: 100%; }
-.bars i.ok { background: var(--ok); }
-.bars i.run {
-  background: repeating-linear-gradient(115deg,
-    var(--info) 0 8px, color-mix(in srgb, var(--info) 62%, transparent) 8px 16px);
-  background-size: 22px 100%;
-  animation: flow .8s linear infinite;
+/* Progress bars (js/bars.js). A sunken track; filled segments that slide to
+   their new width, carry a light running along them and breathe; a glowing
+   head where the fill ends; stripes flowing where devices are working; and a
+   halo when the whole bar is done. */
+.bars {
+  --bh: 10px;
+  position: relative; display: flex; height: var(--bh); min-width: 90px;
+  border-radius: 999px; overflow: hidden; isolation: isolate;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #000 14%, transparent), transparent 60%),
+    color-mix(in srgb, var(--fg) 8%, transparent);
+  box-shadow: inset 0 1px 3px color-mix(in srgb, #000 30%, transparent),
+    0 1px 0 color-mix(in srgb, #fff 6%, transparent);
 }
-@keyframes flow { to { background-position: 22px 0; } }
-.bars i.err { background: var(--err); } .bars i.wait { background: var(--line-2); }
+.bars i {
+  --c: var(--line-2);
+  display: block; height: 100%; flex: none; position: relative; overflow: hidden;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--c) 55%, #fff) 0%, var(--c) 50%,
+    color-mix(in srgb, var(--c) 78%, #000) 100%);
+  transition: width .9s cubic-bezier(.22, 1, .36, 1);
+}
+.bars i:first-child { border-radius: 999px 0 0 999px; }
+.bars i + i { box-shadow: inset 1px 0 0 color-mix(in srgb, #000 25%, transparent); }
+.bars i.ok   { --c: var(--ok);   animation: fillbreathe 2.4s ease-in-out infinite; }
+.bars i.err  { --c: var(--err);  animation: fillbreathe 1.6s ease-in-out infinite; }
+.bars i.back { --c: var(--warn, #e5a50a); animation: fillbreathe 1.2s ease-in-out infinite; }
+.bars i.wait { --c: var(--line-2); }
+@keyframes fillbreathe { 50% { filter: brightness(1.18) saturate(1.15); } }
+/* the light running along every filled segment */
+.bars i:not(.wait)::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, #fff 55%, transparent) 50%, transparent 70%);
+  background-size: 250% 100%; background-repeat: no-repeat;
+  animation: fillsheen 2.2s cubic-bezier(.45, 0, .25, 1) infinite;
+}
+@keyframes fillsheen { from { background-position: 180% 0; } to { background-position: -80% 0; } }
+/* where the fill ends: a glowing head, pulsing */
+.bars i.head { overflow: visible; }
+.bars i.head::before {
+  content: ''; position: absolute; top: 0; bottom: 0; right: 0; width: 14px; z-index: 1;
+  border-radius: 999px; pointer-events: none;
+  background: radial-gradient(ellipse at 70% 50%, #fff 0 18%, color-mix(in srgb, var(--c) 70%, #fff) 35%, transparent 72%);
+  box-shadow: 0 0 10px 1px var(--c);
+  animation: headpulse 1.5s ease-in-out infinite;
+}
+@keyframes headpulse { 50% { opacity: .45; box-shadow: 0 0 3px 0 var(--c); } }
+.bars i.run {
+  --c: var(--info);
+  background:
+    repeating-linear-gradient(115deg, transparent 0 7px, color-mix(in srgb, #fff 32%, transparent) 7px 14px),
+    linear-gradient(180deg, color-mix(in srgb, var(--c) 55%, #fff) 0%, var(--c) 50%, color-mix(in srgb, var(--c) 78%, #000) 100%);
+  background-size: 22px 100%, 100% 100%;
+  animation: flow .9s linear infinite, fillbreathe 1.4s ease-in-out infinite;
+}
+@keyframes flow { to { background-position: 22px 0, 0 0; } }
+/* all done: the whole bar glows, slowly */
+.bars.full { animation: fullglow 2.8s ease-in-out infinite; }
+@keyframes fullglow {
+  50% { box-shadow: inset 0 1px 3px color-mix(in srgb, #000 30%, transparent),
+    0 0 12px 1px color-mix(in srgb, var(--ok) 55%, transparent); }
+}
 
 .log { font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap;
        background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
@@ -496,7 +546,7 @@ tr.busy td:first-child::before {
      A spinner is not decoration -- it is the difference between "working" and
      "stuck", and a ring that does not turn states the second one. It keeps
      turning. */
-  .pill.pulse::before, .bars i.run, .skel i, #progress.on::after, .toast {
+  .pill.pulse::before, .bars i, .bars i::after, .bars i::before, .bars.full, .skel i, #progress.on::after, .toast {
     animation: none !important;
   }
 }

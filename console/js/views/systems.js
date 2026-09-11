@@ -1,4 +1,5 @@
 import { S, distributionSets, qawk } from '../api.js';
+import { bars } from '../bars.js';
 import { ask, drawer, fail, modal, toast } from '../chrome.js';
 import { h, icon } from '../dom.js';
 import { check as fiqlCheck } from '../fiql.js';
@@ -8,10 +9,11 @@ import { ago, download } from '../util.js';
 
 /* ------- systems: updated as a whole, after Mender Orchestrator (Qawk) --
  *
- * A system is devices that work together -- a bowling centre: lane computers
- * (hd) and the terminals attached to them (st05, hyper). Its TYPE (Mender's
- * topology) lists the components, each recognised by a query, and names the
- * field a device carries to say which system it is in (metadata.center). A
+ * A system is devices that work together -- a 6hd and the two st05 and the
+ * hyper under it; a centre has sixteen, and a neo-intel stands alone. Its
+ * TYPE (Mender's topology) lists the components, each recognised by a query,
+ * and names the field a device carries to say which system it is in
+ * (metadata.system). A
  * MANIFEST says what a type should run: a set per component, and an order --
  * lower first, equal together. A DEPLOYMENT applies a manifest to the systems
  * of the type, a few at a time; when one device of a system fails, the whole
@@ -104,10 +106,10 @@ function orderLine(comps) {
 function systemsBar(d) {
   const c = d.counts || {};
   const tot = d.total || 0;
-  const seg = (n, color) => (n ? h('div', { style: `height:100%;width:${100 * n / tot}%;background:var(${color})` }) : null);
   return h('div', { style: 'min-width:160px' },
-    h('div', { style: 'display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--bg-3)' },
-      seg(c.succeeded, '--ok'), seg(c.rolled_back, '--err'), seg((c.running || 0) + (c.rolling_back || 0), '--info')),
+    bars([[c.succeeded, 'ok', `${fmt(c.succeeded)} updated`], [c.running, 'run', `${fmt(c.running)} updating`],
+      [c.rolling_back, 'back', `${fmt(c.rolling_back)} going back`], [c.rolled_back, 'err', `${fmt(c.rolled_back)} rolled back`]],
+    tot, { key: 'sd' + d.id }),
     h('div.faint', { style: 'font-size:11px;margin-top:3px' },
       `${fmt(c.succeeded)} updated · ${fmt(c.running)} updating` + (c.rolled_back ? ` · ${fmt(c.rolled_back)} rolled back` : '')
       + ` · of ${fmt(tot)}`));
@@ -171,13 +173,13 @@ async function systemsDrawer(t) {
 }
 
 function typeDialog(t) {
-  t = t || { name: '', description: '', systemKey: 'metadata.center', components: [{ componentType: '', match: '' }] };
-  const name = h('input', { type: 'text', value: t.name, placeholder: 'bowling-center' });
-  const key = h('input.mono', { type: 'text', value: t.systemKey, placeholder: 'metadata.center' });
+  t = t || { name: '', description: '', systemKey: 'metadata.system', components: [{ componentType: '', match: '' }] };
+  const name = h('input', { type: 'text', value: t.name, placeholder: '6hd-system' });
+  const key = h('input.mono', { type: 'text', value: t.systemKey, placeholder: 'metadata.system' });
   const rows = h('div.stack', { style: 'gap:6px' });
   const addRow = (c = { componentType: '', match: '' }) => {
-    const type = h('input', { type: 'text', value: c.componentType, placeholder: 'hd', style: 'width:110px' });
-    const match = h('input.mono', { type: 'text', value: c.match, placeholder: 'attribute.device_type==hd', style: 'flex:1;min-width:0' });
+    const type = h('input', { type: 'text', value: c.componentType, placeholder: '6hd', style: 'width:110px' });
+    const match = h('input.mono', { type: 'text', value: c.match, placeholder: 'attribute.device_type==6hd', style: 'flex:1;min-width:0' });
     const row = h('div.flex', { style: 'gap:6px' }, type, match,
       h('button.btn.sm.ghost', { title: 'remove', onclick: () => row.remove() }, '×'));
     row._v = () => ({ componentType: type.value.trim(), match: match.value.trim() });
@@ -203,7 +205,7 @@ async function manifestDialog(m) {
   const [types, sets] = await Promise.all([qawk.get('/systemtypes'), distributionSets(true)]);
   if (!types.content.length) { toast('No system type', 'describe a system type first', 'info'); return; }
   m = m || { name: '', systemTypeId: types.content[0].id, components: [] };
-  const name = h('input', { type: 'text', value: m.name, placeholder: 'center-2026.09' });
+  const name = h('input', { type: 'text', value: m.name, placeholder: '6hd-system-2026.09' });
   const type = h('select', types.content.map(t => h('option', { value: t.id, selected: t.id === m.systemTypeId }, t.name)));
   const rows = h('div.stack', { style: 'gap:6px' });
   const draw = () => {

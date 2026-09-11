@@ -53,6 +53,20 @@ const { cols, headsFor } = await import(JS + 'columns.js');
 const { pill, typePill } = await import(JS + 'badges.js');
 ok('le colonne di default esistono', cols('targets').length === 8, cols('targets').join(','));
 ok('le intestazioni seguono le colonne scelte', headsFor('targets', cols('targets')).length === 8);
+{
+  // a browser that chose its columns before Fleet existed gets Fleet, after
+  // Name; one that has seen it and taken it away does not
+  const store = new Map();
+  const prev = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) } });
+  store.set('hb-cols-targets', JSON.stringify(['controllerId', 'name', 'status', 'ip']));
+  const merged = cols('targets');
+  ok('una scelta vecchia riceve la colonna Fleet, dopo Name', merged.join() === 'controllerId,name,fleet,status,ip', merged.join());
+  store.set('hb-cols-seen-targets', JSON.stringify(['controllerId', 'name', 'fleet', 'status', 'ds', 'lastPoll', 'nextPoll', 'ip']));
+  ok('chi l\'ha tolta non se la ritrova', !cols('targets').includes('fleet'), cols('targets').join());
+  if (prev) Object.defineProperty(globalThis, 'localStorage', prev); else delete globalThis.localStorage;
+}
 ok('i badge di tipo sono coerenti', typePill('os_app').className.includes('ty-both'));
 ok('i pill di stato prendono la classe', pill('in_sync', 'ok').className.includes('ok'));
 ok('pagedPath impagina', pagedPath('/targets', pg('targets'), '', 'id:DESC').includes('offset=0'));

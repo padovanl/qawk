@@ -1,6 +1,7 @@
 import { del, distributionSets, fiql, get, post, waiting } from '../api.js';
 import { start } from '../auth.js';
 import { ACT_ICON, TARGET_PILL, pill } from '../badges.js';
+import { bars } from '../bars.js';
 import { ask, drawer, fail, modal, toast } from '../chrome.js';
 import { $, h, icon, skeleton } from '../dom.js';
 import { fiqlEditor } from '../fiql.js';
@@ -28,15 +29,15 @@ VIEWS.ro = {
     root.replaceChildren(tableOf(['Id', 'Name', 'Status', 'Groups', 'Progress', 'Created', ''],
       d.content.map(r => {
         const t = r.totalTargets || 0, c = r.totalTargetsPerStatus || {};
-        const seg = (n, cls) => n ? h('i.' + cls, { style: `width:${(n / t * 100).toFixed(1)}%` }) : null;
         const st = String(r.status || '').toLowerCase();
         return {
           onclick: () => openRollout(r),
           cells: [h('span.mono', r.id), r.name,
             pill(st, st === 'finished' ? 'ok' : st === 'paused' ? 'warn' : st === 'ready' ? 'mute' : 'info'),
             h('span.mono', r.totalGroups ?? '—'),
-            h('div.flex', h('div.bars', seg(c.finished, 'ok'), seg(c.running, 'run'),
-              seg(c.error, 'err'), seg((c.scheduled || 0) + (c.notstarted || 0), 'wait')),
+            h('div.flex', bars([[c.finished, 'ok', `${c.finished || 0} finished`], [c.running, 'run', `${c.running || 0} running`],
+              [c.error, 'err', `${c.error || 0} in error`], [(c.scheduled || 0) + (c.notstarted || 0), 'wait', 'not started']],
+            t, { key: 'ro' + r.id }),
               h('span.faint.nowrap', `${c.finished || 0}/${t}`)),
             h('span.faint.nowrap', { title: when(r.createdAt) }, ago(r.createdAt)),
             h('div.wrap',
@@ -98,14 +99,14 @@ async function openRollout(r) {
               const gs = String(x.status || '').toLowerCase();
               const gc = x.totalTargetsPerStatus || {};
               const tot = x.totalTargets || 0;
-              const seg = (n, cls) => n ? h('i.' + cls, { style: `width:${(n / tot * 100).toFixed(1)}%` }) : null;
               return {
                 onclick: () => openRolloutGroup(r, x),
                 cells: [h('span.mono', x.id), x.name,
                   pill(gs, gs === 'finished' ? 'ok' : gs === 'error' ? 'err'
                     : gs === 'running' ? 'live' : 'mute'),
-                  h('div.bars', seg(gc.finished, 'ok'), seg(gc.running, 'run'),
-                    seg(gc.error, 'err'), seg((gc.scheduled || 0) + (gc.notstarted || 0), 'wait')),
+                  bars([[gc.finished, 'ok', `${gc.finished || 0} finished`], [gc.running, 'run', `${gc.running || 0} running`],
+                    [gc.error, 'err', `${gc.error || 0} in error`], [(gc.scheduled || 0) + (gc.notstarted || 0), 'wait', 'not started']],
+                  tot, { key: 'rg' + x.id }),
                   h('span.mono', tot || '—'),
                   h('span.mono', gc.finished ?? 0), h('span.mono', gc.error ?? 0)],
               };

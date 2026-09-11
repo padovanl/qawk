@@ -135,15 +135,37 @@ function fieldsFor(view) {
     return d && d.f ? { key: d.f, ph: 'filter' } : {};
   }).concat([{}]);
 }
+/* A column added to the defaults after someone saved their choice joins that
+ * choice, at its place: otherwise a browser that ever chose its columns never
+ * sees a new one -- the Fleet column stayed invisible to exactly the people
+ * who use the console most. Along with the choice goes the list of defaults
+ * it was made against ("seen"); a default missing from it is new. One taken
+ * away after that stays away. Choices saved before "seen" existed were made
+ * against the defaults minus those listed in ADDED. */
+const ADDED = { targets: ['fleet'] };
 function cols(view = 'targets') {
+  const def = COLSETS[view].def;
   try {
     const v = JSON.parse(localStorage.getItem('hb-cols-' + view) || 'null');
-    if (Array.isArray(v) && v.length) return v;
+    if (Array.isArray(v) && v.length) {
+      const seen = JSON.parse(localStorage.getItem('hb-cols-seen-' + view) || 'null')
+        || def.filter(id => !(ADDED[view] || []).includes(id));
+      const out = v.slice();
+      def.forEach((id, i) => {
+        if (seen.includes(id) || out.includes(id)) return;
+        const after = i ? out.indexOf(def[i - 1]) : -1;
+        out.splice(after >= 0 ? after + 1 : (i ? out.length : 0), 0, id);
+      });
+      return out;
+    }
   } catch (_) {}
-  return COLSETS[view].def.slice();
+  return def.slice();
 }
 function setCols(v, view = 'targets') {
-  try { localStorage.setItem('hb-cols-' + view, JSON.stringify(v)); } catch (_) {}
+  try {
+    localStorage.setItem('hb-cols-' + view, JSON.stringify(v));
+    localStorage.setItem('hb-cols-seen-' + view, JSON.stringify(COLSETS[view].def));
+  } catch (_) {}
   render();
 }
 const colLabel = (id, view = 'targets') => id.startsWith('attr:')

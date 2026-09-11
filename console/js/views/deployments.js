@@ -1,4 +1,5 @@
 import { S, qawk } from '../api.js';
+import { bars } from '../bars.js';
 import { h, icon } from '../dom.js';
 import { VIEWS, go } from '../router.js';
 import { serverInfo } from '../server.js';
@@ -50,8 +51,12 @@ function row(d, compact) {
     h('span.faint', { style: 'font-size:12px' },
       `${fmt(d.done)} of ${fmt(d.total)} done` + (d.since ? ' · started ' + ago(d.since) : '')
       + (d.by && d.by.length ? ' · by ' + d.by.slice(0, 3).join(', ') : ''))),
-  h('div', { style: 'height:6px;border-radius:3px;background:var(--bg-3);overflow:hidden;margin:8px 0 6px' },
-    h('div', { style: `height:100%;width:${pct}%;background:var(${bad ? '--err' : '--ok'})` })),
+  h('div', { style: 'margin:8px 0 6px' }, bars([
+    [d.done, 'ok', `${fmt(d.done)} done (${pct}%)`],
+    [(d.downloading || 0) + (d.installing || 0) + (d.confirming || 0), 'run', 'working on it'],
+    [d.failed, 'err', `${fmt(d.failed)} failed`],
+    [(d.waiting || 0) + (d.scheduled || 0), 'wait', 'waiting'],
+  ], d.total, { key: `dep:${d.kind}:${d.title}` })),
   !compact && d.detail ? h('div.faint', { style: 'font-size:12px;margin-bottom:4px;white-space:pre-line' }, d.detail) : null,
   h('div.wrap', { style: 'gap:4px' },
     seg(d.waiting, 'waiting', 'mute', 'pending'), seg(d.scheduled, 'waiting for its window', 'mute', 'pending'),

@@ -1,4 +1,5 @@
 import { S, distributionSets, qawk } from '../api.js';
+import { bars } from '../bars.js';
 import { ask, closeDrawer, drawer, fail, modal, toast } from '../chrome.js';
 import { h, icon } from '../dom.js';
 import { check as fiqlCheck, fiqlEditor } from '../fiql.js';
@@ -93,8 +94,8 @@ function card(f, fleets) {
     h('div', { style: 'margin:8px 0 4px' },
       f.distributionSet ? h('span.pill.ok', f.distributionSet) : h('span.faint', 'no release'), ' ', statusPill(r),
       r && r.forced ? h('span.pill.err', { title: r.reason }, 'forced') : null),
-    p ? h('div', h('div', { style: 'height:6px;border-radius:3px;background:var(--line,#ddd);overflow:hidden;margin:4px 0' },
-          h('div', { style: `height:100%;width:${pct}%;background:${r && r.status === 'halted' ? 'var(--err,#e5484d)' : 'var(--ok,#12a594)'}` })),
+    p ? h('div', h('div', { style: 'margin:6px 0 4px' }, bars([[p.onRelease, 'ok', `${p.onRelease} on it (${pct}%)`],
+          [p.active, 'run', `${p.active} updating`], [p.failed, 'err', `${p.failed} failed`]], p.members, { key: 'fleet' + f.id })),
         h('div.faint', { style: 'font-size:12px' },
           `${p.onRelease}/${p.members} on it`, p.active ? ` · ${p.active} updating` : '',
           p.failed ? ` · ${p.failed} failed` : '', f.wavePercent && r ? ` · wave ${r.waves} of ${f.wavePercent}%` : ''))
