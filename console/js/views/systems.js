@@ -149,9 +149,15 @@ async function runsDrawer(id) {
           h('span', h('span.pill.' + (RUN_CLS[r.status] || 'mute'), r.status.replace(/_/g, ' ')),
             r.currentOrder != null && r.status === 'running' ? h('span.faint', { style: 'margin-left:6px;font-size:11px' }, `order ${r.currentOrder}`) : null,
             r.reason ? h('div.faint', { style: 'font-size:11px;max-width:300px' }, r.reason) : null),
-          h('div.wrap', { style: 'gap:4px' }, (r.components || []).map(c => h('span.pill.' + (c.onSet === c.devices ? 'ok' : r.status === 'rolled_back' ? 'mute' : 'live'),
-            { title: `order ${c.order}` + (c.back ? ` · ${c.back} back on the previous set` : '') },
-            `${c.componentType} ${c.onSet}/${c.devices}`))),
+          h('div.wrap', { style: 'gap:4px' }, (r.components || []).map(c => {
+            // going back, or gone back: how many are on their previous set again,
+            // not how many are on the new one -- "0/1" with a spinner read as stuck
+            const back = r.status === 'rolling_back' || r.status === 'rolled_back';
+            const cls = back ? (r.status === 'rolling_back' ? 'amber' : 'mute')
+              : c.onSet === c.devices ? 'ok' : r.status === 'running' ? 'live' : 'mute';
+            return h('span.pill.' + cls, { title: `order ${c.order}` + (c.back ? ` · ${c.back} back on the previous set` : '') },
+              back ? `${c.componentType} back ${c.back}/${c.devices}` : `${c.componentType} ${c.onSet}/${c.devices}`);
+          })),
           ['running', 'succeeded'].includes(r.status) ? h('button.btn.sm.danger', { onclick: async () => {
             if (!await ask('Roll back ' + r.system, 'Every device of this system the deployment updated goes back to what it ran before.',
               { okLabel: 'Roll back', danger: true })) return;
