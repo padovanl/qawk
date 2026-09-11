@@ -332,7 +332,6 @@ dl.kv dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: bre
 .bars .fill {
   position: relative; display: flex; height: 100%; border-radius: 999px; overflow: hidden;
   transition: width .9s cubic-bezier(.22, 1, .36, 1);
-  box-shadow: 0 0 8px -1px color-mix(in srgb, var(--ok) 70%, transparent);
   animation: fillbreathe 2.2s ease-in-out infinite;
 }
 .bars .fill:not(:empty) { min-width: var(--bh); }
@@ -346,15 +345,16 @@ dl.kv dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: bre
 .bars i.ok   { --c: var(--ok); }
 .bars i.err  { --c: var(--err); }
 .bars i.back { --c: var(--warn, #e5a50a); }
+/* devices at work: a calm translucent band with a slow light moving through
+   it -- not a candy-cane of stripes, and not a colour that reads as "done" */
 .bars i.run {
   --c: var(--info);
-  background:
-    repeating-linear-gradient(115deg, transparent 0 6px, color-mix(in srgb, #fff 40%, transparent) 6px 12px),
-    linear-gradient(180deg, color-mix(in srgb, var(--c) 50%, #fff) 0%, var(--c) 48%, color-mix(in srgb, var(--c) 75%, #000) 100%);
-  background-size: 20px 100%, 100% 100%;
-  animation: flow .7s linear infinite;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--c) 20%, transparent) 0%,
+    color-mix(in srgb, var(--c) 55%, transparent) 50%, color-mix(in srgb, var(--c) 20%, transparent) 100%);
+  background-size: 200% 100%;
+  animation: flow 2.4s ease-in-out infinite;
 }
-@keyframes flow { to { background-position: 20px 0, 0 0; } }
+@keyframes flow { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @keyframes fillbreathe { 50% { filter: brightness(1.2) saturate(1.2); } }
 /* a shine going back and forth along the fill, all the time (Android's) */
 .bars .fill::after {
