@@ -359,7 +359,8 @@ dl.kv dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: bre
 /* a shine going back and forth along the fill, all the time (Android's) */
 .bars .fill::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(90deg, transparent 38%, color-mix(in srgb, #fff 80%, transparent) 50%, transparent 62%);
+  background: linear-gradient(90deg, transparent 34%, color-mix(in srgb, #fff 16%, transparent) 44%,
+    color-mix(in srgb, #fff 30%, transparent) 50%, color-mix(in srgb, #fff 16%, transparent) 56%, transparent 66%);
   background-size: 260% 100%; background-repeat: no-repeat;
   animation: fillsheen 1.7s ease-in-out infinite alternate;
 }
