@@ -151,15 +151,27 @@ function attentionPanel({ errors, failed, fstates, trouble, over, cutoff }) {
       'no failed device, no halted release, no approval waiting, every device polling'))));
 }
 
+/* hawkBit's words mean something else on a dashboard: five thousand devices
+ * online and polling, simply never given an update, showed as "registered"
+ * -- read as "just arrived", or "stuck". Plain words, hawkBit's in the tip. */
+const WORD = {
+  in_sync: ['up to date', 'in_sync: running what it was last given'],
+  pending: ['updating', 'pending: an update is on its way to it, or being installed'],
+  error: ['update failed', 'error: its last update failed'],
+  registered: ['never updated', 'registered: known to the server and polling, never given an update'],
+  unknown: ['unknown', 'unknown: the server has no status for it yet'],
+};
+
 function fleetStatus(byStatus, virgin, phases, sample) {
-  return h('div.panel', h('h3', 'Fleet status'), h('div.body.wrap',
+  return h('div.panel', h('h3', 'Devices by update'), h('div.body.wrap',
     Object.keys(byStatus).length || virgin
       ? Object.entries(byStatus).flatMap(([k, v]) => {
           // "pending" is broken out into what those devices are doing; the
           // bucket itself stays clickable, since hawkBit's filter only knows
           // the five words.
-          const bucket = h('button.btn.sm', { onclick: () => { S.q = ''; S.status = k; go('targets'); } },
-            h('span.pill.' + (TARGET_PILL[k] || 'mute'), `${k.replace(/_/g, ' ')} · ${fmt(v)}`));
+          const [word, tip] = WORD[k] || [k.replace(/_/g, ' '), k];
+          const bucket = h('button.btn.sm', { title: tip, onclick: () => { S.q = ''; S.status = k; go('targets'); } },
+            h('span.pill.' + (TARGET_PILL[k] || 'mute'), `${word} · ${fmt(v)}`));
           if (k !== 'pending' || !Object.keys(phases).length) return [bucket];
           return [bucket].concat(Object.entries(phases).map(([label, n]) =>
             h('button.btn.sm', {

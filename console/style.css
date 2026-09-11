@@ -1417,3 +1417,73 @@ pre.cmd {
   border: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
 }
 .pill.fb::before, .pill.dt::before { background: var(--c); }
+
+/* ------------------------------------------------ after Tabler (MIT) ------
+ * The console's own elements dressed as Tabler's widgets (tabler.io): its
+ * soft badges and status dot, its stat cards, its card with a card-title,
+ * its card-table, its datagrid, its empty state. Tabler itself is not loaded:
+ * its classes (.btn, .card, .table, .badge) are the console's names too, and
+ * would restyle everything at once. */
+
+/* badges: Tabler's "-lt" -- a soft tint, the text in the colour, a hairline */
+.pill {
+  border-radius: 6px; padding: 3px 8px; gap: 6px; font-weight: 600; letter-spacing: .1px;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+}
+.pill.ok, .pill.warn, .pill.err, .pill.info, .pill.live, .pill.amber { background: color-mix(in srgb, currentColor 13%, transparent); }
+.pill.mute { border-color: var(--line); }
+/* at work: Tabler's status-dot-animated, a dot with a ring going out */
+.pill.live::before {
+  width: 6px; height: 6px; border: 0; border-radius: 50%; background: currentColor;
+  animation: status-pulsate 1.5s ease-out infinite;
+}
+@keyframes status-pulsate {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent); }
+  70%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* stat cards */
+.card { border-radius: 8px; padding: 16px 18px; transition: border-color .15s, background .15s; }
+.card .k { font-size: 11px; font-weight: 600; letter-spacing: .06em; }
+.card .v { font-family: inherit; font-size: 28px; font-weight: 600; line-height: 1.15; margin-top: 8px;
+           font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+.card .sub { font-size: 12px; color: var(--fg-dim); margin-top: 4px; }
+.cards > div[style*="cursor:pointer"]:hover .card { border-color: var(--line-2); background: var(--bg-3); }
+
+/* card with a card-title */
+.panel { border-radius: 8px; }
+.panel > h3 {
+  text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 600; color: var(--fg);
+  background: transparent; padding: 13px 16px;
+}
+.panel .body { padding: 16px; }
+
+/* card-table */
+table.t th {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--fg-faint); background: color-mix(in srgb, var(--fg) 3%, transparent);
+  padding: 9px 12px;
+}
+table.t td { padding: 10px 12px; }
+table.t tbody tr { transition: background .12s; }
+table.t tbody tr:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); }
+table.t tbody tr.sel { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* datagrid: a title above each value, in as many columns as fit */
+dl.datagrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px 20px; margin: 0; }
+dl.datagrid > div { min-width: 0; }
+dl.datagrid > div.wide { grid-column: 1 / -1; }
+dl.datagrid dt { font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+                 color: var(--fg-faint); margin-bottom: 4px; }
+dl.datagrid dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+
+/* empty state: an icon in a circle, a title, a line of explanation */
+.empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 44px 24px; }
+.empty:not(:has(.spin))::before {
+  content: ''; width: 46px; height: 46px; border-radius: 50%; margin-bottom: 10px;
+  background: color-mix(in srgb, var(--fg) 6%, transparent) center / 22px no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 13h3l3 3h4l3-3h3M4 13l2-8h12l2 8v6H4z'/%3E%3C/svg%3E");
+}
+.empty b { color: var(--fg); font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+table.t th { white-space: nowrap; }   /* "ASSIGNED / INSTALLED" on one line */

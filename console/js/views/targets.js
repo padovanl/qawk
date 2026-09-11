@@ -221,11 +221,15 @@ VIEWS.targets = {
           const badge = n === null ? null
             : watch ? (n > 0 ? h('span.n.alert.' + (TARGET_PILL[x] || 'mute').split(' ').pop(), fmt(n)) : null)
             : h('span.n', fmt(n));
+          // plain words, as on the dashboard; hawkBit's own in the tip
+          const word = { '': 'all', in_sync: 'up to date', pending: 'updating', error: 'failed',
+            registered: 'never updated', unknown: 'unknown' }[x];
           return h('button', {
             class: S.status === x ? 'on' : '',
-            title: n === null ? '' : `${fmt(n)} device${n === 1 ? '' : 's'}${base ? ' matching the search' : ''}`,
+            title: (n === null ? '' : `${fmt(n)} device${n === 1 ? '' : 's'}${base ? ' matching the search' : ''}`)
+              + (x ? ` — hawkBit calls it "${x}"` : ''),
             onclick: () => { S.status = x; render(); },
-          }, x === '' ? 'all' : x.replace(/_/g, ' '), badge);
+          }, word, badge);
         })),
         legendBtn),
       fleetRow,

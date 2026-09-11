@@ -124,8 +124,9 @@ function overviewPane(t, attrs, autoc, id, state) {
   const rows = Object.entries(attrs || {}).sort(([a], [b]) => a.localeCompare(b));
   return h('div.stack',
     h('div.panel', h('h3', 'Target'), h('div.body.stack',
-      h('dl.kv', kv.map(([k, v]) => [h('dt', k), h('dd', v ?? '—')]),
-        h('dt', 'assigned / installed'), h('dd', dsBox)))),
+      // Tabler's datagrid: a title above each value, in as many columns as fit
+      h('dl.datagrid', kv.map(([k, v]) => h('div', h('dt', k), h('dd', v ?? '—'))),
+        h('div.wide', h('dt', 'assigned / installed'), h('dd', dsBox))))),
     autoc ? h('div.panel', h('h3', 'Auto-confirmation'), h('div.body.flex',
       toggle(autoc.active, async v => {
         // Both directions are POST. DELETE on deactivate answers 405 and leaves

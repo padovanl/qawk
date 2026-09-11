@@ -21,7 +21,10 @@ const T_COLS = {
   controllerId: { label: 'Controller', s: 'controllerId', cell: t => h('span.mono', t.controllerId) },
   name:         { label: 'Name', s: 'name', cell: t => h('span.dim', t.name !== t.controllerId ? t.name : '—') },
   status:       { label: 'Status', s: 'updateStatus', cell: t => {
-                    const p = pill(t.updateStatus, TARGET_PILL[t.updateStatus]);
+                    // "registered" read as "just arrived" or "stuck": it is a device never given an update
+                    const p = pill(t.updateStatus === 'registered' ? 'never updated' : t.updateStatus,
+                      TARGET_PILL[t.updateStatus]);
+                    if (t.updateStatus === 'registered') p.title = 'hawkBit calls it "registered": polling, never given an update';
                     // in_sync on a device that has never installed anything is
                     // hawkBit saying "nothing pending", which is not the same
                     // as "up to date". Worth a mark rather than a false calm.
