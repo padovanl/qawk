@@ -4,110 +4,281 @@ import { h, icon } from '../dom.js';
 import { check as fiqlCheck, fiqlEditor } from '../fiql.js';
 import { colourPicker } from '../inputs.js';
 import { VIEWS, render } from '../router.js';
+import { serverInfo } from '../server.js';
 import { tableOf } from '../table.js';
-import { ago } from '../util.js';
+import { ago, when } from '../util.js';
 
-/* ------- fleets (a Qawk addition) ------------------------------------ *
+/* ------- fleets and the release pipeline (a Qawk addition) ----------- *
  *
- * Beta, production, staging: sets of devices that should run the same release.
- * A device is in at most one fleet. It gets there by hand, or by the fleet's
- * rule -- a target query, checked every ten seconds against devices that are
- * in no fleet yet, so a machine that registers for the first time lands where
- * it belongs from what it says about itself. A fleet with a release gives it
- * to every member that does not run it; "promote" copies one fleet's release
- * to another, which is the whole beta -> production step in one click.
+ * dev -> beta -> prod: a release reaches a fleet with an upstream only by
+ * promotion from it, through the fleet's gate and, when the fleet asks, a
+ * second person's approval; inside the fleet it goes out in waves and halts
+ * by itself when too many devices fail. A fleet with no upstream (dev, expo)
+ * is given releases directly. A temporary fleet -- expo, the machines taken
+ * to a trade show -- remembers where its devices came from and sends them
+ * back. A frozen fleet gets nothing.
  *
- * Nothing here needs the device to know: it is still plain hawkBit DDI. */
+ * The device knows none of this: it is still plain hawkBit DDI. */
+const can = p => (serverInfo()?.me?.permissions || []).includes(p);
+const me = () => serverInfo()?.me?.username || '';
+
 VIEWS.fleets = {
   title: 'Fleets',
-  bar: () => [h('button.btn.sm.primary', { onclick: () => fleetDialog() }, icon('plus', 14), 'new fleet')],
+  bar: () => [h('button.btn.sm.primary', { onclick: () => fleetDialog(null, VIEWS.fleets.last || []) },
+    icon('plus', 14), 'new fleet')],
   async render(root) {
-    const d = await qawk.get('/fleets');
+    const [d, pend] = await Promise.all([qawk.get('/fleets'), qawk.get('/releases?status=waiting_for_approval')]);
     const fleets = d.content;
+    VIEWS.fleets.last = fleets;
     root.replaceChildren(h('div.stack',
-      h('div.panel', h('h3', 'What these are for'), h('div.body.faint',
-        'A fleet is a group of devices that should run the same release — beta, production, a customer site. ' +
-        'Devices join by hand or by the fleet\'s rule, a target query checked against devices in no fleet yet. ' +
-        'Give a fleet a release and every member gets it; promote copies one fleet\'s release to another.')),
+      pend.content.length ? approvals(pend.content) : null,
       fleets.length
-        ? tableOf(['Fleet', 'Rule', 'Release', 'Members', 'On release', ''], fleets.map(f => ({
-            cells: [
-              h('span.flex', h('span.swatch-dot', { style: `--sw:${f.colour || '#8b8f98'}` }),
-                h('b', f.name), f.description ? h('span.faint', ' · ' + f.description) : null),
-              f.rule ? h('span.mono.faint', f.rule) : h('span.faint', 'by hand'),
-              f.distributionSet
-                ? h('span', h('span.pill.ok', f.distributionSet), h('span.dim', ' ' + f.actionType))
-                : h('span.faint', 'none'),
-              h('span.mono', String(f.members)),
-              progress(f),
-              h('div.wrap',
-                h('button.btn.sm', { onclick: () => membersDrawer(f) }, 'members'),
-                h('button.btn.sm', { onclick: () => promoteDialog(f, fleets) }, 'promote'),
-                h('button.btn.sm', { onclick: () => fleetDialog(f) }, 'edit'),
-                h('button.btn.sm.danger', { onclick: async () => {
-                    if (!await ask('Delete fleet', `${f.name}\nIts ${f.members} devices stay, in no fleet.`, { danger: true })) return;
-                    try { await qawk.del('/fleets/' + f.id); render(); } catch (e) { fail(e); } } }, 'delete'))],
-          })))
-        : h('div.empty', h('b', 'No fleets'), 'Create beta and production, then promote from one to the other.')));
+        ? h('div.panel', h('h3', 'Pipeline'), h('div.body', lanes(fleets)))
+        : h('div.empty', h('b', 'No fleets'),
+            'Create dev, then beta and prod with their upstream, and expo as a temporary fleet.'),
+      h('div.panel', h('h3', 'How releases move'), h('div.body.faint',
+        'A fleet with an upstream takes releases only by promotion from it, through its gate: so many devices ' +
+        'of the upstream run the release, such a share of them, for so long. It may also need a second person ' +
+        'to approve. Inside a fleet a release goes out in waves and halts by itself when failures pass the ' +
+        'threshold. A frozen fleet gets nothing. Devices lent to a temporary fleet go back where they came from.'))));
   },
 };
 
-function progress(f) {
-  if (!f.distributionSet) return h('span.faint', '—');
-  const pct = f.members ? Math.round(100 * f.onRelease / f.members) : 0;
-  return h('span.flex',
-    h('span.mono', `${f.onRelease}/${f.members}`),
-    h('span.bar', { style: 'display:inline-block;width:70px;height:6px;border-radius:3px;background:var(--line,#ddd);overflow:hidden' },
-      h('span', { style: `display:block;height:100%;width:${pct}%;background:var(--ok,#12a594)` })),
-    f.updating ? h('span.pill', `${f.updating} updating`) : null,
-    f.failed ? h('span.pill.err', `${f.failed} failed`) : null);
+/* The chains, each on its own line, then the fleets that stand alone. */
+function lanes(fleets) {
+  const byId = new Map(fleets.map(f => [f.id, f]));
+  const children = id => fleets.filter(f => f.upstreamId === id);
+  const lines = [], seen = new Set();
+  for (const root of fleets.filter(f => !f.upstreamId || !byId.has(f.upstreamId))) {
+    const line = [];
+    for (let f = root; f && !seen.has(f.id); f = children(f.id)[0]) { line.push(f); seen.add(f.id); }
+    lines.push(line);
+  }
+  for (const f of fleets) if (!seen.has(f.id)) lines.push([f]);   // a second branch
+  lines.sort((a, b) => (b.length - a.length) || (a[0].temporary - b[0].temporary));
+  return h('div.stack', lines.map(line => h('div', {
+    style: 'display:flex;flex-wrap:wrap;gap:10px;align-items:stretch' },
+  line.flatMap((f, i) => [i ? h('div', { style: 'align-self:center;font-size:22px;opacity:.5' }, '→') : null,
+    card(f, fleets)]))));
 }
 
-async function fleetDialog(existing) {
-  const f = existing || {};
+function statusPill(r) {
+  if (!r) return h('span.faint', 'no release');
+  const cls = { active: '', completed: '.ok', halted: '.err' }[r.status] ?? '';
+  return h('span.pill' + cls, r.status);
+}
+
+function card(f, fleets) {
+  const p = f.progress, r = f.release;
+  const pct = p && p.members ? Math.round(100 * p.onRelease / p.members) : 0;
+  const frozen = f.freeze && f.freeze.active;
+  return h('div', { style: 'border:1px solid var(--line,#ddd);border-radius:10px;padding:10px 12px;min-width:250px;flex:1;max-width:380px' +
+      (frozen ? ';background:repeating-linear-gradient(135deg,transparent 0 10px,rgba(90,150,255,.07) 10px 20px)' : '') },
+    h('div.flex', { style: 'justify-content:space-between;gap:6px' },
+      h('span.flex', h('span.swatch-dot', { style: `--sw:${f.colour || '#8b8f98'}` }), h('b', f.name),
+        f.temporary ? h('span.pill', 'temporary') : null),
+      h('span.faint', `${f.members} device${f.members === 1 ? '' : 's'}`)),
+    f.description ? h('div.faint', f.description) : null,
+    h('div', { style: 'margin:8px 0 4px' },
+      f.distributionSet ? h('span.pill.ok', f.distributionSet) : h('span.faint', 'no release'), ' ', statusPill(r),
+      r && r.forced ? h('span.pill.err', { title: r.reason }, 'forced') : null),
+    p ? h('div', h('div', { style: 'height:6px;border-radius:3px;background:var(--line,#ddd);overflow:hidden;margin:4px 0' },
+          h('div', { style: `height:100%;width:${pct}%;background:${r && r.status === 'halted' ? 'var(--err,#e5484d)' : 'var(--ok,#12a594)'}` })),
+        h('div.faint', { style: 'font-size:12px' },
+          `${p.onRelease}/${p.members} on it`, p.active ? ` · ${p.active} updating` : '',
+          p.failed ? ` · ${p.failed} failed` : '', f.wavePercent && r ? ` · wave ${r.waves} of ${f.wavePercent}%` : ''))
+      : null,
+    r && r.status === 'halted' ? h('div', { style: 'color:var(--err,#e5484d);font-size:12px;margin-top:4px' },
+      r.reason.split('\n').pop()) : null,
+    frozen ? h('div', { style: 'font-size:12px;margin-top:4px' }, '❄ frozen: ', h('b', f.freeze.reason),
+      f.freeze.until ? h('span.faint', ' until ' + when(f.freeze.until)) : null) : null,
+    f.freeze && !f.freeze.active ? h('div.faint', { style: 'font-size:12px' },
+      `❄ freeze planned: ${f.freeze.reason}`, f.freeze.from ? ' from ' + when(f.freeze.from) : '') : null,
+    f.pending ? h('div', { style: 'font-size:12px;margin-top:4px' },
+      h('span.pill', 'awaiting approval'), ` ${f.pending.distributionSet} from ${f.pending.from || 'direct'}`) : null,
+    h('div.faint', { style: 'font-size:11px;margin-top:6px' },
+      f.upstream ? `from ${f.upstream} when ≥${f.gate.minDevices} devices and ≥${f.gate.minSuccess}% run it` +
+        (f.gate.soakMinutes ? `, ${f.gate.soakMinutes} min soak` : '') + (f.gate.approvalRequired ? ', approved' : '')
+        : 'takes releases directly', f.rule ? ` · rule ${f.rule}` : ''),
+    h('div.wrap', { style: 'margin-top:8px' },
+      f.upstream
+        ? h('button.btn.sm.primary', { onclick: () => promoteDialog(f, fleets) }, 'promote from ' + f.upstream)
+        : h('button.btn.sm.primary', { onclick: () => releaseDialog(f) }, 'release'),
+      r && r.status === 'halted' ? h('button.btn.sm', { onclick: () => resume(f) }, 'resume') : null,
+      h('button.btn.sm', { onclick: () => membersDrawer(f) }, 'devices'),
+      h('button.btn.sm', { onclick: () => historyDrawer(f) }, 'history'),
+      f.freeze ? h('button.btn.sm', { onclick: () => thaw(f) }, 'thaw') : h('button.btn.sm', { onclick: () => freezeDialog(f) }, 'freeze'),
+      f.temporary ? h('button.btn.sm', { onclick: () => sendHome(f) }, 'send devices home') : null,
+      h('button.btn.sm', { onclick: () => fleetDialog(f, fleets) }, 'edit'),
+      h('button.btn.sm.danger', { onclick: async () => {
+          if (!await ask('Delete fleet', `${f.name}\nIts ${f.members} devices stay, in no fleet.`, { danger: true })) return;
+          try { await qawk.del('/fleets/' + f.id); render(); } catch (e) { fail(e); } } }, 'delete')));
+}
+
+function approvals(list) {
+  return h('div.panel', h('h3', 'Waiting for approval'), h('div.body',
+    tableOf(['Fleet', 'Release', 'From', 'Asked by', 'Gate', ''], list.map(r => ({
+      cells: [h('b', r.fleet), h('span.pill', r.distributionSet), r.from || h('span.faint', 'direct'),
+        h('span', r.requestedBy, h('span.faint', ' · ' + ago(r.requestedAt))),
+        h('span.faint', { title: r.gateReport, style: 'white-space:pre-line;font-size:11px' },
+          r.forced ? 'forced: ' + r.reason : (r.gateReport || '—')),
+        can('APPROVE_ROLLOUT') ? h('div.wrap',
+          h('button.btn.sm.primary', {
+            disabled: r.requestedBy.toLowerCase() === me().toLowerCase(),
+            title: r.requestedBy.toLowerCase() === me().toLowerCase() ? 'four eyes: someone else approves what you asked for' : '',
+            onclick: () => decide(r, true) }, 'approve'),
+          h('button.btn.sm.danger', { onclick: () => decide(r, false) }, 'deny'))
+          : h('span.faint', 'needs APPROVE_ROLLOUT')],
+    })))));
+}
+
+function decide(r, approve) {
+  const note = h('input', { type: 'text', placeholder: approve ? 'change ticket, remarks…' : 'why not' });
+  modal(`${approve ? 'Approve' : 'Deny'} ${r.distributionSet} for ${r.fleet}`, [
+    h('pre.mono', { style: 'font-size:11px;white-space:pre-wrap;margin:0' }, r.gateReport || ''),
+    h('label.f', 'Note', note)], async () => {
+    await qawk.post(`/releases/${r.id}/${approve ? 'approve' : 'deny'}`, { note: note.value.trim() });
+    toast(approve ? 'Approved' : 'Denied', `${r.distributionSet} → ${r.fleet}`, 'ok'); render();
+  }, approve ? 'Approve' : 'Deny');
+}
+
+async function promoteDialog(to, fleets) {
+  const from = fleets.find(f => f.id === to.upstreamId);
+  if (!from || !from.distributionSet) { toast('Nothing to promote', `${to.upstream} runs no release`, 'info'); return; }
+  const g = await qawk.get(`/fleets/${to.id}/gate?from=${from.id}`);
+  const reason = h('input', { type: 'text', placeholder: 'why the gate is forced: it goes in the history' });
+  const canForce = can('APPROVE_ROLLOUT');
+  modal(`Promote ${from.distributionSet} to ${to.name}`, [
+    h('div', { style: 'margin-bottom:6px' }, g.open ? h('span.pill.ok', 'gate open') : h('span.pill.err', 'gate closed')),
+    h('pre.mono', { style: 'font-size:12px;white-space:pre-wrap;margin:0 0 8px' }, g.report),
+    !g.open && canForce ? h('label.f', 'Force it anyway, because', reason) : null,
+    !g.open && !canForce ? h('p.faint', 'Only someone with APPROVE_ROLLOUT can force a closed gate.') : null,
+    to.gate.approvalRequired ? h('p.faint', { style: 'font-size:12px' },
+      `${to.name} needs approval: the release waits until someone other than you approves it.`) : null,
+    to.wavePercent ? h('p.faint', { style: 'font-size:12px' },
+      `It goes out ${to.wavePercent}% of the fleet at a time; it halts if more than ${to.errorThreshold}% fail.`) : null,
+  ], async () => {
+    if (!g.open && !canForce) return false;
+    const r = await qawk.post(`/fleets/${to.id}/promote`,
+      { from: from.id, force: !g.open, reason: reason.value.trim() });
+    toast(r.status === 'waiting_for_approval' ? 'Waiting for approval' : 'Promoted',
+      `${r.distributionSet} → ${to.name}`, 'ok');
+    render();
+  }, g.open ? 'Promote' : 'Force');
+}
+
+async function releaseDialog(f) {
+  const sets = await distributionSets(true);
+  const ds = h('select', h('option', { value: '0' }, '— none: devices are left alone —'),
+    sets.content.filter(d => d.complete).map(d => h('option',
+      { value: d.id, selected: f.distributionSetId === d.id }, `${d.name} ${d.version} · ${d.type}`)));
+  modal('Release for ' + f.name, [h('label.f', 'Distribution set', ds),
+    f.gate.approvalRequired ? h('p.faint', 'This fleet needs approval: the release waits for it.') : null],
+  async () => {
+    await qawk.put('/fleets/' + f.id, { distributionSetId: Number(ds.value) });
+    toast('Release set', f.name, 'ok'); render();
+  }, 'Release');
+}
+
+async function resume(f) {
+  if (!await ask('Resume ' + f.name, `${f.release.reason.split('\n').pop()}\nThe devices that failed stay as they are; the rest go on.`,
+    { okLabel: 'Resume' })) return;
+  try { await qawk.post(`/fleets/${f.id}/resume`, {}); render(); } catch (e) { fail(e); }
+}
+
+const dt = ms => {
+  if (!ms) return '';
+  const d = new Date(ms), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+function freezeDialog(f) {
+  const reason = h('input', { type: 'text', placeholder: f.temporary ? 'e.g. ISE Barcelona' : 'e.g. season opening' });
+  const from = h('input', { type: 'datetime-local' });
+  const until = h('input', { type: 'datetime-local' });
+  modal('Freeze ' + f.name, [h('label.f', 'Reason', reason),
+    h('label.f', 'From (empty: now)', from), h('label.f', 'Until (empty: until thawed)', until),
+    h('p.faint', { style: 'font-size:12px' },
+      'No release reaches the fleet while it is frozen. Someone can still assign a single device by hand; the audit log records who.')],
+  async () => {
+    const b = { reason: reason.value.trim() };
+    if (from.value) b.from = new Date(from.value).getTime();
+    if (until.value) b.until = new Date(until.value).getTime();
+    await qawk.put(`/fleets/${f.id}/freeze`, b); toast('Frozen', f.name, 'ok'); render();
+  }, 'Freeze');
+}
+
+async function thaw(f) {
+  if (!await ask('Thaw ' + f.name, `${f.freeze.reason}\nReleases reach the fleet again.`, { okLabel: 'Thaw' })) return;
+  try { await qawk.del(`/fleets/${f.id}/freeze`); render(); } catch (e) { fail(e); }
+}
+
+async function sendHome(f, ids) {
+  if (!ids && !await ask('Send home', `Every device in ${f.name} goes back to the fleet it came from,\nand gets that fleet's release again.`,
+    { okLabel: 'Send home' })) return;
+  try {
+    const r = await qawk.post(`/fleets/${f.id}/return`, ids ? { controllerIds: ids } : {});
+    toast('Sent home', `${r.returned} device${r.returned === 1 ? '' : 's'}` +
+      (r.stayed ? `, ${r.stayed} with no home stay` : ''), 'ok');
+    render();
+  } catch (e) { fail(e); }
+}
+
+async function fleetDialog(existing, fleets) {
+  const f = existing || { gate: { minDevices: 1, minSuccess: 100, soakMinutes: 0, approvalRequired: false },
+    wavePercent: 0, waveTimeoutMinutes: 60, errorThreshold: 0, actionType: 'forced' };
+  const num = (v, min, max) => h('input', { type: 'number', value: v, min, max, style: 'width:90px' });
   const name = h('input', { type: 'text', value: f.name || '' });
   const desc = h('input', { type: 'text', value: f.description || '' });
   const colour = colourPicker(f.colour || '#12a594', { nameEl: name });
   const rule = fiqlEditor({ entity: 'targets', value: f.rule || '' });
-  const sets = await distributionSets(true);
-  const ds = h('select', h('option', { value: '0' }, '— none: members are left alone —'),
-    sets.content.filter(d => d.complete).map(d => h('option',
-      { value: d.id, selected: f.distributionSetId === d.id }, `${d.name} ${d.version} · ${d.type}`)));
-  const type = h('select', ['forced', 'soft'].map(t =>
-    h('option', { value: t, selected: (f.actionType || 'forced') === t }, t)));
-  modal(existing ? 'Edit fleet' : 'New fleet', [
+  const up = h('select', h('option', { value: '0' }, '— none: releases are given directly —'),
+    fleets.filter(o => !existing || o.id !== existing.id).map(o =>
+      h('option', { value: o.id, selected: f.upstreamId === o.id }, o.name)));
+  const temp = h('input', { type: 'checkbox', checked: !!f.temporary });
+  const minDev = num(f.gate.minDevices, 0), minOk = num(f.gate.minSuccess, 0, 100), soak = num(f.gate.soakMinutes, 0);
+  const appr = h('input', { type: 'checkbox', checked: f.gate.approvalRequired });
+  const wave = num(f.wavePercent, 0, 100), waveT = num(f.waveTimeoutMinutes, 1), thr = num(f.errorThreshold, 0, 100);
+  const type = h('select', ['forced', 'soft'].map(t => h('option', { value: t, selected: f.actionType === t }, t)));
+  const row = (...n) => h('div', { style: 'display:flex;gap:12px;flex-wrap:wrap;align-items:end' }, ...n);
+  modal(existing ? 'Edit ' + f.name : 'New fleet', [
     h('label.f', 'Name', name), h('label.f', 'Description', desc), h('label.f', 'Colour', colour),
-    h('label.f', 'Rule (optional)', rule),
-    h('p.faint', { style: 'margin:0;font-size:12px' },
-      'Devices in no fleet that match the rule join this one, including devices that register later. ' +
-      'Leave it empty to add members by hand.'),
-    h('label.f', 'Release', ds), h('label.f', 'Mode', type),
+    h('label.f', 'Rule: devices in no fleet that match join this one', rule),
+    h('label.f', 'Takes releases from', up),
+    h('label', { style: 'display:flex;gap:6px;align-items:center' }, temp,
+      'temporary: devices come back to the fleet they came from (a trade show)'),
+    h('div.f', h('span', 'Gate, checked on the upstream'), row(
+      h('label.f', 'devices on it', minDev), h('label.f', '% of the fleet', minOk), h('label.f', 'soak, minutes', soak)),
+      h('label', { style: 'display:flex;gap:6px;align-items:center;margin-top:4px' }, appr,
+        'a second person approves every release')),
+    h('div.f', h('span', 'Delivery'), row(
+      h('label.f', 'wave, % (0: all)', wave), h('label.f', 'next wave after, min', waveT),
+      h('label.f', 'halt over, % failed', thr), h('label.f', 'mode', type))),
   ], async () => {
     if (!name.value.trim()) throw new Error('a name is required');
-    if (rule.value.trim()) {
-      const v = fiqlCheck(rule.value, 'targets');
-      if (!v.ok) throw new Error(v.msg);
-    }
+    if (rule.value.trim()) { const v = fiqlCheck(rule.value, 'targets'); if (!v.ok) throw new Error(v.msg); }
     const b = { name: name.value.trim(), description: desc.value.trim(), colour: colour.value,
-      rule: rule.value.trim(), distributionSetId: Number(ds.value), actionType: type.value };
+      rule: rule.value.trim(), upstreamId: Number(up.value), temporary: temp.checked,
+      gate: { minDevices: Number(minDev.value), minSuccess: Number(minOk.value), soakMinutes: Number(soak.value),
+        approvalRequired: appr.checked },
+      wavePercent: Number(wave.value), waveTimeoutMinutes: Number(waveT.value), errorThreshold: Number(thr.value),
+      actionType: type.value };
     if (existing) await qawk.put('/fleets/' + existing.id, b);
     else await qawk.post('/fleets', b);
     toast('Saved', b.name, 'ok'); render();
   }, 'Save');
 }
 
-function promoteDialog(to, fleets) {
-  const others = fleets.filter(o => o.id !== to.id && o.distributionSetId);
-  if (!others.length) { toast('Nothing to promote', 'no other fleet runs a release yet', 'info'); return; }
-  const from = h('select', others.map(o => h('option', { value: o.id }, `${o.name} — ${o.distributionSet}`)));
-  modal('Promote to ' + to.name, [
-    h('label.f', 'Take the release of', from),
-    h('p.faint', { style: 'margin:0;font-size:12px' },
-      `Every device in ${to.name} that does not run it gets it within ten seconds.`),
-  ], async () => {
-    const r = await qawk.post(`/fleets/${to.id}/promote`, { from: Number(from.value) });
-    toast('Promoted', `${to.name} now gets ${r.distributionSet}`, 'ok'); render();
-  }, 'Promote');
+async function historyDrawer(f) {
+  const d = await qawk.get(`/fleets/${f.id}/releases?limit=100`);
+  drawer(f.name + ' — releases', d.content.length
+    ? tableOf(['When', 'Release', 'From', 'Status', 'Asked by', 'Decided by', 'Waves'], d.content.map(r => ({
+        cells: [h('span.faint', when(r.requestedAt)), h('span.pill', r.distributionSet), r.from || h('span.faint', 'direct'),
+          h('span', statusPill(r), r.forced ? h('span.pill.err', { title: r.reason }, 'forced') : null,
+            r.reason ? h('div.faint', { style: 'font-size:11px;white-space:pre-line' }, r.reason) : null),
+          r.requestedBy, r.decidedBy || h('span.faint', '—'), String(r.waves)],
+      })))
+    : h('div.empty', 'No release yet.'));
 }
 
 async function membersDrawer(f) {
@@ -121,15 +292,19 @@ async function membersDrawer(f) {
         if (!ids.length) return;
         try { await qawk.put(`/fleets/${f.id}/targets`, ids); await load(); render(); } catch (e) { fail(e); }
       } }, 'add')),
-      h('div.faint', `${d.total} device${d.total === 1 ? '' : 's'}`),
+      h('div.faint', `${d.total} device${d.total === 1 ? '' : 's'}` +
+        (f.temporary ? ' · devices added here remember the fleet they came from' : '')),
       d.content.length
-        ? tableOf(['Device', 'Status', 'Runs', 'Should run', 'Last poll', ''], d.content.map(t => ({
+        ? tableOf(['Device', 'Status', 'Runs', 'Should run', f.temporary ? 'Home' : 'Joined', 'Last poll', ''], d.content.map(t => ({
             cells: [h('span.mono', t.controllerId), h('span.dim', t.updateStatus),
               t.installed || h('span.faint', '—'), t.assigned || h('span.faint', '—'),
+              f.temporary ? (t.home || h('span.faint', 'none')) : h('span.faint', t.joinedAt ? ago(t.joinedAt) : '—'),
               t.lastControllerRequestAt ? h('span.faint', ago(t.lastControllerRequestAt)) : h('span.faint', 'never'),
-              h('button.btn.sm', { onclick: async () => {
-                try { await qawk.delJSON(`/fleets/${f.id}/targets`, [t.controllerId]); await load(); render(); }
-                catch (e) { fail(e); } } }, 'remove')],
+              h('div.wrap',
+                f.temporary && t.home ? h('button.btn.sm', { onclick: async () => { await sendHome(f, [t.controllerId]); await load(); } }, 'send home') : null,
+                h('button.btn.sm', { onclick: async () => {
+                  try { await qawk.delJSON(`/fleets/${f.id}/targets`, [t.controllerId]); await load(); render(); }
+                  catch (e) { fail(e); } } }, 'remove'))],
           })))
         : h('div.empty', 'no members'));
   };

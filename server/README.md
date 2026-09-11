@@ -300,6 +300,86 @@ The console shows a **Fleets** page when the server lists `fleets` in
 `/qawk/v1/info`: each fleet with its rule, release and a bar of how many
 members run it, the members in a side panel, and edit / promote / delete.
 
+### The release pipeline: dev → beta → prod, expo apart
+
+Fleets chain. A fleet may name an **upstream** — beta names dev, prod names
+beta — and then takes releases **only by promotion** from it; a fleet with no
+upstream (dev, expo) is given releases directly. What a release must show in
+the upstream before it may enter is the fleet's **gate**:
+
+| Gate setting | Meaning |
+|---|---|
+| `gate.minDevices` | at least so many devices of the upstream run the release |
+| `gate.minSuccess` | at least this percentage of the upstream's devices run it |
+| `gate.soakMinutes` | it started in the upstream at least so many minutes ago |
+| `gate.approvalRequired` | every release into this fleet waits for a second person |
+
+A closed gate refuses the promotion (`409`, with the report line by line). A
+person with `APPROVE_ROLLOUT` may **force** it, but only with a reason, which
+stays in the release's history. When approval is required the promotion
+answers `202` and waits in the queue (`GET /qawk/v1/releases?status=waiting_for_approval`)
+until someone with `APPROVE_ROLLOUT` **other than who asked** approves it (four
+eyes) or denies it. The built-in role `release-manager` is an operator who can
+approve and force.
+
+Inside a fleet a release goes out in **waves**: `wavePercent` of the members
+at a time (0: all at once); the next wave when the last has finished, or
+after `waveTimeoutMinutes` if some devices never answer. When the devices
+that failed pass `errorThreshold` percent of those that finished, the release
+**halts** by itself; nothing more is sent until someone resumes it
+(`POST /qawk/v1/fleets/{id}/resume`), and only new failures count after that.
+A release is `completed` when every member runs it; a device joining later
+still gets it.
+
+A **freeze** (`PUT /qawk/v1/fleets/{id}/freeze {reason, from, until}`, both
+ends optional) stops every release reaching the fleet — promotions, direct
+releases and the background delivery; planned freezes show in the console
+before they start. A person can still assign one device by hand through the
+hawkBit API; the audit log records who.
+
+A **temporary** fleet — expo, the machines taken to a trade show — remembers
+where each device came from (`home`). `POST /qawk/v1/fleets/{id}/return`
+(all members, or `{"controllerIds": [...]}`) sends them back, and there they
+get their own fleet's release again: a device is sent a release again when it
+joins a fleet, not only once ever.
+
+| Route | Permission |
+|---|---|
+| `GET /qawk/v1/fleets/{id}/gate?from=<id>` — would the gate open, and why | `READ_TARGET` |
+| `POST /qawk/v1/fleets/{id}/promote` — `{from, force, reason}`; `200` started, `202` waiting for approval | `UPDATE_TARGET` (+ `APPROVE_ROLLOUT` to force) |
+| `GET /qawk/v1/fleets/{id}/releases` — the fleet's history | `READ_TARGET` |
+| `GET /qawk/v1/releases?status=…` — every fleet's; `waiting_for_approval` is the queue | `READ_TARGET` |
+| `POST /qawk/v1/releases/{id}/approve`, `…/deny` — `{note}` | `APPROVE_ROLLOUT` |
+| `POST /qawk/v1/fleets/{id}/resume` — a halted release goes on | `UPDATE_TARGET` |
+| `PUT` / `DELETE /qawk/v1/fleets/{id}/freeze` | `UPDATE_TARGET` |
+| `POST /qawk/v1/fleets/{id}/return` — devices of a temporary fleet go home | `UPDATE_TARGET` |
+
+A fleet's JSON carries `upstreamId`, `temporary`, `gate`, `wavePercent`,
+`waveTimeoutMinutes`, `errorThreshold`, `freeze`, the current `release`
+(status, waves, who asked and who decided), its `progress` (members, on it,
+updating, succeeded, failed) and the `pending` release, if any.
+
+The console draws the chains as a pipeline, one card per fleet — release,
+status, a bar of the devices on it, the wave, a freeze, an approval waiting —
+with the approval queue on top; promotion shows the gate's report before
+anything is sent.
+
+**Simulated devices.** The Qawk image carries `qawk-sim`, which runs any
+number of devices that register through the device API, report
+`ring=<fleet>` among their attributes (so a rule `attribute.ring==beta` picks
+them up), take deployments and report them done after a random time — without
+downloading anything — and fail any whose module name contains `broken`:
+
+```bash
+docker run --rm --network host --entrypoint qawk-sim qawk:local \
+    -url http://localhost:8080 -token <gateway token> \
+    -fleet dev:20 -fleet beta:40 -fleet prod:120 -fleet expo:8
+```
+
+`test/pipeline.py` runs the whole pipeline against a scratch server with it;
+rows 15–19 of the device demonstration (`ota/demo/run-demo.sh`) run it with
+the real device among 188 simulated ones.
+
 ### Users, roles, API tokens and the audit log
 
 hawkBit keeps its users in its configuration file. Qawk keeps them in the

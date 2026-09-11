@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -11,22 +13,85 @@ import (
 	"qawk/internal/store"
 )
 
-// Fleets (a Qawk addition): beta, production, staging -- sets of devices that
-// should run the same release.
+// Fleets and the release pipeline (a Qawk addition).
 //
-// Two things happen in the background, every few seconds, on the instance
-// that runs the jobs:
+// A fleet is a set of devices that should run the same release: dev, beta,
+// prod, a trade show. Fleets chain: beta names dev as its upstream, prod
+// names beta, and a release reaches a fleet with an upstream only by
+// promotion from it, through the fleet's gate -- so many devices of the
+// upstream run it, such a share of them, for so long -- and, when the fleet
+// asks for it, with a second person's approval. A fleet with no upstream
+// (dev, expo) is given releases directly.
+//
+// In the background, every ten seconds, on the instance running the jobs:
 //
 //   - a fleet with a rule adopts the devices that match it and are in no
-//     fleet yet: a device registering for the first time lands in the right
-//     fleet by itself, from what it reports about itself;
-//   - a fleet with a release gives it to every member that does not have it
-//     and has never been sent it -- the same rule as auto-assignment, so a
-//     device where it failed is not sent it again every ten seconds.
+//     fleet yet, so a device registering for the first time lands in the
+//     right one from what it reports about itself;
+//   - a fleet's current release goes to the members that do not have it and
+//     have not been sent it since it started (or since they joined), all at
+//     once or in waves; it halts by itself when the share of devices that
+//     failed passes the fleet's error threshold;
+//   - a frozen fleet is left alone.
 
-// SaveFleet validates a fleet before it is stored: the rule must parse, the
-// release must be assignable.
-func (s *Service) SaveFleet(ctx context.Context, user string, f model.Fleet) (int64, error) {
+func errGate(msg string) error {
+	return httpx.Custom(http.StatusConflict, "qawk.fleet.gateClosed", "qawk.GateClosedException", msg)
+}
+
+func errFrozen(f model.Fleet) error {
+	return httpx.Custom(http.StatusConflict, "qawk.fleet.frozen", "qawk.FleetFrozenException",
+		fmt.Sprintf("fleet %s is frozen: %s", f.Name, *f.FreezeReason))
+}
+
+func errFourEyes() error {
+	return httpx.Custom(http.StatusForbidden, "qawk.release.fourEyes", "qawk.FourEyesException",
+		"a release is approved by someone other than who asked for it")
+}
+
+func errNoForce() error {
+	return httpx.Custom(http.StatusForbidden, "hawkbit.server.error.insufficientpermission",
+		"org.eclipse.hawkbit.im.authentication.InsufficientPermissionException",
+		"Insufficient Permission: forcing a closed gate needs APPROVE_ROLLOUT")
+}
+
+// FleetState is a fleet with its current release, how it is going, and the
+// release waiting for approval, if any.
+type FleetState struct {
+	model.Fleet
+	Release  *model.FleetRelease
+	Progress *model.ReleaseProgress
+	Pending  *model.FleetRelease
+}
+
+func (s *Service) FleetState(ctx context.Context, f model.Fleet) (FleetState, error) {
+	st := FleetState{Fleet: f}
+	rel, err := s.st.CurrentRelease(ctx, s.st.DB(), f.ID)
+	if err != nil {
+		return st, err
+	}
+	st.Release = rel
+	if rel != nil && rel.DSID != nil {
+		p, err := s.st.Progress(ctx, f.ID, *rel.DSID, since(rel))
+		if err != nil {
+			return st, err
+		}
+		st.Progress = &p
+	}
+	st.Pending, err = s.st.PendingRelease(ctx, s.st.DB(), f.ID)
+	return st, err
+}
+
+func since(r *model.FleetRelease) int64 {
+	if r.StartedAt != nil {
+		return *r.StartedAt
+	}
+	return 0
+}
+
+// SaveFleet validates a fleet and stores it. release, when not nil, is the
+// set the fleet is given directly (0: none) -- refused for a fleet with an
+// upstream, which takes releases by promotion.
+func (s *Service) SaveFleet(ctx context.Context, user string, f model.Fleet, release *int64) (int64, error) {
 	if strings.TrimSpace(f.Name) == "" {
 		return 0, httpx.Validation("a fleet needs a name")
 	}
@@ -41,125 +106,512 @@ func (s *Service) SaveFleet(ctx context.Context, user string, f model.Fleet) (in
 	if f.ActionType == "" {
 		f.ActionType = model.TypeForced
 	}
+	if f.WaveTimeoutMinutes == 0 {
+		f.WaveTimeoutMinutes = 60
+	}
+	for _, c := range []struct {
+		v    int
+		name string
+		max  int
+	}{
+		{f.Gate.MinSuccess, "gate.minSuccess", 100}, {f.WavePercent, "wavePercent", 100},
+		{f.ErrorThreshold, "errorThreshold", 100}, {f.Gate.MinDevices, "gate.minDevices", 1 << 30},
+		{f.Gate.SoakMinutes, "gate.soakMinutes", 1 << 30}, {f.WaveTimeoutMinutes, "waveTimeoutMinutes", 1 << 30},
+	} {
+		if c.v < 0 || c.v > c.max {
+			return 0, httpx.Validation(fmt.Sprintf("%s must be between 0 and %d", c.name, c.max))
+		}
+	}
 	id := f.ID
 	err := s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
-		if f.DSID != nil {
-			if _, err := s.checkAssignable(ctx, tx, *f.DSID); err != nil {
+		var err error
+		// before the write: a missing upstream is the caller's mistake (400),
+		// not a foreign key the database refuses (409)
+		if f.UpstreamID != nil {
+			if err := s.checkUpstream(ctx, tx, f.ID, *f.UpstreamID); err != nil {
 				return err
 			}
 		}
 		if f.ID == 0 {
-			var err error
-			id, err = s.st.CreateFleet(ctx, tx, user, now, f)
+			if id, err = s.st.CreateFleet(ctx, tx, user, now, f); err != nil {
+				return err
+			}
+		} else {
+			if _, err := s.st.Fleet(ctx, tx, f.ID); err != nil {
+				return err
+			}
+			if err := s.st.UpdateFleet(ctx, tx, user, now, f); err != nil {
+				return err
+			}
+		}
+		if release == nil {
+			return nil
+		}
+		cur, err := s.st.Fleet(ctx, tx, id)
+		if err != nil {
 			return err
 		}
-		if _, err := s.st.Fleet(ctx, tx, f.ID); err != nil {
-			return err
-		}
-		return s.st.UpdateFleet(ctx, tx, user, now, f)
+		return s.releaseDirect(ctx, tx, user, cur, *release, now)
 	})
 	return id, err
 }
 
-// SetMembers puts devices into a fleet by hand (fleet nil: out of theirs).
-func (s *Service) SetMembers(ctx context.Context, user string, controllerIDs []string, fleet *int64) error {
-	return s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
-		if fleet != nil {
-			if _, err := s.st.Fleet(ctx, tx, *fleet); err != nil {
+// checkUpstream refuses an upstream that does not exist or makes a loop.
+func (s *Service) checkUpstream(ctx context.Context, tx pgx.Tx, id, up int64) error {
+	for i := 0; i < 64; i++ {
+		if up == id {
+			return httpx.Validation("a pipeline cannot loop back to the fleet it starts from")
+		}
+		u, err := s.st.Fleet(ctx, tx, up)
+		if err != nil {
+			return httpx.Validation(fmt.Sprintf("there is no fleet %d to take releases from", up))
+		}
+		if u.UpstreamID == nil {
+			return nil
+		}
+		up = *u.UpstreamID
+	}
+	return httpx.Validation("the pipeline is too long")
+}
+
+// releaseDirect gives a fleet with no upstream a release (0: none).
+func (s *Service) releaseDirect(ctx context.Context, tx pgx.Tx, user string, f model.Fleet, dsID int64, now int64) error {
+	if dsID == 0 {
+		if f.DSID == nil {
+			return nil
+		}
+		if err := s.st.SetFleetDS(ctx, tx, user, now, f.ID, nil); err != nil {
+			return err
+		}
+		return s.st.EndReleases(ctx, tx, f.ID, now)
+	}
+	if f.DSID != nil && *f.DSID == dsID {
+		return nil
+	}
+	if f.UpstreamID != nil {
+		return httpx.Validation(fmt.Sprintf("%s takes its releases from %s: promote one from there",
+			f.Name, deref(f.UpstreamName)))
+	}
+	if f.Frozen(now) {
+		return errFrozen(f)
+	}
+	ds, err := s.checkAssignable(ctx, tx, dsID)
+	if err != nil {
+		return err
+	}
+	r := model.FleetRelease{FleetID: f.ID, DSID: &dsID, DSLabel: ds.Label(), Status: model.ReleaseActive,
+		RequestedBy: user, RequestedAt: now}
+	if f.Gate.ApprovalRequired {
+		r.Status = model.ReleasePending
+	}
+	id, err := s.st.CreateRelease(ctx, tx, r)
+	if err != nil || r.Status == model.ReleasePending {
+		return err
+	}
+	return s.startRelease(ctx, tx, user, f.ID, id, dsID, now)
+}
+
+func (s *Service) startRelease(ctx context.Context, tx pgx.Tx, user string, fleet, id, dsID, now int64) error {
+	if err := s.st.SetFleetDS(ctx, tx, user, now, fleet, &dsID); err != nil {
+		return err
+	}
+	return s.st.StartRelease(ctx, tx, fleet, id, now)
+}
+
+func deref(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+// Gate says whether the release from runs may enter to, and why, line by line.
+func (s *Service) Gate(ctx context.Context, to, from int64) (report string, open bool, err error) {
+	dst, err := s.st.Fleet(ctx, s.st.DB(), to)
+	if err != nil {
+		return "", false, err
+	}
+	src, err := s.st.Fleet(ctx, s.st.DB(), from)
+	if err != nil {
+		return "", false, err
+	}
+	rel, err := s.st.CurrentRelease(ctx, s.st.DB(), from)
+	if err != nil {
+		return "", false, err
+	}
+	report, open, err = s.gate(ctx, dst, src, rel, httpx.Now())
+	return report, open, err
+}
+
+func (s *Service) gate(ctx context.Context, dst, src model.Fleet, rel *model.FleetRelease, now int64) (string, bool, error) {
+	if rel == nil || rel.DSID == nil {
+		return "✗ " + src.Name + " runs no release", false, nil
+	}
+	if dst.UpstreamID == nil {
+		return "✓ " + dst.Name + " stands alone: no gate", true, nil
+	}
+	p, err := s.st.Progress(ctx, src.ID, *rel.DSID, since(rel))
+	if err != nil {
+		return "", false, err
+	}
+	g := dst.Gate
+	var lines []string
+	open := true
+	check := func(ok bool, line string) {
+		mark := "✓ "
+		if !ok {
+			mark, open = "✗ ", false
+		}
+		lines = append(lines, mark+line)
+	}
+	pct := int64(0)
+	if p.Members > 0 {
+		pct = p.OnRelease * 100 / p.Members
+	}
+	soak := (now - since(rel)) / 60_000
+	check(rel.Status != model.ReleaseHalted, fmt.Sprintf("%s in %s is not halted", rel.DSLabel, src.Name))
+	check(p.OnRelease >= int64(g.MinDevices),
+		fmt.Sprintf("%d devices of %s run %s (at least %d)", p.OnRelease, src.Name, rel.DSLabel, g.MinDevices))
+	check(p.Members > 0 && pct >= int64(g.MinSuccess),
+		fmt.Sprintf("%d%% of %s runs it (at least %d%%)", pct, src.Name, g.MinSuccess))
+	check(soak >= int64(g.SoakMinutes),
+		fmt.Sprintf("it has been in %s for %d minutes (at least %d)", src.Name, soak, g.SoakMinutes))
+	return strings.Join(lines, "\n"), open, nil
+}
+
+// Promote asks for to to get the release from runs: "prod gets what beta
+// has". Through the gate, or past it with force, a reason and APPROVE_ROLLOUT;
+// then at once, or once someone else approves.
+func (s *Service) Promote(ctx context.Context, user string, canForce bool, to, from int64, force bool, reason string) (model.FleetRelease, error) {
+	var out model.FleetRelease
+	err := s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
+		dst, err := s.st.Fleet(ctx, tx, to)
+		if err != nil {
+			return err
+		}
+		src, err := s.st.Fleet(ctx, tx, from)
+		if err != nil {
+			return err
+		}
+		if to == from {
+			return httpx.Validation("a fleet cannot be promoted from itself")
+		}
+		if dst.UpstreamID != nil && *dst.UpstreamID != from {
+			return httpx.Validation(fmt.Sprintf("%s takes its releases from %s, not from %s",
+				dst.Name, deref(dst.UpstreamName), src.Name))
+		}
+		if dst.Frozen(now) {
+			return errFrozen(dst)
+		}
+		rel, err := s.st.CurrentRelease(ctx, tx, from)
+		if err != nil {
+			return err
+		}
+		report, open, err := s.gate(ctx, dst, src, rel, now)
+		if err != nil {
+			return err
+		}
+		if rel == nil || rel.DSID == nil {
+			return httpx.Validation(src.Name + " runs no release: there is nothing to promote")
+		}
+		if !open {
+			if !force {
+				return errGate(fmt.Sprintf("the gate into %s is closed:\n%s", dst.Name, report))
+			}
+			if !canForce {
+				return errNoForce()
+			}
+			if strings.TrimSpace(reason) == "" {
+				return httpx.Validation("say why the gate is forced: it goes in the release's history")
+			}
+		}
+		ds, err := s.checkAssignable(ctx, tx, *rel.DSID)
+		if err != nil {
+			return err
+		}
+		r := model.FleetRelease{FleetID: to, DSID: rel.DSID, DSLabel: ds.Label(), FromFleetID: &from,
+			FromFleetName: src.Name, Status: model.ReleaseActive, Forced: !open, Reason: strings.TrimSpace(reason),
+			GateReport: report, RequestedBy: user, RequestedAt: now}
+		if dst.Gate.ApprovalRequired {
+			r.Status = model.ReleasePending
+		}
+		id, err := s.st.CreateRelease(ctx, tx, r)
+		if err != nil {
+			return err
+		}
+		if r.Status == model.ReleaseActive {
+			if err := s.startRelease(ctx, tx, user, to, id, *rel.DSID, now); err != nil {
 				return err
 			}
+		}
+		out, err = s.st.Release(ctx, tx, id)
+		return err
+	})
+	return out, err
+}
+
+// Approve lets a release waiting for approval go out. Four eyes: not by the
+// person who asked for it.
+func (s *Service) Approve(ctx context.Context, user string, id int64, note string) (model.FleetRelease, error) {
+	var out model.FleetRelease
+	err := s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
+		r, err := s.st.Release(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if r.Status != model.ReleasePending {
+			return httpx.Validation(fmt.Sprintf("release %d is %s, not waiting for approval", id, r.Status))
+		}
+		if strings.EqualFold(r.RequestedBy, user) {
+			return errFourEyes()
+		}
+		f, err := s.st.Fleet(ctx, tx, r.FleetID)
+		if err != nil {
+			return err
+		}
+		if f.Frozen(now) {
+			return errFrozen(f)
+		}
+		if r.DSID == nil {
+			return httpx.Validation("the set of this release has been deleted")
+		}
+		if _, err := s.checkAssignable(ctx, tx, *r.DSID); err != nil {
+			return err
+		}
+		if err := s.st.DecideRelease(ctx, tx, id, model.ReleaseActive, user, note, now); err != nil {
+			return err
+		}
+		if err := s.startRelease(ctx, tx, user, r.FleetID, id, *r.DSID, now); err != nil {
+			return err
+		}
+		out, err = s.st.Release(ctx, tx, id)
+		return err
+	})
+	return out, err
+}
+
+func (s *Service) Deny(ctx context.Context, user string, id int64, note string) (model.FleetRelease, error) {
+	var out model.FleetRelease
+	err := s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
+		r, err := s.st.Release(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if r.Status != model.ReleasePending {
+			return httpx.Validation(fmt.Sprintf("release %d is %s, not waiting for approval", id, r.Status))
+		}
+		if err := s.st.DecideRelease(ctx, tx, id, model.ReleaseDenied, user, note, now); err != nil {
+			return err
+		}
+		out, err = s.st.Release(ctx, tx, id)
+		return err
+	})
+	return out, err
+}
+
+// Resume lets a halted release go on. The failures that halted it are
+// counted as already seen: only new ones can halt it again.
+func (s *Service) Resume(ctx context.Context, user string, fleet int64) error {
+	return s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
+		r, err := s.st.CurrentRelease(ctx, tx, fleet)
+		if err != nil {
+			return err
+		}
+		if r == nil || r.Status != model.ReleaseHalted || r.DSID == nil {
+			return httpx.Validation("this fleet has no halted release")
+		}
+		p, err := s.st.Progress(ctx, fleet, *r.DSID, since(r))
+		if err != nil {
+			return err
+		}
+		return s.st.ResumeRelease(ctx, tx, r.ID, p.Failed)
+	})
+}
+
+// Freeze stops every release reaching a fleet, from from to until (either
+// may be nil: now, for ever). A person can still assign a device through the
+// hawkBit API; the audit log says who did.
+func (s *Service) Freeze(ctx context.Context, user string, fleet int64, reason string, from, until *int64) error {
+	if strings.TrimSpace(reason) == "" {
+		return httpx.Validation("a freeze needs a reason: the console shows it to whoever tries to release")
+	}
+	if from != nil && until != nil && *until <= *from {
+		return httpx.Validation("a freeze must end after it starts")
+	}
+	reason = strings.TrimSpace(reason)
+	return s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
+		if _, err := s.st.Fleet(ctx, tx, fleet); err != nil {
+			return err
+		}
+		return s.st.SetFreeze(ctx, tx, user, now, fleet, &reason, from, until)
+	})
+}
+
+func (s *Service) Thaw(ctx context.Context, user string, fleet int64) error {
+	return s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
+		if _, err := s.st.Fleet(ctx, tx, fleet); err != nil {
+			return err
+		}
+		return s.st.SetFreeze(ctx, tx, user, now, fleet, nil, nil, nil)
+	})
+}
+
+// SetMembers puts devices into a fleet by hand (fleet nil: out of theirs).
+// Into a temporary fleet they remember the one they came from.
+func (s *Service) SetMembers(ctx context.Context, user string, controllerIDs []string, fleet *int64) error {
+	return s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
+		temporary := false
+		if fleet != nil {
+			f, err := s.st.Fleet(ctx, tx, *fleet)
+			if err != nil {
+				return err
+			}
+			temporary = f.Temporary
 		}
 		ids, err := s.st.IDsOf(ctx, tx, controllerIDs)
 		if err != nil {
 			return err
 		}
-		return s.st.SetFleet(ctx, tx, ids, fleet)
+		return s.st.SetFleet(ctx, tx, ids, fleet, now, temporary)
 	})
 }
 
-// Promote gives a fleet the release another one runs: "production gets what
-// beta has". The members receive it from the next background step.
-func (s *Service) Promote(ctx context.Context, user string, to, from int64) (model.Fleet, error) {
-	var out model.Fleet
-	err := s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
-		src, err := s.st.Fleet(ctx, tx, from)
-		if err != nil {
+// ReturnHome sends a temporary fleet's devices back to the fleets they came
+// from (all, or those listed); there they get that fleet's release again.
+func (s *Service) ReturnHome(ctx context.Context, user string, fleet int64, controllerIDs []string) (returned, homeless int64, err error) {
+	err = s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
+		if _, err := s.st.Fleet(ctx, tx, fleet); err != nil {
 			return err
 		}
-		if src.DSID == nil {
-			return httpx.Validation("fleet " + src.Name + " runs no release: there is nothing to promote")
+		var ids []int64
+		if len(controllerIDs) > 0 {
+			var err error
+			if ids, err = s.st.IDsOf(ctx, tx, controllerIDs); err != nil {
+				return err
+			}
 		}
-		dst, err := s.st.Fleet(ctx, tx, to)
-		if err != nil {
-			return err
-		}
-		if _, err := s.checkAssignable(ctx, tx, *src.DSID); err != nil {
-			return err
-		}
-		dst.DSID = src.DSID
-		if err := s.st.UpdateFleet(ctx, tx, user, now, dst); err != nil {
-			return err
-		}
-		out, err = s.st.Fleet(ctx, tx, to)
+		var err error
+		returned, homeless, err = s.st.ReturnHome(ctx, tx, fleet, ids, now)
 		return err
 	})
-	return out, err
+	return returned, homeless, err
 }
+
+// ------------------------------------------------------------ background
 
 func (s *Service) tickFleets(ctx context.Context) error {
 	fleets, err := s.st.Fleets(ctx)
 	if err != nil {
 		return err
 	}
+	now := httpx.Now()
 	for _, f := range fleets {
-		if f.Rule != nil && *f.Rule != "" {
-			ids, err := s.st.Matching(ctx, s.st.DB(), *f.Rule, func(a *store.Args) []string {
-				return []string{"t.fleet_id IS NULL"}
-			})
-			if err != nil {
-				s.log.Warn("fleet rule", "fleet", f.Name, "err", err)
-			} else if len(ids) > 0 {
-				fid := f.ID
-				if err := s.st.Tx(ctx, "system", func(tx pgx.Tx, now int64) error {
-					return s.st.SetFleet(ctx, tx, ids, &fid)
-				}); err != nil {
-					s.log.Warn("fleet adoption", "fleet", f.Name, "err", err)
-				} else {
-					s.log.Info("devices joined a fleet by its rule", "fleet", f.Name, "devices", len(ids))
-				}
-			}
-		}
-		if f.DSID == nil {
+		s.adopt(ctx, f)
+		if f.DSID == nil || f.Frozen(now) {
 			continue
 		}
-		dsID := *f.DSID
-		ds, err := s.st.DistributionSet(ctx, s.st.DB(), dsID)
-		if err != nil || ds.Deleted || !ds.Valid || !ds.Complete {
-			continue
-		}
-		fid := f.ID
-		ids, err := s.st.Matching(ctx, s.st.DB(), "", func(a *store.Args) []string {
-			d := a.Bind(dsID)
-			return append(compatible(ds.TypeID)(a),
-				"t.fleet_id = "+a.Bind(fid),
-				"t.assigned_ds_id IS DISTINCT FROM "+d,
-				"NOT EXISTS (SELECT 1 FROM actions x WHERE x.target_id = t.id AND x.ds_id = "+d+")")
-		})
-		if err != nil || len(ids) == 0 {
-			continue
-		}
-		reqs := make([]AssignRequest, 0, len(ids))
-		for _, id := range ids {
-			t, err := s.st.TargetByID(ctx, s.st.DB(), id)
-			if err == nil {
-				reqs = append(reqs, AssignRequest{ControllerID: t.ControllerID, Type: f.ActionType})
-			}
-		}
-		if res, err := s.Assign(ctx, f.LastModifiedBy, dsID, reqs); err != nil {
+		if err := s.deliver(ctx, f, now); err != nil && ctx.Err() == nil {
 			s.log.Warn("fleet release", "fleet", f.Name, "err", err)
-		} else if res.Assigned > 0 {
-			s.log.Info("fleet release sent", "fleet", f.Name, "set", ds.Label(), "devices", res.Assigned)
 		}
+	}
+	return nil
+}
+
+// adopt puts the devices matching a fleet's rule, and in no fleet, into it.
+func (s *Service) adopt(ctx context.Context, f model.Fleet) {
+	if f.Rule == nil || *f.Rule == "" {
+		return
+	}
+	ids, err := s.st.Matching(ctx, s.st.DB(), *f.Rule, func(a *store.Args) []string {
+		return []string{"t.fleet_id IS NULL"}
+	})
+	if err != nil {
+		s.log.Warn("fleet rule", "fleet", f.Name, "err", err)
+		return
+	}
+	if len(ids) == 0 {
+		return
+	}
+	fid := f.ID
+	if err := s.st.Tx(ctx, "system", func(tx pgx.Tx, now int64) error {
+		return s.st.SetFleet(ctx, tx, ids, &fid, now, false)
+	}); err != nil {
+		s.log.Warn("fleet adoption", "fleet", f.Name, "err", err)
+		return
+	}
+	s.log.Info("devices joined a fleet by its rule", "fleet", f.Name, "devices", len(ids))
+}
+
+// deliver sends a fleet's current release on: the next wave, or everyone.
+func (s *Service) deliver(ctx context.Context, f model.Fleet, now int64) error {
+	rel, err := s.st.CurrentRelease(ctx, s.st.DB(), f.ID)
+	if err != nil || rel == nil || rel.Status == model.ReleaseHalted || rel.DSID == nil || *rel.DSID != *f.DSID {
+		return err
+	}
+	dsID, from := *f.DSID, since(rel)
+	ds, err := s.st.DistributionSet(ctx, s.st.DB(), dsID)
+	if err != nil || ds.Deleted || !ds.Valid || !ds.Complete {
+		return nil
+	}
+	p, err := s.st.Progress(ctx, f.ID, dsID, from)
+	if err != nil {
+		return err
+	}
+	started := p.Succeeded + p.Failed
+	fresh := p.Failed - int64(rel.FailureBaseline)
+	if fresh > 0 && started > 0 && fresh*100 > int64(f.ErrorThreshold)*started {
+		why := fmt.Sprintf("halted: %d of %d devices failed (%d%%), over the %d%% threshold",
+			fresh, started, fresh*100/started, f.ErrorThreshold)
+		s.log.Warn("fleet release halted", "fleet", f.Name, "set", ds.Label(), "failed", fresh, "started", started)
+		return s.st.HaltRelease(ctx, rel.ID, why, now)
+	}
+	fid := f.ID
+	ids, err := s.st.Matching(ctx, s.st.DB(), "", func(a *store.Args) []string {
+		d := a.Bind(dsID)
+		return append(compatible(ds.TypeID)(a),
+			"t.fleet_id = "+a.Bind(fid),
+			"t.assigned_ds_id IS DISTINCT FROM "+d,
+			"NOT EXISTS (SELECT 1 FROM actions x WHERE x.target_id = t.id AND x.ds_id = "+d+
+				" AND x.created_at >= greatest("+a.Bind(from)+"::bigint, coalesce(t.fleet_joined_at, 0)))")
+	})
+	if err != nil {
+		return err
+	}
+	if len(ids) == 0 {
+		if rel.Status == model.ReleaseActive && p.Active == 0 && p.Members > 0 && p.OnRelease == p.Members {
+			s.log.Info("fleet release completed", "fleet", f.Name, "set", ds.Label(), "devices", p.Members)
+			return s.st.CompleteRelease(ctx, rel.ID, now)
+		}
+		return nil
+	}
+	if f.WavePercent > 0 {
+		// the next wave when this one is done, or has had its time
+		if p.Active > 0 && (rel.LastWaveAt == nil || now-*rel.LastWaveAt < int64(f.WaveTimeoutMinutes)*60_000) {
+			return nil
+		}
+		size := int((p.Members*int64(f.WavePercent) + 99) / 100)
+		if size < 1 {
+			size = 1
+		}
+		if len(ids) > size {
+			ids = ids[:size]
+		}
+	}
+	reqs := make([]AssignRequest, 0, len(ids))
+	for _, id := range ids {
+		if t, err := s.st.TargetByID(ctx, s.st.DB(), id); err == nil {
+			reqs = append(reqs, AssignRequest{ControllerID: t.ControllerID, Type: f.ActionType})
+		}
+	}
+	res, err := s.Assign(ctx, rel.RequestedBy, dsID, reqs)
+	if err != nil {
+		return err
+	}
+	if res.Assigned > 0 {
+		if err := s.st.MarkWave(ctx, rel.ID, now); err != nil {
+			return err
+		}
+		s.log.Info("fleet release sent", "fleet", f.Name, "set", ds.Label(), "devices", res.Assigned, "wave", rel.Waves+1)
 	}
 	return nil
 }
