@@ -1,9 +1,9 @@
-import { distributionSets, qawk } from '../api.js';
-import { ask, drawer, fail, modal, toast } from '../chrome.js';
+import { S, distributionSets, qawk } from '../api.js';
+import { ask, closeDrawer, drawer, fail, modal, toast } from '../chrome.js';
 import { h, icon } from '../dom.js';
 import { check as fiqlCheck, fiqlEditor } from '../fiql.js';
 import { colourPicker } from '../inputs.js';
-import { VIEWS, render } from '../router.js';
+import { VIEWS, go, render } from '../router.js';
 import { serverInfo } from '../server.js';
 import { tableOf } from '../table.js';
 import { ago, when } from '../util.js';
@@ -105,7 +105,8 @@ function card(f, fleets) {
         ? h('button.btn.sm.primary', { onclick: () => promoteDialog(f, fleets) }, 'promote from ' + f.upstream)
         : h('button.btn.sm.primary', { onclick: () => releaseDialog(f) }, 'release'),
       r && r.status === 'halted' ? h('button.btn.sm', { onclick: () => resume(f) }, 'resume') : null,
-      h('button.btn.sm', { onclick: () => membersDrawer(f) }, 'devices'),
+      h('button.btn.sm', { title: 'its devices, in Targets', onclick: () => openInTargets(f) }, 'devices'),
+      h('button.btn.sm', { title: 'add devices by id; send expo devices home', onclick: () => membersDrawer(f) }, 'manage'),
       h('button.btn.sm', { onclick: () => historyDrawer(f) }, 'history'),
       f.freeze ? h('button.btn.sm', { onclick: () => thaw(f) }, 'thaw') : h('button.btn.sm', { onclick: () => freezeDialog(f) }, 'freeze'),
       f.temporary ? h('button.btn.sm', { onclick: () => sendHome(f) }, 'send devices home') : null,
@@ -281,33 +282,45 @@ async function historyDrawer(f) {
     : h('div.empty', 'No release yet.'));
 }
 
+// A fleet's devices are a Targets page: paged, searchable, with its columns
+// and status counts -- prod holds ten thousand of them.
+function openInTargets(f, status = '') {
+  S.fleet = f.name; S.status = status; S.q = '';
+  go('targets');
+}
+
 async function membersDrawer(f) {
   const box = h('div.stack');
+  const nowrap = 'white-space:nowrap';
   const load = async () => {
-    const d = await qawk.get(`/fleets/${f.id}/targets?limit=500`);
-    const add = h('input', { type: 'text', placeholder: 'controller ids, comma separated' });
+    const d = await qawk.get(`/fleets/${f.id}/targets?limit=${f.temporary ? 100 : 1}`);
+    const add = h('input', { type: 'text', placeholder: 'controller ids, comma separated', style: 'flex:1;min-width:0' });
     box.replaceChildren(
       h('div.flex', add, h('button.btn.sm.primary', { onclick: async () => {
         const ids = add.value.split(/[\s,]+/).filter(Boolean);
         if (!ids.length) return;
-        try { await qawk.put(`/fleets/${f.id}/targets`, ids); await load(); render(); } catch (e) { fail(e); }
+        try { await qawk.put(`/fleets/${f.id}/targets`, ids); toast('Added', `${ids.length} to ${f.name}`, 'ok'); await load(); render(); }
+        catch (e) { fail(e); }
       } }, 'add')),
-      h('div.faint', `${d.total} device${d.total === 1 ? '' : 's'}` +
-        (f.temporary ? ' · devices added here remember the fleet they came from' : '')),
-      d.content.length
-        ? tableOf(['Device', 'Status', 'Runs', 'Should run', f.temporary ? 'Home' : 'Joined', 'Last poll', ''], d.content.map(t => ({
-            cells: [h('span.mono', t.controllerId), h('span.dim', t.updateStatus),
-              t.installed || h('span.faint', '—'), t.assigned || h('span.faint', '—'),
-              f.temporary ? (t.home || h('span.faint', 'none')) : h('span.faint', t.joinedAt ? ago(t.joinedAt) : '—'),
-              t.lastControllerRequestAt ? h('span.faint', ago(t.lastControllerRequestAt)) : h('span.faint', 'never'),
-              h('div.wrap',
-                f.temporary && t.home ? h('button.btn.sm', { onclick: async () => { await sendHome(f, [t.controllerId]); await load(); } }, 'send home') : null,
-                h('button.btn.sm', { onclick: async () => {
+      h('div.flex', { style: 'justify-content:space-between;gap:8px' },
+        h('span.faint', `${d.total.toLocaleString('en-US')} device${d.total === 1 ? '' : 's'}`
+          + (f.temporary ? ' · each remembers the fleet it came from' : '')),
+        h('button.btn.sm', { onclick: () => { closeDrawer(); openInTargets(f); } }, 'open them in Targets')),
+      f.temporary && d.content.length
+        ? tableOf(['Device', 'Runs', 'Home', ''], d.content.map(t => ({
+            cells: [h('span.mono', { style: nowrap }, t.controllerId),
+              h('span.mono', { style: nowrap }, (t.installed || '—').replace(':', ' ')),
+              h('span', { style: nowrap }, t.home || h('span.faint', 'none')),
+              h('div.flex', { style: nowrap + ';gap:4px' },
+                t.home ? h('button.btn.sm', { onclick: async () => { await sendHome(f, [t.controllerId]); await load(); } }, 'send home') : null,
+                h('button.btn.sm.ghost', { title: 'take it out of this fleet', onclick: async () => {
                   try { await qawk.delJSON(`/fleets/${f.id}/targets`, [t.controllerId]); await load(); render(); }
-                  catch (e) { fail(e); } } }, 'remove'))],
+                  catch (e) { fail(e); } } }, '\u00d7'))],
           })))
-        : h('div.empty', 'no members'));
+        : null,
+      f.temporary ? null : h('p.faint', { style: 'margin:0;font-size:12px' },
+        'A fleet can hold thousands of devices: they are listed, searched and paged in Targets, filtered on this fleet.'));
   };
-  drawer(f.name, box);
+  drawer(f.name + ' — devices', box);
   try { await load(); } catch (e) { fail(e); }
 }

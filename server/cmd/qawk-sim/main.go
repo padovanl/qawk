@@ -202,10 +202,11 @@ func (d *device) deploy(ctx context.Context, root, href string) {
 func (d *device) install(ctx context.Context, root, id, what string) {
 	defer d.busy.Store(false)
 	fb := root + "/deploymentBase/" + id + "/feedback"
-	send := func(exec, finished, detail string) {
+	send := func(exec, finished, detail string) int {
 		b, _ := json.Marshal(map[string]any{"status": map[string]any{"execution": exec,
 			"result": map[string]string{"finished": finished}, "details": []string{"qawk-sim: " + detail}}})
-		d.req(ctx, "POST", fb, string(b))
+		code, _ := d.req(ctx, "POST", fb, string(b))
+		return code
 	}
 	d.s.c.installing.Add(1)
 	defer d.s.c.installing.Add(-1)
@@ -227,14 +228,19 @@ func (d *device) install(ctx context.Context, root, id, what string) {
 			fail = true
 		}
 	}
+	var code int
 	if fail {
-		send("closed", "failure", what+" did not start: rolled back to the previous version")
+		code = send("closed", "failure", what+" did not start: rolled back to the previous version")
 		d.s.c.failed.Add(1)
 	} else {
-		send("closed", "success", what+" installed")
+		code = send("closed", "success", what+" installed")
 		d.s.c.succeeded.Add(1)
 	}
-	d.done.Store(id, true)
+	// A report the server did not take is made again at the next poll, as a
+	// real device does: marked done, the action stayed open for ever.
+	if code/100 == 2 || code == http.StatusGone {
+		d.done.Store(id, true)
+	}
 }
 
 func sleep(ctx context.Context, d time.Duration) bool {

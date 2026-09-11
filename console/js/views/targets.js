@@ -1,7 +1,8 @@
-import { S, del, enc, get, post, waiting } from '../api.js';
+import { S, del, enc, fiql, get, post, qawk, waiting } from '../api.js';
+import { serverInfo } from '../server.js';
 import { PHASE_WORDS, TARGET_PILL, pill } from '../badges.js';
 import { ask, modal, toast } from '../chrome.js';
-import { T_COLS, attrsOf, cols, columnsDialog, headsFor, loadPhases } from '../columns.js';
+import { T_COLS, attrsOf, cols, columnsDialog, headsFor, loadPhases, prefetchAttrs } from '../columns.js';
 import { $, h, icon } from '../dom.js';
 import { fiqlEditor } from '../fiql.js';
 import { noteTargets } from '../notices.js';
@@ -185,13 +186,48 @@ VIEWS.targets = {
       },
     }, icon('info', 13), legendOpen ? 'hide meanings' : 'what do these mean?');
 
+    // HOW MANY IN EACH, AT A GLANCE. Each chip carries its count from the
+    // server (limit=1 returns only the total), within the search if there is
+    // one. The four worth a look -- pending, error, registered, unknown --
+    // show a coloured badge only when they are not zero, error in solid red:
+    // a count rather than a dot, because one failed device and three hundred
+    // are not the same news. "all" and "in sync" show theirs faintly.
+    // the fleets, for the quick filters: dev, beta, prod, expo
+    const fleetList = ((serverInfo() || {}).features || []).includes('fleets')
+      ? await qawk.get('/fleets').then(r => r.content || []).catch(() => []) : [];
+    const base = searchQuery();
+    const counts = await Promise.all(T_STATUS.map(x => {
+      const cq = [base, x ? `updatestatus==${x}` : ''].filter(Boolean).join(';');
+      return get('/targets?limit=1' + (cq ? '&q=' + fiql(cq) : '')).then(r => r.total).catch(() => null);
+    }));
+    const fmt = n => n.toLocaleString('en-US');
+    // FLEETS AT A CLICK. They combine with the status chips: prod and error
+    // is prod's devices in error.
+    const fleetRow = fleetList.length ? h('div.flex', { style: 'margin-top:8px;gap:8px' },
+      h('span.faint', { style: 'font-size:12px' }, 'fleet'),
+      h('div.seg', [['', 'any', null, null]].concat(fleetList.map(f => [f.name, f.name, f.members, f.colour]))
+        .map(([v, label, n, colour]) => h('button', {
+          class: (S.fleet || '') === v ? 'on' : '',
+          title: v ? `fleet ${v}: ${fmt(n)} device${n === 1 ? '' : 's'}` : 'every device, in a fleet or not',
+          onclick: () => { S.fleet = v; render(); },
+        }, colour ? h('span.swatch-dot', { style: `--sw:${colour};margin-right:5px` }) : null, label,
+        n != null ? h('span.n', fmt(n)) : null)))) : null;
     const chips = h('div', { style: 'margin-bottom:12px' },
       h('div.flex',
-        h('div.seg', T_STATUS.map(x => h('button', {
-          class: S.status === x ? 'on' : '',
-          onclick: () => { S.status = x; render(); },
-        }, x === '' ? 'all' : x.replace(/_/g, ' ')))),
+        h('div.seg', T_STATUS.map((x, i) => {
+          const n = counts[i];
+          const watch = x !== '' && x !== 'in_sync';
+          const badge = n === null ? null
+            : watch ? (n > 0 ? h('span.n.alert.' + (TARGET_PILL[x] || 'mute').split(' ').pop(), fmt(n)) : null)
+            : h('span.n', fmt(n));
+          return h('button', {
+            class: S.status === x ? 'on' : '',
+            title: n === null ? '' : `${fmt(n)} device${n === 1 ? '' : 's'}${base ? ' matching the search' : ''}`,
+            onclick: () => { S.status = x; render(); },
+          }, x === '' ? 'all' : x.replace(/_/g, ' '), badge);
+        })),
         legendBtn),
+      fleetRow,
       legend);
 
     const st = pg('targets');
@@ -224,6 +260,7 @@ VIEWS.targets = {
     // Look the phases up BEFORE building the rows: drawing "pending" and
     // rewriting it a moment later is a flicker on every refresh.
     await loadPhases(data.content);
+    if (cols().some(id => id.startsWith('attr:'))) await prefetchAttrs(data.content.map(t => t.controllerId));
 
     // The attribute cache is NOT cleared here any more: clearing it made every
     // attribute cell re-fetch and blink on each automatic refresh. Attributes
@@ -261,10 +298,20 @@ VIEWS.targets = {
   },
 };
 
+// The free-text search as a query: FIQL as it is, or a substring of the name
+// or the controller id.
+function searchQuery() {
+  const q = S.q.trim();
+  const parts = [];
+  if (q) parts.push(/[=!<>]=|==/.test(q) ? q : `(name==*${q}*,controllerId==*${q}*)`);
+  if (S.fleet) parts.push(`fleet==${S.fleet}`);
+  return parts.join(';');
+}
+
 function currentQuery() {
   const parts = [];
-  const q = S.q.trim();
-  if (q) parts.push(/[=!<>]=|==/.test(q) ? q : `(name==*${q}*,controllerId==*${q}*)`);
+  const q = searchQuery();
+  if (q) parts.push(q);
   if (S.status) parts.push(`updatestatus==${S.status}`);
   return parts.join(';');
 }

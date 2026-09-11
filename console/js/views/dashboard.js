@@ -1,5 +1,6 @@
 import { S, enc, fiql, get } from '../api.js';
-import { PHASE_WORDS, TARGET_PILL, actionPill, phaseOf, pill } from '../badges.js';
+import { PHASE_WORDS, TARGET_PILL, actionPill, phasesOf, pill } from '../badges.js';
+import { inProgressPanel } from './deployments.js';
 import { $, h } from '../dom.js';
 import { noteTargets } from '../notices.js';
 import { VIEWS, drawNav, go, render } from '../router.js';
@@ -80,12 +81,9 @@ VIEWS.dash = {
     // sample -- the sixty seen last -- and says so; the pending total above
     // is the fleet's.
     const phases = {};
-    await Promise.all(tg.content
-      .filter(t => t.updateStatus === 'pending')
-      .map(async t => {
-        const ph = await phaseOf(t.controllerId);
-        if (ph && ph.label) phases[ph.label] = (phases[ph.label] || 0) + 1;
-      }));
+    const phs = await phasesOf(tg.content.filter(t => t.updateStatus === 'pending').map(t => t.controllerId));
+    phs.forEach(ph => { if (ph && ph.label) phases[ph.label] = (phases[ph.label] || 0) + 1; });
+    const prog = await inProgressPanel(5).catch(() => null);
 
     // The latest actions of the whole fleet, newest first, in one request:
     // /actions is the fleet-wide feed, and each action names its target in its
@@ -105,6 +103,7 @@ VIEWS.dash = {
         card('Targets', tg.total, over ? `${over} overdue` : 'all polling on time'),
         card('Distribution sets', ds.total), card('Software modules', sm.total),
         card('Rollouts', ro.total)),
+      prog,
       h('div.panel', h('h3', 'Fleet status'), h('div.body.wrap',
         Object.keys(byStatus).length || virgin
           ? Object.entries(byStatus).flatMap(([k, v]) => {

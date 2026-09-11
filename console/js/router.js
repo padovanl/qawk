@@ -10,6 +10,7 @@ const VIEWS = {};
 /* ---------------------------------------------------------------- shell */
 const NAV = [
   { id: 'dash', label: 'Dashboard', ico: 'dash' },
+  { id: 'inprog', label: 'In progress', ico: 'deploy', feature: 'deployments' },
   { sep: 'Fleet' },
   { id: 'targets', label: 'Targets', count: 'targets', ico: 'target' },
   { id: 'fleets', label: 'Fleets', ico: 'fleet', feature: 'fleets' },
@@ -71,7 +72,7 @@ function drawNav() {
 
 function go(id) {
   S.view = id;
-  if (id !== 'targets') { S.q = ''; S.status = ''; S.picked.clear(); }
+  if (id !== 'targets') { S.q = ''; S.status = ''; S.fleet = ''; S.picked.clear(); }
   location.hash = id;
   closeDrawer(); drawNav(); render();
 }

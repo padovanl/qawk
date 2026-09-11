@@ -178,6 +178,11 @@ header.bar .grow { flex: 1; }
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent);
 }
 .seg button .n { opacity: .65; margin-left: 5px; font-family: var(--mono); font-size: 11px; }
+/* a status worth a look, when it is not zero: the count as a badge */
+.seg button .n.alert { opacity: 1; font-weight: 600; padding: 1px 6px; border-radius: 9px; }
+.seg button .n.alert.err   { color: #fff; background: var(--err); }
+.seg button .n.alert.amber { color: var(--warn); background: color-mix(in srgb, var(--warn) 22%, transparent); }
+.seg button .n.alert.mute  { color: var(--fg); background: var(--bg-3); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 18%, transparent); }
 
 input[type=text], input[type=password], input[type=number], select, textarea {
   height: var(--ctl);

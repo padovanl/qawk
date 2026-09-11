@@ -1,3 +1,4 @@
+import { sampleAttributes } from '../batch.js';
 import { S, distributionSets, enc, fiql, get, limited, post } from '../api.js';
 import { ask, fail, modal, toast } from '../chrome.js';
 import { $, h, icon } from '../dom.js';
@@ -15,15 +16,12 @@ import { when } from '../util.js';
  * target type is a label a device cannot set. */
 async function deviceTypes() {
   const out = new Set();
-  const [types, sample] = await Promise.all([
+  const [types, attrs] = await Promise.all([
     get('/targettypes?limit=50').catch(() => ({ content: [] })),
-    get('/targets?limit=50').catch(() => ({ content: [] })),
+    sampleAttributes(200).catch(() => []),
   ]);
   types.content.forEach(t => out.add(t.name));
-  await Promise.all(sample.content.map(async t => {
-    const a = await limited(() => get(`/targets/${enc(t.controllerId)}/attributes`)).catch(() => ({}));
-    if (a && a.device_type) out.add(a.device_type);
-  }));
+  attrs.forEach(a => { if (a && a.device_type) out.add(a.device_type); });
   return [...out].sort();
 }
 

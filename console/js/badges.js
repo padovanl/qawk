@@ -1,3 +1,4 @@
+import { hasBatch, statesOf } from './batch.js';
 import { start } from './auth.js';
 import { serverInfo } from './server.js';
 import { enc, get, limited } from './api.js';
@@ -303,6 +304,27 @@ function refine(ph, dls) {
        + ' -- counted by Qawk as it sends them' });
 }
 
+/* A page of devices at once (Qawk): the same phase, from one request. */
+function phaseFromState(s) {
+  if (!s || !s.actionId) return null;
+  if (s.active === false) return { closed: true };
+  return refine(phaseFrom(s.statuses || [], s.dsType), s.downloads || []);
+}
+
+async function phasesOf(ids) {
+  const out = new Map();
+  if (!ids.length) return out;
+  if (hasBatch()) {
+    try {
+      const st = await statesOf(ids);
+      for (const [id, s] of st) { const ph = phaseFromState(s); if (ph) out.set(id, ph); }
+      return out;
+    } catch (_) { /* one by one, below */ }
+  }
+  await Promise.all(ids.map(async id => { const ph = await phaseOf(id); if (ph) out.set(id, ph); }));
+  return out;
+}
+
 /* Draws a phase into a pill. Separate from the asking so a caller that already
    knows the phase can paint it with no flicker. */
 function paintPhase(p, ph) {
@@ -359,6 +381,6 @@ function explainPending(p, targetId) {
 
 export {
   ACTION_PILL, ACT_ICON, PHASE_NOTE, PHASE_WORDS, TARGET_PILL, actionPill, explainPending,
-  paintPhase, phaseOf,
+  paintPhase, phaseOf, phaseFromState, phasesOf,
   phaseFrom, pill, typePill,
 };

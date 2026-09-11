@@ -1,3 +1,4 @@
+import { sampleAttributes } from './batch.js';
 import { enc, get, limited } from './api.js';
 import { h, icon } from './dom.js';
 
@@ -239,23 +240,15 @@ function cached(key, fn) {
 }
 async function attributeKeys() {
   return cached('attrkeys', async () => {
-    const s = await get('/targets?limit=12');
     const keys = new Set();
-    await Promise.all((s.content || []).map(async t => {
-      const a = await limited(() => get(`/targets/${enc(t.controllerId)}/attributes`)).catch(() => ({}));
-      Object.keys(a || {}).forEach(k => keys.add(k));
-    }));
+    (await sampleAttributes(50)).forEach(a => Object.keys(a || {}).forEach(k => keys.add(k)));
     return [...keys].sort();
   });
 }
 async function attributeValues(key) {
   return cached('attrval:' + key, async () => {
-    const s = await get('/targets?limit=25');
     const vals = new Set();
-    await Promise.all((s.content || []).map(async t => {
-      const a = await limited(() => get(`/targets/${enc(t.controllerId)}/attributes`)).catch(() => ({}));
-      if (a && a[key] != null) vals.add(String(a[key]));
-    }));
+    (await sampleAttributes(200)).forEach(a => { if (a && a[key] != null) vals.add(String(a[key])); });
     return [...vals].sort();
   });
 }

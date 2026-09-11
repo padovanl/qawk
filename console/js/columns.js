@@ -1,5 +1,6 @@
+import { attributesOf, hasBatch, sampleAttributes, statesOf } from './batch.js';
 import { enc, get, limited } from './api.js';
-import { TARGET_PILL, explainPending, paintPhase, phaseOf, pill, typePill } from './badges.js';
+import { TARGET_PILL, explainPending, paintPhase, phaseFromState, phaseOf, pill, typePill } from './badges.js';
 import { modal } from './chrome.js';
 import { $, h } from './dom.js';
 import { render } from './router.js';
@@ -160,10 +161,31 @@ async function deltaBase(smId) {
    loadPhases() and read by the status cell, so the two happen in the right
    order instead of racing. */
 const PHASES = new Map();
+const aiFresh = new Map();   // controllerId -> {a, i, at}: read with the page's batch
 async function loadPhases(targets) {
   PHASES.clear();
-  const pending = (targets || []).filter(t => t.updateStatus === 'pending');
-  if (!pending.length) return;
+  const list = targets || [];
+  if (!list.length) return;
+  // ONE REQUEST FOR THE PAGE (Qawk): what every row's device is doing, and
+  // what it was assigned and runs -- the status column and the
+  // assigned/installed column both read it. Against hawkBit, row by row.
+  if (hasBatch()) {
+    try {
+      const st = await statesOf(list.map(t => t.controllerId));
+      const now = Date.now();
+      for (const t of list) {
+        const s = st.get(t.controllerId);
+        if (!s) continue;
+        aiFresh.set(t.controllerId, { a: s.assigned, i: s.installed, at: now });
+        if (t.updateStatus === 'pending') {
+          const ph = phaseFromState(s);
+          if (ph) PHASES.set(t.controllerId, ph);
+        }
+      }
+      return;
+    } catch (_) { /* row by row, below */ }
+  }
+  const pending = list.filter(t => t.updateStatus === 'pending');
   await Promise.all(pending.map(async t => {
     const ph = await phaseOf(t.controllerId);
     if (ph) PHASES.set(t.controllerId, ph);
@@ -182,6 +204,17 @@ async function attrsOf(id) {
   const v = limited(() => get(`/targets/${enc(id)}/attributes`)).catch(() => ({}));
   attrCache.set(id, { at: Date.now(), v });
   return v;
+}
+
+/* The attributes of a whole page in one request, before its cells ask. */
+async function prefetchAttrs(ids) {
+  const need = ids.filter(id => { const hit = attrCache.get(id); return !hit || Date.now() - hit.at >= ATTR_TTL; });
+  if (!need.length || !hasBatch()) return;
+  try {
+    const m = await attributesOf(need);
+    const now = Date.now();
+    need.forEach(id => attrCache.set(id, { at: now, v: Promise.resolve(m.get(id) || {}) }));
+  } catch (_) { /* each cell asks for itself */ }
 }
 
 
@@ -220,6 +253,12 @@ function renderAI(cell, a, i) {
 async function loadAssignedInstalled(id, cell) {
   const seen = aiCache.get(id);
   if (seen) renderAI(cell, seen.a, seen.i);      // no "…" on a refresh
+  const fresh = aiFresh.get(id);
+  if (fresh && Date.now() - fresh.at < 15000) {  // read with the page: no request of its own
+    const key = `${fresh.a && fresh.a.id}/${fresh.i && fresh.i.id}`;
+    if (!seen || seen.key !== key) { aiCache.set(id, { a: fresh.a, i: fresh.i, key }); renderAI(cell, fresh.a, fresh.i); }
+    return;
+  }
   try {
     const [a, i] = await limited(() => Promise.all([
       get(`/targets/${enc(id)}/assignedDS`).catch(() => null),
@@ -239,11 +278,7 @@ async function columnsDialog(view = 'targets') {
 
   const keys = new Set();
   if (CS.attrs) {
-    const sample = await get('/targets?limit=12').catch(() => ({ content: [] }));
-    await Promise.all(sample.content.map(async t => {
-      const a = await get(`/targets/${enc(t.controllerId)}/attributes`).catch(() => ({}));
-      Object.keys(a || {}).forEach(k => keys.add(k));
-    }));
+    (await sampleAttributes(50).catch(() => [])).forEach(a => Object.keys(a || {}).forEach(k => keys.add(k)));
     chosen.filter(c => c.startsWith('attr:')).forEach(c => keys.add(c.slice(5)));
   }
 
@@ -328,5 +363,5 @@ const baseCell = id => {
 };
 
 export {
-  loadPhases, D_COLS, M_COLS, T_COLS, attrsOf, baseCell, cols, columnsDialog, fieldsFor, headsFor, loadAssignedInstalled, metaCache,
+  loadPhases, prefetchAttrs, D_COLS, M_COLS, T_COLS, attrsOf, baseCell, cols, columnsDialog, fieldsFor, headsFor, loadAssignedInstalled, metaCache,
 };

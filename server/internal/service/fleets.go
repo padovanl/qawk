@@ -603,15 +603,28 @@ func (s *Service) deliver(ctx context.Context, f model.Fleet, now int64) error {
 			reqs = append(reqs, AssignRequest{ControllerID: t.ControllerID, Type: f.ActionType})
 		}
 	}
-	res, err := s.Assign(ctx, rel.RequestedBy, dsID, reqs)
-	if err != nil {
-		return err
+	// In slices of a hundred, each in its own transaction. One transaction for
+	// a wave of two thousand held those devices' rows for minutes on a busy
+	// disk, and their reports waited behind it until they timed out (measured:
+	// 809 devices of prod stuck, their feedback answered 500 after 30 s).
+	assigned := 0
+	for len(reqs) > 0 {
+		n := min(assignSlice, len(reqs))
+		res, err := s.Assign(ctx, rel.RequestedBy, dsID, reqs[:n])
+		if err != nil {
+			return err
+		}
+		assigned += res.Assigned
+		reqs = reqs[n:]
 	}
-	if res.Assigned > 0 {
+	if assigned > 0 {
 		if err := s.st.MarkWave(ctx, rel.ID, now); err != nil {
 			return err
 		}
-		s.log.Info("fleet release sent", "fleet", f.Name, "set", ds.Label(), "devices", res.Assigned, "wave", rel.Waves+1)
+		s.log.Info("fleet release sent", "fleet", f.Name, "set", ds.Label(), "devices", assigned, "wave", rel.Waves+1)
 	}
 	return nil
 }
+
+// assignSlice is how many devices one transaction assigns at most.
+const assignSlice = 100

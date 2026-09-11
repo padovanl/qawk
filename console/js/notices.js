@@ -1,4 +1,4 @@
-import { S, enc, get, waiting } from './api.js';
+import { S, enc, fiql, get, waiting } from './api.js';
 import { toast } from './chrome.js';
 import { noticeOn } from './prefs.js';
 import { $, h, icon } from './dom.js';
@@ -66,6 +66,11 @@ async function noticesTick() {
 // Called with each fresh target listing: the first one only records what is
 // there, so opening the console does not announce the whole fleet.
 function noteTargets(list) {
+  // NOT FROM A PAGE ANY MORE: new devices are counted by the server, in
+  // cataloguesTick. At ten thousand devices the sixty a page had just fetched
+  // changed at every refresh, and each stranger in them was announced as new.
+  return;
+  // eslint-disable-next-line no-unreachable
   const ids = list.map(t => t.controllerId);
   if (S.known === null) { S.known = new Set(ids); return; }
   const fresh = ids.filter(i => !S.known.has(i));
@@ -146,7 +151,7 @@ async function cataloguesTick() {
       get('/softwaremodules?limit=50&sort=id:DESC'),
       get('/distributionsets?limit=50&sort=id:DESC'),
       get('/rollouts?limit=25&sort=id:DESC').catch(() => ({ content: [] })),
-      get('/targets?limit=1').catch(() => null),
+      get('/targets?limit=5&sort=createdAt:DESC').catch(() => null),
     ]);
   } catch (_) { return; }
 
@@ -162,6 +167,25 @@ async function cataloguesTick() {
   if (ro && ro.total !== undefined) S.counts.ro = ro.total;
   if (tg && tg.total !== undefined) S.counts.targets = tg.total;
   drawNav();
+
+  // NEW DEVICES, counted by the server: those registered after the newest one
+  // seen before. Removed ones: the total going down.
+  if (tg && tg.content) {
+    const newest = Math.max(0, ...tg.content.map(t => t.createdAt || 0));
+    if (S.newestSeen == null) S.newestSeen = newest;
+    else if (newest > S.newestSeen) {
+      const since = S.newestSeen;
+      S.newestSeen = newest;
+      const n = await get('/targets?limit=1&q=' + fiql(`createdat=gt=${since}`)).then(r => r.total).catch(() => 0);
+      if (n === 1) notify('devices', 'New device', tg.content[0].controllerId, 'info', 12000);
+      else if (n > 1) notify('devices', 'New devices', `${n.toLocaleString('en-US')} registered`, 'info', 12000);
+    }
+    if (S.targetTotal != null && tg.total < S.targetTotal) {
+      const gone = S.targetTotal - tg.total;
+      notify('devices', gone === 1 ? 'Device removed' : 'Devices removed', `${gone.toLocaleString('en-US')} fewer`, 'mute', 9000);
+    }
+    S.targetTotal = tg.total;
+  }
 
   const seenOf = r => new Map((r.content || []).map(x => [x.id, x]));
   const now = { sm: seenOf(sm), ds: seenOf(ds), ro: seenOf(ro) };
