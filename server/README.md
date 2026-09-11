@@ -408,8 +408,8 @@ the real device among 188 simulated ones.
 Some devices only make sense together. A 6hd has two st05 and a hyper
 attached under it; the st05 and the hyper must be on the new version before
 the 6hd, and a group left half on one version and half on the other is worse
-than one not updated at all. A centre has sixteen such groups; a neo-intel
-stands alone and belongs to none. [Mender Orchestrator](https://docs.mender.io/orchestrate-updates/overview)
+than one not updated at all. A centre has many such groups — tens, a
+hundred or more; a neo-intel stands alone and belongs to none. [Mender Orchestrator](https://docs.mender.io/orchestrate-updates/overview)
 solves this with a *topology* (what a system is made of), a *manifest* (what
 each component should run, and in which order) and an orchestrator running
 on one device of each system. Qawk keeps the first two, in Mender's own YAML,

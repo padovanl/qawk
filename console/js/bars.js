@@ -3,29 +3,33 @@ import { h } from './dom.js';
 /* ------- progress bars: one look everywhere ---------------------------
  *
  * A bar is segments of one total: ok (done), run (working on it), back
- * (going back), err (failed), wait (not started). The page redraws itself
- * every few seconds, which used to throw the bar away and draw it again at
- * its new width: a jump, or, animated, a bar growing from nothing each time.
- * Given a key, a bar starts at the widths it had last time and slides to the
- * new ones, so a release going from 40% to 45% is seen moving. The last
- * filled segment carries the glowing head; a bar all done glows (style.css). */
+ * (going back), err (failed). What has not started is the empty track -- a
+ * grey segment for it read as progress of some other kind. The segments sit
+ * in one capsule, rounded at its end, that slides to its new length; a light
+ * runs along it and its end pulses (style.css).
+ *
+ * The page redraws itself every few seconds, which used to throw the bar away
+ * and draw it again at its new width: a jump, or a bar growing from nothing
+ * each time. Given a key, a bar starts at the length it had last time and
+ * slides from there, so a release going from 40% to 45% is seen moving. */
 const last = new Map();
 const raf = globalThis.requestAnimationFrame || (f => setTimeout(f, 16));
 
 function bars(segs, total, opts = {}) {
-  const t = total || segs.reduce((a, [n]) => a + (n || 0), 0) || 1;
-  const want = segs.map(([n]) => Math.max(0, Math.min(100, 100 * (n || 0) / t)));
-  const from = (opts.key && last.get(opts.key)) || want.map(() => 0);
-  let head = -1;
-  segs.forEach(([n, cls], i) => { if (n && cls !== 'wait') head = i; });
-  const els = segs.map(([n, cls, title], i) => h('i.' + cls + (i === head ? '.head' : ''), {
-    style: `width:${(from[i] ?? 0).toFixed(2)}%`, title: title || (n ? `${n} ${cls}` : ''),
-  }));
-  const full = segs[0] && segs[0][1] === 'ok' && want[0] >= 99.95;
-  const bar = h('div.bars' + (full ? '.full' : ''), { style: opts.height ? `--bh:${opts.height}px` : '' }, els);
+  const shown = segs.filter(([n, cls]) => n > 0 && cls !== 'wait');
+  const filled = shown.reduce((a, [n]) => a + n, 0);
+  const t = total || filled || 1;
+  const want = Math.max(0, Math.min(100, 100 * filled / t));
+  const from = opts.key && last.has(opts.key) ? last.get(opts.key) : 0;
+  const fill = h('div.fill', { style: `width:${from.toFixed(2)}%` },
+    shown.map(([n, cls, title]) => h('i.' + cls, { style: `flex:${n} 1 0`, title: title || `${n} ${cls}` })));
+  const full = want >= 99.95 && shown.length === 1 && shown[0][1] === 'ok';
+  const live = shown.some(([, cls]) => cls === 'run');
+  const bar = h('div.bars' + (full ? '.full' : '') + (live ? '.live' : ''),
+    { style: opts.height ? `--bh:${opts.height}px` : '', title: `${Math.round(want)}%` }, fill);
   if (opts.key) last.set(opts.key, want);
-  // two frames: the first paints the old widths, the second slides to the new
-  raf(() => raf(() => els.forEach((e, i) => { e.style.width = want[i].toFixed(2) + '%'; })));
+  // two frames: the first paints the old length, the second slides to the new
+  raf(() => raf(() => { fill.style.width = want.toFixed(2) + '%'; }));
   return bar;
 }
 

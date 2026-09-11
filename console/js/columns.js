@@ -51,7 +51,7 @@ const T_COLS = {
   fleet:        { label: 'Fleet', cell: t => {
     const f = FLEET_OF.get(t.controllerId);
     return f ? h('span.flex', { style: 'gap:6px;white-space:nowrap' },
-      h('span.swatch-dot', { style: `--sw:${f.colour || '#8b8f98'}` }), f.name) : h('span.faint', '—');
+      h('span.swatch-dot', { style: `--sw:${f.colour || '#8b8f98'}` }), f.name) : h('span.faint.nowrap', { title: 'in no fleet' }, 'no fleet');
   } },
   ip:           { label: 'IP', cell: t => h('span.mono.faint', t.ipAddress || '—') },
   targetType:   { label: 'Type', cell: t => h('span.dim', (t.targetType && (t.targetType.name || t.targetType)) || '—') },

@@ -10,7 +10,8 @@ import { ago, download } from '../util.js';
 /* ------- systems: updated as a whole, after Mender Orchestrator (Qawk) --
  *
  * A system is devices that work together -- a 6hd and the two st05 and the
- * hyper under it; a centre has sixteen, and a neo-intel stands alone. Its
+ * hyper under it; a centre has many -- a hundred or more -- and a neo-intel
+ * stands alone. Its
  * TYPE (Mender's topology) lists the components, each recognised by a query,
  * and names the field a device carries to say which system it is in
  * (metadata.system). A

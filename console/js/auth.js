@@ -17,11 +17,16 @@ async function start() {
   $('#conn').textContent = S.user + ' @ hawkBit';
   S.view = (location.hash || '#dash').slice(1);
   if (!VIEWS[S.view]) S.view = 'dash';
-  drawNav(); refreshCounts(); await render(); tick();
-  // Asked once, in the background: it costs one request and must never hold
-  // up the first screen.
+  drawNav(); refreshCounts();
+  // Which server, BEFORE the first page. Qawk's pages and columns ask it as
+  // they draw -- In progress, the Fleet column, the one-request-per-page
+  // batches -- and after an F5 they used to be drawn before the answer came:
+  // In progress said "not Qawk", the Fleet column stayed empty. It is one
+  // request, answered in milliseconds, and says hawkBit when it fails.
+  await whoIsServer(); drawNav();
+  await render(); tick();
+  // Asked once, in the background: it must never hold up the first screen.
   checkCompat();
-  whoIsServer().then(drawNav);
 }
 
 /* Sign-in dressing: the field icons, a reveal for the password, and a theme

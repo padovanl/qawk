@@ -19,7 +19,7 @@
 // -fail-rate of the others; a device that fails says it rolled back.
 //
 // With -system name:count:component=n,... it runs systems instead -- a 6hd
-// and the two st05 and the hyper under it, sixteen times as in a centre:
+// and the two st05 and the hyper under it, as many times as a centre has:
 //
 //	qawk-sim -token <t> -system 6hd:16:6hd=1,st05=2,hyper=1
 //
