@@ -86,6 +86,7 @@ function inProgressPanelFrom(list, max) {
 
 VIEWS.inprog = {
   title: 'In progress',
+  live: 3000,
   async render(root) {
     if (!has()) {
       root.replaceChildren(h('div.empty', 'This server does not say what is in progress: it is not Qawk.'));

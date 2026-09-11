@@ -110,8 +110,29 @@ async function render() {
     if (mine === renderToken) {
       $('#progress').classList.remove('on');
       root.classList.remove('stale');
+      live();
     }
   }
+}
+
+/* LIVE PAGES. A page of things in motion -- In progress, systems, fleets, the
+ * dashboard -- declares `live: ms` and follows the server by itself, whatever
+ * the auto-refresh says and with the pointer over it: someone watching a
+ * release go out keeps the mouse on the page, which paused the auto-refresh
+ * for good, and the numbers froze. These pages have no fields to lose and no
+ * rows to shift; only an open dialog or drawer, or a hidden tab, waits. The
+ * bars are keyed, so they slide to the new figures. */
+let liveT = null;
+function live() {
+  clearTimeout(liveT);
+  const v = VIEWS[S.view];
+  if (!v || !v.live) return;
+  const view = S.view;
+  liveT = setTimeout(() => {
+    if (S.view !== view) return;
+    if (document.hidden || $('#modal').open || $('#drawer').classList.contains('open')) { live(); return; }
+    render();
+  }, v.live);
 }
 
 let debounceT = null;

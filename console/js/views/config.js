@@ -72,7 +72,8 @@ VIEWS.cfg = {
       matchMedia('(prefers-reduced-motion: reduce)').matches
         ? h('div.panel', h('h3', 'Reduced motion'), h('div.body.faint',
             'This browser is asking for less animation — your system has that setting on, ' +
-            'so the spinners and progress bars here are still. Layout transitions still run. ' +
+            'so the decorative loops here are still. Spinners and progress bars keep moving: ' +
+            'they are how you tell "working" from "stuck". Layout transitions still run. ' +
             'On Windows it is Settings → Accessibility → Visual effects → Animation effects.'))
         : null,
       h('div.panel', h('h3', 'Notifications'), h('div.body.stack',

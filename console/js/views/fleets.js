@@ -25,6 +25,7 @@ const me = () => serverInfo()?.me?.username || '';
 
 VIEWS.fleets = {
   title: 'Fleets',
+  live: 5000,
   bar: () => [h('button.btn.sm.primary', { onclick: () => fleetDialog(null, VIEWS.fleets.last || []) },
     icon('plus', 14), 'new fleet')],
   async render(root) {

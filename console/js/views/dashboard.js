@@ -56,6 +56,7 @@ function targetOf(a) {
 
 VIEWS.dash = {
   title: 'Dashboard',
+  live: 10000,
   async render(root) {
     const count = q => get('/targets?limit=1&q=' + fiql(q)).then(r => r.total);
     const cutoffP = overdueCutoff();

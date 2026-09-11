@@ -45,6 +45,7 @@ async function rawGet(path) {
 
 VIEWS.systems = {
   title: 'Systems',
+  live: 4000,
   bar: () => [
     h('button.btn.sm.primary', { onclick: () => deploymentDialog() }, icon('deploy', 14), 'deploy a manifest'),
     h('button.btn.sm', { onclick: () => typeDialog() }, icon('plus', 14), 'system type'),

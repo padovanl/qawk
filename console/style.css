@@ -356,14 +356,14 @@ dl.kv dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: bre
 }
 @keyframes flow { to { background-position: 20px 0, 0 0; } }
 @keyframes fillbreathe { 50% { filter: brightness(1.2) saturate(1.2); } }
-/* a light sweeping along the fill, all the time */
+/* a shine going back and forth along the fill, all the time (Android's) */
 .bars .fill::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(100deg, transparent 40%, color-mix(in srgb, #fff 70%, transparent) 50%, transparent 60%);
-  background-size: 300% 100%; background-repeat: no-repeat;
-  animation: fillsheen 1.9s linear infinite;
+  background: linear-gradient(90deg, transparent 38%, color-mix(in srgb, #fff 80%, transparent) 50%, transparent 62%);
+  background-size: 260% 100%; background-repeat: no-repeat;
+  animation: fillsheen 1.7s ease-in-out infinite alternate;
 }
-@keyframes fillsheen { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+@keyframes fillsheen { from { background-position: 110% 0; } to { background-position: -10% 0; } }
 /* the rounded end glows and pulses */
 .bars .fill:not(:empty)::before {
   content: ''; position: absolute; right: 0; top: 0; bottom: 0; width: var(--bh); z-index: 1;
@@ -546,7 +546,9 @@ tr.busy td:first-child::before {
      A spinner is not decoration -- it is the difference between "working" and
      "stuck", and a ring that does not turn states the second one. It keeps
      turning. */
-  .pill.pulse::before, .bars i, .bars .fill, .bars .fill::after, .bars .fill::before, .skel i, #progress.on::after, .toast {
+  /* The progress bars keep moving, like the spinner: a bar that shines says
+     "working", a still one reads as stuck. */
+  .pill.pulse::before, .skel i, #progress.on::after, .toast {
     animation: none !important;
   }
 }
