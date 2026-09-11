@@ -54,6 +54,9 @@ type Config struct {
 	// AuditDays is how long the audit log is kept; 0 keeps it for ever.
 	AuditDays int
 
+	// MetricsToken, when set, is the bearer token /metrics wants.
+	MetricsToken string
+
 	LogLevel string
 }
 
@@ -75,6 +78,7 @@ func Load() (Config, error) {
 		PublicURL:          strings.TrimRight(env("QAWK_PUBLIC_URL", ""), "/"),
 		DefaultPollingTime: env("QAWK_POLLING_TIME", "00:05:00"),
 		LogLevel:           env("QAWK_LOG_LEVEL", "info"),
+		MetricsToken:       env("QAWK_METRICS_TOKEN", ""),
 	}
 	if c.AdminPassword == "" {
 		return c, fmt.Errorf("QAWK_ADMIN_PASSWORD must not be empty")

@@ -133,6 +133,9 @@ func (s *Service) checkAssignable(ctx context.Context, tx pgx.Tx, dsID int64) (m
 
 func (s *Service) createAction(ctx context.Context, tx pgx.Tx, user string, now int64, t model.Target,
 	ds model.DistributionSet, r AssignRequest, confirmFlow bool) (int64, error) {
+	if err := validateWindow(r, now); err != nil {
+		return 0, err
+	}
 
 	// What the target was doing is obsolete now. It is not closed here: the
 	// device is told to cancel, and closes it itself when it has.

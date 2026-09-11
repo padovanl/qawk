@@ -15,15 +15,19 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"qawk/internal/api/ddi"
-	"qawk/internal/api/qawkapi"
 	"qawk/internal/api/mgmt"
+	"qawk/internal/api/qawkapi"
 	"qawk/internal/artifact"
 	"qawk/internal/config"
+	"qawk/internal/metrics"
 	"qawk/internal/openapi"
 	"qawk/internal/service"
 	"qawk/internal/store"
+	"qawk/internal/telemetry"
 	"qawk/internal/users"
 )
 
@@ -35,6 +39,7 @@ type Server struct {
 	svc     *service.Service
 	log     *slog.Logger
 	handler http.Handler
+	tel     *telemetry.Telemetry
 }
 
 func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.Logger) (*Server, error) {
@@ -62,10 +67,19 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 	}
 	svc.SetDirectory(dir)
 
+	m := metrics.New()
+	m.AddSource(fleetGauges(st, svc))
+	tel, err := telemetry.Setup(ctx, Version, m, log)
+	if err != nil {
+		return nil, err
+	}
+
 	r := chi.NewRouter()
 	r.Use(keepSemicolons)
 	r.Use(middleware.Recoverer)
-	r.Use(requestLog(log))
+	r.Use(requestLog(log, m))
+	// Prometheus: open, or behind QAWK_METRICS_TOKEN as a bearer token
+	r.Handle("/metrics", m.Handler(cfg.MetricsToken))
 
 	qawkapi.New(svc, cfg, Version).Routes(r)
 
@@ -86,8 +100,11 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 	ddi.New(svc, cfg.Tenant, cfg.PublicURL, log).Routes(r)
 	openapi.New(r, Version).Routes(r)
 
-	return &Server{cfg: cfg, svc: svc, log: log, handler: r}, nil
+	return &Server{cfg: cfg, svc: svc, log: log, handler: tel.Wrap(r), tel: tel}, nil
 }
+
+// Shutdown flushes what OpenTelemetry still holds.
+func (s *Server) Shutdown(ctx context.Context) error { return s.tel.Shutdown(ctx) }
 
 func (s *Server) Handler() http.Handler { return s.handler }
 
@@ -114,7 +131,7 @@ func keepSemicolons(next http.Handler) http.Handler {
 // requestLog logs each request at debug level, and errors at info: with a
 // fleet polling every thirty seconds, logging every poll at info would bury
 // everything else.
-func requestLog(log *slog.Logger) func(http.Handler) http.Handler {
+func requestLog(log *slog.Logger, m *metrics.Metrics) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
@@ -124,8 +141,22 @@ func requestLog(log *slog.Logger) func(http.Handler) http.Handler {
 			if ww.Status() >= 500 {
 				level = slog.LevelWarn
 			}
+			took, status := time.Since(start), ww.Status()
+			if status == 0 {
+				status = http.StatusOK
+			}
+			if r.URL.Path != "/metrics" {
+				m.Observe(r.URL.Path, r.Method, status, took)
+			}
+			// the span, when there is one, is named after the route chi matched
+			if span := trace.SpanFromContext(r.Context()); span.IsRecording() {
+				if rc := chi.RouteContext(r.Context()); rc != nil && rc.RoutePattern() != "" {
+					span.SetName(r.Method + " " + rc.RoutePattern())
+					span.SetAttributes(attribute.String("http.route", rc.RoutePattern()))
+				}
+			}
 			log.Log(r.Context(), level, "http", "method", r.Method, "path", r.URL.Path,
-				"status", ww.Status(), "ms", time.Since(start).Milliseconds())
+				"status", status, "ms", took.Milliseconds())
 		})
 	}
 }

@@ -26,7 +26,9 @@ func (s *Service) Run(ctx context.Context) {
 		}
 		if leads {
 			s.log.Info("this instance runs the rollout engine and auto-assignment")
+			s.leading.Store(true)
 			s.lead(ctx, alive)
+			s.leading.Store(false)
 			release()
 			s.log.Info("no longer running the background jobs")
 		}

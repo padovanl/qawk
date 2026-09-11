@@ -127,6 +127,20 @@ function attrPanel(rows) {
     h('div.body', search, list));
 }
 
+/* An assignment with a maintenance window installs only while it is open. The
+ * pill says when it opens next; "scheduled" is the device having acknowledged
+ * the skip -- SWUpdate says "Skipped Update." -- and waiting for it. */
+function windowPill(a) {
+  const w = a.maintenanceWindow;
+  if (!w) return null;
+  const next = w.nextStartAt ? when(w.nextStartAt) : '—';
+  return h('span.pill', {
+    title: `maintenance window: ${w.schedule} (cron: sec min hour day month weekday), open ${w.duration}, ` +
+      `offset ${w.timezone}. Outside it the device downloads and waits` +
+      (String(a.status).toLowerCase() === 'scheduled' ? '; it has acknowledged the skip and installs when the window opens.' : '.'),
+  }, a.active ? `window · opens ${next}` : 'window');
+}
+
 function actionsPane(id, actions) {
   if (!actions.length) return h('div.empty', 'no deployment has ever been sent here');
   const wrap = h('div.stack');
@@ -158,7 +172,7 @@ function actionsPane(id, actions) {
     const head = h('div.ahead',
       chev, h('span.mono', '#' + a.id), actionPill(a, id),
       a.active ? h('span.pill.live', 'active') : null,
-      h('span.faint', a.type || ''), summary,
+      h('span.faint', a.type || ''), windowPill(a), summary,
       h('span.faint.nowrap.when', when(a.lastModifiedAt || a.createdAt)));
 
     const cancelOne = async () => {

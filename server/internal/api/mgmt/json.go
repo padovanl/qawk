@@ -6,6 +6,7 @@ import (
 
 	"qawk/internal/httpx"
 	"qawk/internal/model"
+	"qawk/internal/service"
 	"qawk/internal/store"
 	"qawk/internal/tenantcfg"
 )
@@ -140,6 +141,9 @@ func actionJSON(b string, act model.Action, full bool) J {
 	if act.MaintenanceSchedule != nil {
 		m["maintenanceWindow"] = J{"schedule": str(act.MaintenanceSchedule), "duration": str(act.MaintenanceDuration),
 			"timezone": str(act.MaintenanceTimezone)}
+		if next, ok := service.NextMaintenance(act, httpx.Now()); ok {
+			m["maintenanceWindow"].(J)["nextStartAt"] = next
+		}
 	}
 	audit(m, act.Audit)
 	links := J{"self": link(self)}

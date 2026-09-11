@@ -175,6 +175,13 @@ async function newRolloutDialog(presetQuery) {
     h('option', { value: 'scheduled' }, 'scheduled — start at a time'));
   const startAt = dtInput(null);
   startAt.disabled = true;
+  // timeforced: soft until this time, then forced
+  const forceAt = dtInput(null);
+  forceAt.disabled = true;
+  actType.addEventListener('change', () => {
+    forceAt.disabled = actType.value !== 'timeforced';
+    if (forceAt.disabled) forceAt.value = '';
+  });
   startType.addEventListener('change', () => {
     startAt.disabled = startType.value !== 'scheduled';
     if (startAt.disabled) startAt.value = '';
@@ -193,6 +200,7 @@ async function newRolloutDialog(presetQuery) {
     h('label.f', 'Target filter', q), preview, rollTypes,
     h('label.f', 'Group count', groupsBox),
     h('label.f', 'Action type', actType),
+    h('label.f', 'Force time (timeforced only)', forceAt), dtQuick(forceAt),
     h('label.f', 'Start type', startType),
     h('label.f', 'Scheduled at', startAt), dtQuick(startAt),
     h('label.f', 'Success threshold, %', okThBox),
@@ -216,6 +224,11 @@ async function newRolloutDialog(presetQuery) {
     const sa = startType.value === 'scheduled' ? dtMs(startAt) : null;
     if (sa) b.startAt = sa; else delete b.startAt;
     if (startType.value === 'scheduled' && !sa) throw new Error('pick a date and time, or choose another start type');
+    if (actType.value === 'timeforced') {
+      const ft = dtMs(forceAt);
+      if (!ft) throw new Error('timeforced needs the time it turns forced');
+      b.forcetime = ft;
+    }
     const r = await post('/rollouts', b);
     if (startType.value === 'auto') await post(`/rollouts/${r.id}/start`).catch(() => {});
     toast('Created', startType.value === 'auto' ? 'started' : 'press start when ready', 'ok');

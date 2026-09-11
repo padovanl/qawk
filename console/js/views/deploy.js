@@ -112,6 +112,29 @@ async function assignDialog(targetId, presetDs, explicitIds) {
     if (at.disabled) at.value = '';
   });
   const confirmReq = toggle(false, null, { label: 'require confirmation on the device' });
+  // A maintenance window: the device may download at once, and installs only
+  // while the window is open. hawkBit's three fields: when it opens (a Quartz
+  // cron -- seconds first, and ? in one of the two day fields), how long it
+  // stays open, and the offset the schedule is read in.
+  const offset = (() => {
+    const m = -new Date().getTimezoneOffset(), a = Math.abs(m);
+    return (m >= 0 ? '+' : '-') + String(Math.floor(a / 60)).padStart(2, '0') + ':' + String(a % 60).padStart(2, '0');
+  })();
+  const mwOn = toggle(false, null, { label: 'install only inside a maintenance window' });
+  const mwCron = h('input.mono', { type: 'text', value: '0 0 2 * * ?', placeholder: '0 0 2 * * ?' });
+  const mwDur = h('input.mono', { type: 'text', value: '02:00:00', placeholder: 'HH:mm:ss', style: 'width:110px' });
+  const mwTz = h('input.mono', { type: 'text', value: offset, placeholder: '+01:00', style: 'width:90px' });
+  const mwPresets = h('div.wrap', [
+    ['every night 02:00', '0 0 2 * * ?'], ['weeknights 22:30', '0 30 22 ? * MON-FRI'],
+    ['Sunday 06:00', '0 0 6 ? * SUN'], ['every hour', '0 0 * * * ?'],
+  ].map(([l, c]) => h('button.chip', { onclick: () => { mwCron.value = c; } }, l)));
+  const mwBox = h('div.hidden', { style: 'border-left:3px solid var(--line,#ddd);padding-left:10px;margin:4px 0' },
+    h('label.f', 'Opens at (cron: sec min hour day month weekday)', mwCron), mwPresets,
+    h('div', { style: 'display:flex;gap:12px;flex-wrap:wrap' },
+      h('label.f', 'Stays open', mwDur), h('label.f', 'Time zone offset', mwTz)),
+    h('p.faint', { style: 'margin:0;font-size:12px' },
+      'Outside the window the device is told to download and wait; the server refuses a window that never comes.'));
+  mwOn.input.addEventListener('change', () => mwBox.classList.toggle('hidden', !mwOn.input.checked));
   // Picking who gets it is the part people do most, so it is a choice, not a
   // query language: one device, a model, everything, or FIQL when none of those
   // is enough.
@@ -209,7 +232,7 @@ async function assignDialog(targetId, presetDs, explicitIds) {
   modal(targetId ? 'Deploy to ' + targetId : 'Deploy', [
     h('label.f', 'Distribution set', sel), h('label.f', 'Mode', type),
     h('label.f', 'Force time', at), dtQuick(at), atHint,
-    confirmReq,
+    confirmReq, mwOn, mwBox,
     h('label.f', 'Send it to', mode), row, count,
     h('div.flex', h('button.btn.sm', { onclick: runPreflight }, icon('check', 14), 'check the devices first'),
       h('span.faint', 'a delta only applies to the version it was built from')),
@@ -235,6 +258,9 @@ async function assignDialog(targetId, presetDs, explicitIds) {
       const ft = dtMs(at);
       if (ft) o.forcetime = ft;
       if (confirmReq.input.checked) o.confirmationRequired = true;
+      if (mwOn.input.checked) {
+        o.maintenanceWindow = { schedule: mwCron.value.trim(), duration: mwDur.value.trim(), timezone: mwTz.value.trim() };
+      }
       return o;
     });
     const r = await post(`/distributionsets/${sel.value}/assignedTargets`, body);

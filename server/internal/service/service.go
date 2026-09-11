@@ -9,6 +9,7 @@ package service
 
 import (
 	"fmt"
+	"sync/atomic"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -24,6 +25,8 @@ type Service struct {
 	art artifact.Store
 	log *slog.Logger
 	dir *users.Directory
+
+	leading atomic.Bool // this instance runs the background jobs
 }
 
 func New(st *store.Store, art artifact.Store, log *slog.Logger) *Service {
@@ -37,6 +40,9 @@ func (s *Service) Artifacts() artifact.Store { return s.art }
 // through it.
 func (s *Service) SetDirectory(d *users.Directory) { s.dir = d }
 func (s *Service) Directory() *users.Directory   { return s.dir }
+
+// Leading: this instance runs the rollout engine, auto-assignment and fleets.
+func (s *Service) Leading() bool { return s.leading.Load() }
 
 // ------------------------------------------------------------------ errors
 //

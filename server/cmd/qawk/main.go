@@ -81,6 +81,11 @@ func main() {
 		log.Error("http", "err", err)
 		os.Exit(1)
 	}
+	flush, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(flush); err != nil {
+		log.Warn("telemetry", "err", err)
+	}
 	log.Info("qawk stopped")
 }
 

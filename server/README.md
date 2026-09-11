@@ -89,6 +89,7 @@ Everything is an environment variable; nothing is read after startup.
 | `QAWK_ADMIN_USER` | `admin` | the administrator: every permission, never stored, always works (other users live in the database) |
 | `QAWK_ADMIN_PASSWORD` | `admin` | its password; must not be empty |
 | `QAWK_AUDIT_DAYS` | `180` | how long the audit log is kept; `0` keeps it for ever |
+| `QAWK_METRICS_TOKEN` | *(empty)* | when set, `/metrics` answers only `Authorization: Bearer <token>`; empty leaves it open, for a scraper on an internal network |
 | `QAWK_PUBLIC_URL` | *(empty)* | base of every link Qawk hands out; empty means "the address the client used", which is right unless a proxy rewrites it |
 | `QAWK_POLLING_TIME` | `00:05:00` | device polling interval until one is set through the API |
 | `QAWK_LOG_LEVEL` | `info` | `debug` logs every request |
@@ -220,7 +221,22 @@ The rules that decide what happens, taken from hawkBit's behaviour:
   (`CONTROLLER_PLUG_AND_PLAY`);
 - rollouts split their targets into groups — evenly, or by percentage and
   per-group query, never putting a target in two groups — and move to the
-  next group when the success threshold is met, pausing when the error one is.
+  next group when the success threshold is met, pausing when the error one is;
+  once started, every group waiting is `scheduled` and the first runs;
+- **scheduled deployments**: a rollout with `startAt` stays `ready` until
+  then and starts by itself; a `timeforced` action is `attempt` until its
+  force time and `forced` after; a `downloadonly` action is `skip` and closes
+  when the device reports `downloaded`; an assignment with a **maintenance
+  window** — a Quartz cron for when it opens (`0 30 2 * * ?`), how long it
+  stays open (`01:00:00`) and the offset it is read in (`+01:00`) — tells the
+  device to download but `skip` the install, `maintenanceWindow:
+  unavailable`, until the window opens, then `available` and the action's own
+  handling. The action shows `nextStartAt`. A window half given, unreadable,
+  or never coming again is refused with hawkBit's
+  `hawkbit.server.error.maintenanceScheduleInvalid`. Quartz's `L`, `W` and `#`
+  are not supported. The `deploymentBase` link changes whenever what the
+  device would be told changes (forced time reached, window opening), so a
+  device that caches by URL reads it again.
 
 ---
 
@@ -235,6 +251,7 @@ the reason.
 | A deleted module's or set's name and version are reserved for ever (soft delete). | They can be used again. | hawkBit's reservation is why the demo has to restart it to start over. Deleted rows are still kept for the history that points at them. |
 | Every range request of a download writes a `download` entry into the action's history. | Only the start of a download does (no `Range`, or one starting at 0). | A delta update reads one file in hundreds of ranges; hawkBit's behaviour is why our start script had to lift its limit on status entries. |
 | The 401 of the Management API carries `WWW-Authenticate`. | It does not. | The console calls the API with `fetch()`, and that header makes browsers pop up their own login dialog over it. |
+| A device reporting `closed`/`success` finishes the action, whatever it had been told. | Outside an action's maintenance window, a success is taken as the skip acknowledged: the action goes to `scheduled`, stays open, and the installed set does not change. | SWUpdate answers `"update": "skip"` with `closed`, `success`, *"Skipped Update."* — measured on our devices. hawkBit takes it at its word and marks a device updated that is not, so maintenance windows could not be used with SWUpdate at all. With this, the device installs when the window opens: the link changes and it is told `forced`. |
 
 ---
 
@@ -256,7 +273,8 @@ directly.
 | Personal API tokens, so scripts do not hold a password | done |
 | An audit log: who changed what, when, from where, and every refused sign-in | done |
 | Live events for the console (server-sent events), instead of polling | planned |
-| Prometheus metrics | planned |
+| Prometheus metrics at `/metrics`: requests and latency by API, targets by status, open actions, each fleet's progress, halted and pending releases, the leader, the database pool (see below) | done |
+| The release pipeline: upstreams, gates, four-eyes approval, waves, error thresholds, freezes, temporary fleets; `qawk-sim` for simulated devices | done |
 | Artifacts in an S3-compatible object store | planned |
 
 Every route already declares the hawkBit permission it needs (`READ_TARGET`,
@@ -368,7 +386,10 @@ anything is sent.
 number of devices that register through the device API, report
 `ring=<fleet>` among their attributes (so a rule `attribute.ring==beta` picks
 them up), take deployments and report them done after a random time — without
-downloading anything — and fail any whose module name contains `broken`:
+downloading anything — and fail any whose module name contains `broken`.
+They answer a deployment they are told to skip outside its maintenance window
+as SWUpdate does (`closed`, `success`, *"Skipped Update."*) and then wait for
+the window, and report a download-only one `downloaded`:
 
 ```bash
 docker run --rm --network host --entrypoint qawk-sim qawk:local \
@@ -379,6 +400,62 @@ docker run --rm --network host --entrypoint qawk-sim qawk:local \
 `test/pipeline.py` runs the whole pipeline against a scratch server with it;
 rows 15–19 of the device demonstration (`ota/demo/run-demo.sh`) run it with
 the real device among 188 simulated ones.
+
+### OpenTelemetry
+
+Qawk sends its metrics and traces to an OpenTelemetry collector over
+OTLP/HTTP, configured as every OpenTelemetry SDK is, by the standard
+variables — and is silent unless they ask for it:
+
+| Variable | Example | Meaning |
+|---|---|---|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://otel-collector:4318` | the collector, for both signals; setting it switches them on |
+| `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`, `…_TRACES_ENDPOINT` | | one signal only |
+| `OTEL_EXPORTER_OTLP_HEADERS` | `authorization=Bearer …` | for a collector that wants credentials |
+| `OTEL_METRICS_EXPORTER`, `OTEL_TRACES_EXPORTER` | `otlp` or `none` | switch one signal on or off explicitly |
+| `OTEL_METRIC_EXPORT_INTERVAL` | `60000` | milliseconds between metric exports |
+| `OTEL_TRACES_SAMPLER`, `OTEL_TRACES_SAMPLER_ARG` | `parentbased_traceidratio`, `0.01` | **sample**: ten thousand devices polling make a span each |
+| `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` | `qawk`, `deployment.environment=prod` | the resource; `service.instance.id` is the host (the pod) |
+| `OTEL_SDK_DISABLED` | `true` | everything off |
+
+**Metrics**: `http.server.request.duration` (histogram, seconds; attributes
+`http.request.method`, `http.response.status_code` and `qawk.surface` —
+`ddi`, `mgmt`, `qawk`), and the gauges of the table below under
+OpenTelemetry names: `qawk.targets` (`qawk.status`), `qawk.actions.active`,
+`qawk.rollouts.running`, `qawk.fleet.devices` / `.on_release` / `.updating` /
+`.failed` (`qawk.fleet`), `qawk.fleet.releases.pending` / `.halted`,
+`qawk.leader`, `qawk.db.connections` (`qawk.state`), `qawk.uptime`,
+`qawk.goroutines`, `qawk.heap`.
+
+**Traces**: a server span per request, named after the route it matched
+(`GET /{tenant}/controller/v1/{controllerId}`, `POST /qawk/v1/fleets/{fleetId}/promote`),
+with W3C trace-context propagation; `/health`, `/live` and `/metrics` are
+left out.
+
+Checked against the stock collector (`otel/opentelemetry-collector` with the
+`debug` exporter): every instrument above arrives, with its attributes, and
+the spans carry their route.
+
+### Metrics (Prometheus)
+
+`GET /metrics` also speaks Prometheus' text format, with no library behind
+it, for a scraper where there is no collector: the same numbers.
+
+| Metric | Kind | What |
+|---|---|---|
+| `qawk_http_requests_total{surface,method,code}` | counter | requests served; `surface` is `ddi` (devices), `mgmt` (hawkBit's API), `qawk` or `other` |
+| `qawk_http_request_duration_seconds{surface}` | histogram | latency, 5 ms to 10 s |
+| `qawk_targets{status}` | gauge | targets by update status |
+| `qawk_actions_active`, `qawk_rollouts_running` | gauge | what is in flight |
+| `qawk_fleet_devices{fleet}`, `qawk_fleet_on_release{fleet}`, `qawk_fleet_updating{fleet}`, `qawk_fleet_failed{fleet}` | gauge | each fleet's progress |
+| `qawk_fleet_releases_pending`, `qawk_fleet_releases_halted` | gauge | approvals waiting, releases stopped by their threshold — the two worth an alert |
+| `qawk_leader` | gauge | 1 on the instance running the background jobs; across instances the sum must be 1 |
+| `qawk_db_connections{state}` | gauge | this instance's pool: acquired, idle, total |
+| `qawk_uptime_seconds`, `qawk_goroutines`, `qawk_heap_bytes` | gauge | the process |
+
+The counters are per instance (sum them); the database gauges are the same
+on every instance (take one, or `max`). Scraping reads a handful of aggregate
+queries, cheap even with ten thousand targets.
 
 ### Users, roles, API tokens and the audit log
 
@@ -492,10 +569,25 @@ use, pass the existing one, or they are locked out:
 QAWK_CONTRACT_TOKEN=$(cat ota/keys/hawkbit-gateway-token) python3 ota/qawk/test/contract.py
 ```
 
+What Qawk adds has its own end-to-end tests, with simulated devices from
+`qawk-sim` (they need Docker and a scratch server: they create users, sets
+and fleets with a random suffix):
+
+```bash
+# fleets and the release pipeline: rules, direct releases, gates, waves,
+# four-eyes approval, freezes, expo and home, halts, forcing, history, audit
+python3 ota/qawk/test/pipeline.py http://localhost:18080
+
+# hawkBit's rollouts: groups in sequence, error threshold and pause, retry,
+# triggerNextGroup, pause/resume, approval and denial, stop, fleet== queries
+python3 ota/qawk/test/rollouts.py http://localhost:18080
+```
+
 The console's own live tests (`ota/hawkbit-ui/test/*-live.mjs`) run against
 Qawk as they run against hawkBit, and the full OTA matrix in
 `ota/TESTBOOK.md` is the end-to-end proof: real devices, real images, real
-updates, through Qawk.
+updates, through Qawk. Rows 15–20 of it put the real device among 188
+simulated ones for fleets, the pipeline and rollouts.
 
 ---
 
@@ -521,22 +613,31 @@ updates, through Qawk.
 
 ```
 cmd/qawk/            the binary: configuration, database, HTTP server, shutdown
+cmd/qawk-load/       load generator: thousands of devices polling
+cmd/qawk-sim/        simulated devices that take updates (demos, pipeline tests)
 internal/
   api/ddi/           the device API
   api/mgmt/          the Management API, one file per area
+  api/qawkapi/       /qawk/v1: info, downloads, fleets and releases, users
   artifact/          artifact bytes, by SHA-256
-  auth/              Management authentication and permissions
+  auth/              the request's user and permissions
   config/            environment variables
   db/                pool, migrations (db/migrations/*.sql)
   fiql/              the q= query language, parser and SQL compiler (+ tests)
   httpx/             JSON, hawkBit's errors, paging, links
+  metrics/           request counters and gauges, /metrics
   model/             the entities, as plain structs
   openapi/           /v3/api-docs, built from hawkBit's own description
-  server/            wiring, /qawk/v1/info, /health
-  service/           what Qawk does
+  server/            wiring, /health, /live, the gauges
+  service/           what Qawk does (fleets.go: the pipeline)
   store/             every SQL statement
+  telemetry/         OpenTelemetry: OTLP metrics and traces
   tenantcfg/         the tenant configuration keys and their defaults
+  users/             who may sign in: users, roles, tokens, the audit log
 reference/           hawkBit 1.1.0's API descriptions and recorded answers
+deploy/kubernetes/   Deployment, Service, PDB, HPA; a lab PostgreSQL
 test/contract.py     the contract test
+test/pipeline.py     fleets and the release pipeline, with qawk-sim
+test/rollouts.py     rollouts, with qawk-sim
 Dockerfile
 ```

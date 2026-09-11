@@ -100,6 +100,14 @@ func (s *Service) Poll(ctx context.Context, controllerID string, address *string
 func deploymentHash(a model.Action) uint32 {
 	h := fnv.New32a()
 	fmt.Fprintf(h, "%d/%s/%d", a.ID, a.ActionType, a.ForcedTime)
+	// as hawkBit's etag: a timeforced action reaching its time is news
+	if a.ActionType == model.TypeTimeForced && a.ForcedTime > 0 && httpx.Now() >= a.ForcedTime {
+		h.Write([]byte("/forced"))
+	}
+	if a.MaintenanceSchedule != nil {
+		// the window opening or closing changes what the device is told
+		fmt.Fprintf(h, "/%s", MaintenanceWindow(a, httpx.Now()))
+	}
 	return h.Sum32() & 0x7fffffff
 }
 
@@ -151,7 +159,9 @@ func (s *Service) DeploymentBase(ctx context.Context, t model.Target, actionID i
 				return httpx.NotFound("Action", actionID)
 			}
 		} else if a.Active && a.Status != model.StatusRetrieved && a.Status != model.StatusCanceling &&
-			a.Status != model.StatusWaitForConfirmation {
+			a.Status != model.StatusWaitForConfirmation &&
+			// a device re-reading a deployment it was told to skip, window shut
+			!(a.Status == model.StatusScheduled && MaintenanceWindow(a, now) == "unavailable") {
 			if err := s.st.SetAction(ctx, tx, a.ID, model.StatusRetrieved, true, nil, t.ControllerID, now); err != nil {
 				return err
 			}
@@ -162,6 +172,13 @@ func (s *Service) DeploymentBase(ctx context.Context, t model.Target, actionID i
 		}
 		d.Action = a
 		d.Download, d.Update = handling(a, now)
+		// a maintenance window: download, but install only while it is open
+		if w := MaintenanceWindow(a, now); w != "" {
+			d.MaintenanceWindow = w
+			if w == "unavailable" {
+				d.Update = "skip"
+			}
+		}
 		ds, err := s.st.DistributionSet(ctx, tx, a.DSID)
 		if err != nil {
 			return err
@@ -335,6 +352,23 @@ func (s *Service) DeploymentFeedback(ctx context.Context, t model.Target, action
 			return ErrGone
 		}
 		status := statusOf(f)
+		// SWUpdate answers "skip" -- sent outside a maintenance window -- with
+		// "closed, success: Skipped Update.": taken at its word, that marks a
+		// device updated that is not (hawkBit does exactly that). While the
+		// window is shut, a success is the skip acknowledged: the action stays
+		// open, scheduled, and the device installs once the window opens. A
+		// Qawk addition; see "Where Qawk differs" in the README.
+		if status == model.StatusFinished && MaintenanceWindow(a, now) == "unavailable" {
+			if a.Status == model.StatusScheduled {
+				return nil // acknowledged already
+			}
+			if _, err := s.st.AddStatus(ctx, tx, model.ActionStatus{ActionID: a.ID, Status: model.StatusScheduled,
+				OccurredAt: now, ReportedAt: now, Code: f.Code,
+				Messages: append(append([]string{}, f.Details...), MsgSkipAcknowledged)}); err != nil {
+				return err
+			}
+			return s.st.SetAction(ctx, tx, a.ID, model.StatusScheduled, true, f.Code, t.ControllerID, now)
+		}
 		at := f.Time
 		if at == 0 {
 			at = now

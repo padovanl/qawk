@@ -11,6 +11,9 @@
 // (attribute.ring==beta). When it is given a deployment it says it is
 // downloading, then installing, then that it is done -- after a random time
 // between -install-min and -install-max -- without downloading anything. A
+// deployment it is told to skip outside its maintenance window is answered as
+// SWUpdate answers it ("closed, success: Skipped Update.") and then waited for;
+// a download-only one is reported downloaded. A
 // deployment whose module name or version contains one of -fail (a
 // comma-separated list; "broken" by default) fails, as does a random share
 // -fail-rate of the others; a device that fails says it rolled back.
@@ -155,6 +158,8 @@ func (d *device) deploy(ctx context.Context, root, href string) {
 	var dep struct {
 		ID         string `json:"id"`
 		Deployment struct {
+			Update string `json:"update"`
+			Window string `json:"maintenanceWindow"`
 			Chunks []struct {
 				Name    string `json:"name"`
 				Version string `json:"version"`
@@ -165,6 +170,25 @@ func (d *device) deploy(ctx context.Context, root, href string) {
 		return
 	}
 	if _, seen := d.done.Load(dep.ID); seen {
+		return
+	}
+	if dep.Deployment.Update == "skip" {
+		if dep.Deployment.Window != "" {
+			// outside its maintenance window. SWUpdate answers this with
+			// "closed, success: Skipped Update." -- which, taken at its word,
+			// marks a device updated that is not; the simulated devices say
+			// the same, so the server's handling of it is exercised. Once per
+			// deployment link: the link changes when the window opens.
+			if _, said := d.done.LoadOrStore("skip:"+href, true); !said {
+				d.req(ctx, "POST", root+"/deploymentBase/"+dep.ID+"/feedback",
+					`{"status":{"execution":"closed","result":{"finished":"success"},"details":["Skipped Update."]}}`)
+			}
+			return
+		}
+		// download only: nothing to install; it says it has downloaded
+		d.done.Store(dep.ID, true)
+		d.req(ctx, "POST", root+"/deploymentBase/"+dep.ID+"/feedback",
+			`{"status":{"execution":"downloaded","result":{"finished":"none"},"details":["qawk-sim: downloaded, not installed"]}}`)
 		return
 	}
 	var what []string

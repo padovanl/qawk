@@ -142,7 +142,10 @@ func (s *Service) CreateRollout(ctx context.Context, user string, d RolloutDef) 
 			if pct <= 0 || pct > 100 {
 				pct = 100
 			}
-			n := int(math.Ceil(float64(len(free)) * pct / 100))
+			// 100/3 is not exact in floating point: 30 x 33.33..% comes out as
+			// 10.000000000000002, and a plain Ceil made that group 11 and the
+			// last one 9. hawkBit splits 40 into four groups of 10.
+			n := int(math.Ceil(float64(len(free))*pct/100 - 1e-9))
 			if n > len(free) {
 				n = len(free)
 			}
@@ -298,7 +301,20 @@ func (s *Service) startRollout(ctx context.Context, tx pgx.Tx, user string, now 
 	if err := s.st.UpdateRollout(ctx, tx, user, now, o); err != nil {
 		return err
 	}
-	_, err := s.startNextGroup(ctx, tx, user, now, o)
+	// As hawkBit: once started, every group waiting is scheduled, and the
+	// first of them runs.
+	groups, err := s.st.AllGroups(ctx, tx, o.ID)
+	if err != nil {
+		return err
+	}
+	for _, g := range groups {
+		if g.Status == model.GroupReady {
+			if err := s.st.SetGroupStatus(ctx, tx, g.ID, model.GroupScheduled, g.TotalTargets, user, now); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = s.startNextGroup(ctx, tx, user, now, o)
 	return err
 }
 
