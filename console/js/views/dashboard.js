@@ -1,6 +1,7 @@
 import { S, fiql, get, qawk } from '../api.js';
 import { PHASE_WORDS, TARGET_PILL, phasesOf } from '../badges.js';
 import { hasBatch, statesOf } from '../batch.js';
+import { fleetBadge } from '../chips.js';
 import { h } from '../dom.js';
 import { VIEWS, drawNav, go } from '../router.js';
 import { card } from '../table.js';
@@ -122,8 +123,7 @@ function attentionPanel({ errors, failed, fstates, trouble, over, cutoff }) {
     rows.push(h('div', { style: 'cursor:pointer;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap',
       onclick: () => go(d.kind === 'fleet' ? 'fleets' : d.kind === 'rollout' ? 'ro' : d.kind === 'system' ? 'systems' : 'inprog') },
     h('span.pill.' + (d.status === 'waiting_for_approval' ? 'amber' : 'err'), String(d.status).replace(/_/g, ' ')),
-    d.colour ? h('span.swatch-dot', { style: `--sw:${d.colour}` }) : null,
-    h('b', d.title), d.distributionSet && d.kind !== 'manual' ? h('span.faint', d.distributionSet) : null,
+    d.kind === 'fleet' ? fleetBadge(d.title, d.colour) : h('b', d.title), d.distributionSet && d.kind !== 'manual' ? h('span.faint', d.distributionSet) : null,
     h('span.faint', { style: 'font-size:12px' }, (d.detail || '').split('\n').pop())));
   }
   if (errors) {

@@ -1,5 +1,6 @@
 import { S, qawk } from '../api.js';
 import { bars } from '../bars.js';
+import { fleetBadge } from '../chips.js';
 import { h, icon } from '../dom.js';
 import { VIEWS, go } from '../router.js';
 import { serverInfo } from '../server.js';
@@ -44,7 +45,7 @@ function row(d, compact) {
   },
   h('div.flex', { style: 'justify-content:space-between;gap:8px;flex-wrap:wrap' },
     h('span.flex', { style: 'gap:8px;flex-wrap:wrap' }, icon(KIND[d.kind][0], 15),
-      d.colour ? h('span.swatch-dot', { style: `--sw:${d.colour}` }) : null, h('b', d.title),
+      d.kind === 'fleet' ? fleetBadge(d.title, d.colour) : h('b', d.title),
       h('span.faint', KIND[d.kind][1]),
       d.distributionSet && d.kind !== 'manual' ? h('span.pill.ok', d.distributionSet) : null,
       h('span.pill' + stCls, String(d.status).replace(/_/g, ' '))),

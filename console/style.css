@@ -359,8 +359,8 @@ dl.kv dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: bre
 /* a shine going back and forth along the fill, all the time (Android's) */
 .bars .fill::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(90deg, transparent 34%, color-mix(in srgb, #fff 16%, transparent) 44%,
-    color-mix(in srgb, #fff 30%, transparent) 50%, color-mix(in srgb, #fff 16%, transparent) 56%, transparent 66%);
+  background: linear-gradient(90deg, transparent 36%, color-mix(in srgb, #fff 8%, transparent) 44%,
+    color-mix(in srgb, #fff 18%, transparent) 50%, color-mix(in srgb, #fff 8%, transparent) 56%, transparent 64%);
   background-size: 260% 100%; background-repeat: no-repeat;
   animation: fillsheen 1.7s ease-in-out infinite alternate;
 }
@@ -1433,3 +1433,14 @@ pre.cmd {
 #login .btn.primary.lg:hover:not(:disabled) { filter: brightness(1.08); color: #fff; }
 #login .login-foot { justify-content: center; text-align: center; }
 #login .login-foot p { color: #6f7a8d; }
+
+/* Badges with a colour of their own (js/chips.js): a channel in the colour
+   it was given, a device type in one worked out from its name. */
+.pill.dt { --c: hsl(var(--h, 210) 60% 52%); font-family: var(--mono); }
+.pill.fb, .pill.dt {
+  font-weight: 600; white-space: nowrap;
+  color: color-mix(in srgb, var(--c) 78%, var(--fg));
+  background: color-mix(in srgb, var(--c) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
+}
+.pill.fb::before, .pill.dt::before { background: var(--c); }

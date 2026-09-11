@@ -1,5 +1,6 @@
 import { S, distributionSets, qawk } from '../api.js';
 import { bars } from '../bars.js';
+import { fleetBadge } from '../chips.js';
 import { ask, drawer, fail, modal, toast } from '../chrome.js';
 import { h, icon } from '../dom.js';
 import { check as fiqlCheck } from '../fiql.js';
@@ -58,7 +59,9 @@ VIEWS.systems = {
       h('div.panel', h('h3', 'Deployments'), h('div.body',
         deps.content.length ? tableOf(['Deployment', 'Manifest', 'Systems', 'Status', ''], deps.content.map(d => ({
           onclick: () => runsDrawer(d.id),
-          cells: [h('b', d.name), h('span.mono', d.manifest), systemsBar(d),
+          cells: [h('div', h('b', d.name), h('div.faint', { style: 'font-size:11px' },
+            (d.fleet ? 'channel ' + d.fleet : 'every channel') + (d.groups && d.groups.length ? ' · ' + d.groups.join(', ') : ''))),
+            h('span.mono', d.manifest), systemsBar(d),
             h('span', h('span.pill.' + (SD_CLS[d.status] || 'mute'), d.status),
               d.reason ? h('div.faint', { style: 'font-size:11px;max-width:320px' }, d.reason) : null),
             h('div.wrap', { onclick: e => e.stopPropagation() }, commands(d))],
@@ -165,19 +168,43 @@ async function runsDrawer(id) {
   }, 4000);
 }
 
+// A system's channel: the one all its devices are in, in its colour.
+function channelOf(s) {
+  return s.fleet
+    ? fleetBadge(s.fleet, s.colour)
+    : h('span.faint', { title: s.mixed ? 'its devices are not all in the same channel: a channel deployment leaves it out' : '' },
+      s.mixed ? 'mixed channels' : 'no channel');
+}
+
+// The systems of a type, by centre: each a 6hd with its st05 and hyper, in its channel.
 async function systemsDrawer(t) {
   const d = await qawk.get(`/systemtypes/${t.id}/systems`);
-  drawer(`${t.name} — ${d.total} systems`, d.content.length
-    ? tableOf(['System', 'Devices', ...t.components.map(c => c.componentType)], d.content.map(s => ({
-        cells: [h('b.mono', s.system), fmt(s.devices), ...t.components.map(c => fmt((s.components || {})[c.componentType] || 0))],
-      })))
-    : h('div.empty', `No device says which ${t.name} it is in: set ${t.systemKey} on them (Targets → metadata), or have them report it.`));
+  if (!d.content.length) {
+    drawer(`${t.name} — no system`, h('div.empty',
+      `No device says which ${t.name} it is in: set ${t.systemKey} on them (Targets → metadata), or have them report it.`));
+    return;
+  }
+  const byCentre = new Map();
+  d.content.forEach(s => {
+    const g = s.group || (t.groupKey ? 'no centre' : '');
+    if (!byCentre.has(g)) byCentre.set(g, []);
+    byCentre.get(g).push(s);
+  });
+  const table = list => tableOf(['System', 'Channel', 'Devices', ...t.components.map(c => c.componentType)],
+    list.map(s => ({ cells: [h('b.mono', s.system), channelOf(s), fmt(s.devices),
+      ...t.components.map(c => fmt((s.components || {})[c.componentType] || 0))] })));
+  drawer(`${t.name} — ${d.total} systems` + (t.groupKey ? `, ${byCentre.size} centres` : ''),
+    h('div.stack', [...byCentre.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([g, list]) => (g
+      ? h('div', h('div.flex', { style: 'gap:8px;margin:6px 0 4px' }, h('b', g),
+          h('span.faint', `${list.length} system${list.length === 1 ? '' : 's'}`)), table(list))
+      : table(list)))));
 }
 
 function typeDialog(t) {
   t = t || { name: '', description: '', systemKey: 'metadata.system', components: [{ componentType: '', match: '' }] };
   const name = h('input', { type: 'text', value: t.name, placeholder: '6hd-system' });
   const key = h('input.mono', { type: 'text', value: t.systemKey, placeholder: 'metadata.system' });
+  const group = h('input.mono', { type: 'text', value: t.groupKey || '', placeholder: 'attribute.centerid' });
   const rows = h('div.stack', { style: 'gap:6px' });
   const addRow = (c = { componentType: '', match: '' }) => {
     const type = h('input', { type: 'text', value: c.componentType, placeholder: '6hd', style: 'width:110px' });
@@ -192,12 +219,14 @@ function typeDialog(t) {
     h('label.f', 'Name', name),
     h('label.f', 'How a device says which system it is in', key),
     h('p.faint', { style: 'margin:0;font-size:12px' }, 'attribute.<key> (the device reports it) or metadata.<key> (set it in Targets).'),
+    h('label.f', 'Centre (optional): the field that says which centre a system is in', group),
     h('div.f', h('span', 'Components: a name, and the query that recognises its devices'), rows,
       h('button.btn.sm', { onclick: () => addRow() }, icon('plus', 13), 'component')),
   ], async () => {
     const comps = [...rows.children].map(r => r._v()).filter(c => c.componentType);
     for (const c of comps) { const v = fiqlCheck(c.match, 'targets'); if (!v.ok) throw new Error(`${c.componentType}: ${v.msg}`); }
-    const b = { name: name.value.trim(), description: t.description || '', systemKey: key.value.trim(), components: comps };
+    const b = { name: name.value.trim(), description: t.description || '', systemKey: key.value.trim(),
+      groupKey: group.value.trim(), components: comps };
     if (t.id) await qawk.put('/systemtypes/' + t.id, b); else await qawk.post('/systemtypes', b);
     toast('Saved', b.name, 'ok'); render();
   }, 'Save');
@@ -235,32 +264,64 @@ async function manifestDialog(m) {
   }, 'Save');
 }
 
+/* Deploy a manifest to the systems of a channel -- and of some centres only,
+ * or all of them. A system is in a channel when all its devices are; one
+ * whose devices are in different channels is left out, and the deployment
+ * says so. Inside each system the manifest's order holds, and a system that
+ * fails goes back alone: the rest of the channel goes on. */
 async function deploymentDialog(preset) {
-  const mans = (await qawk.get('/manifests')).content;
+  const [mans, fleets] = await Promise.all([qawk.get('/manifests').then(r => r.content),
+    qawk.get('/fleets').then(r => r.content).catch(() => [])]);
   if (!mans.length) { toast('No manifest', 'write a manifest first', 'info'); return; }
   const man = h('select', mans.map(m => h('option', { value: m.id, selected: preset && preset.id === m.id }, `${m.name} · ${m.systemType}`)));
   const name = h('input', { type: 'text', value: (preset ? preset.name : mans[0].name) + ' ' + new Date().toISOString().slice(0, 10) });
+  const chan = h('select', h('option', { value: '' }, '— every channel —'), fleets.map(f => h('option', { value: f.id }, f.name)));
   const par = h('input', { type: 'number', min: 1, value: 2, style: 'width:80px' });
   const maxf = h('input', { type: 'number', min: 0, value: 1, style: 'width:80px' });
+  const centres = h('div.wrap', { style: 'gap:8px' });
+  const centresBox = h('div.f', h('span', 'Centres (none ticked: every centre)'), centres);
   const list = h('div.wrap', { style: 'gap:6px;max-height:200px;overflow:auto' });
+  const count = h('span.faint');
   const every = h('input', { type: 'checkbox', checked: true });
+  let sys = [];
+  const pickedCentres = () => [...centres.querySelectorAll('input:checked')].map(i => i.value);
+  const redraw = () => {
+    const f = Number(chan.value), cs = new Set(pickedCentres());
+    const shown = sys.filter(x => (!f || (x.fleetId === f && !x.mixed)) && (!cs.size || cs.has(x.group)));
+    const out = f ? sys.filter(x => x.mixed && (!cs.size || cs.has(x.group))).length : 0;
+    list.replaceChildren(...shown.map(x => h('label', { style: 'display:flex;gap:4px;align-items:center' },
+      h('input', { type: 'checkbox', value: x.system, checked: true }), x.system,
+      h('span.faint', x.group ? `${x.group} · ${x.devices}` : `(${x.devices})`))));
+    count.textContent = `${shown.length} system${shown.length === 1 ? '' : 's'} in scope`
+      + (out ? ` · ${out} left out: their devices are in different channels` : '');
+  };
   const loadSystems = async () => {
     const m = mans.find(x => x.id === Number(man.value));
-    const s = await qawk.get(`/systemtypes/${m.systemTypeId}/systems`);
-    list.replaceChildren(...s.content.map(x => h('label', { style: 'display:flex;gap:4px;align-items:center' },
-      h('input', { type: 'checkbox', value: x.system, checked: true }), x.system, h('span.faint', `(${x.devices})`))));
+    sys = (await qawk.get(`/systemtypes/${m.systemTypeId}/systems`)).content;
+    const groups = [...new Set(sys.map(x => x.group).filter(Boolean))].sort();
+    centres.replaceChildren(...groups.map(g => h('label', { style: 'display:flex;gap:4px;align-items:center' },
+      h('input', { type: 'checkbox', value: g, onchange: redraw }), g)));
+    centresBox.hidden = !groups.length;
+    redraw();
   };
   man.addEventListener('change', loadSystems);
+  chan.addEventListener('change', redraw);
   await loadSystems();
   modal('Deploy a manifest', [
     h('label.f', 'Manifest', man), h('label.f', 'Name', name),
-    h('label', { style: 'display:flex;gap:6px;align-items:center' }, every, 'every system of the type, including ones that appear later in this list'),
-    h('div.f', h('span', 'or these systems'), list),
+    h('label.f', 'Channel: only systems whose devices are all in it', chan),
+    centresBox,
+    h('label', { style: 'display:flex;gap:6px;align-items:center' }, every,
+      'every system in scope, including ones that join it before the deployment starts'),
+    h('div.f', h('span', 'or these systems'), list, count),
     h('div.flex', { style: 'gap:12px;flex-wrap:wrap' }, h('label.f', 'Systems at a time', par), h('label.f', 'Systems that may fail', maxf)),
-    h('p.faint', { style: 'margin:0;font-size:12px' }, 'It is created as a draft: press start when ready.'),
+    h('p.faint', { style: 'margin:0;font-size:12px' },
+      'A system that fails goes back alone — its 6hd, st05 and hyper — and the others go on. It is created as a draft: press start when ready.'),
   ], async () => {
     const picked = [...list.querySelectorAll('input:checked')].map(i => i.value);
     const b = { name: name.value.trim(), manifestId: Number(man.value), maxParallel: Number(par.value), maxFailed: Number(maxf.value) };
+    if (chan.value) b.fleetId = Number(chan.value);
+    if (pickedCentres().length) b.groups = pickedCentres();
     if (!every.checked) b.systems = picked;
     await qawk.post('/systemdeployments', b);
     toast('Created', b.name + ' — press start', 'ok'); render();

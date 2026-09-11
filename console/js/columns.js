@@ -2,6 +2,7 @@ import { attributesOf, hasBatch, sampleAttributes, statesOf } from './batch.js';
 import { enc, get, limited } from './api.js';
 import { TARGET_PILL, explainPending, paintPhase, phaseFromState, phaseOf, pill, typePill } from './badges.js';
 import { modal } from './chrome.js';
+import { fleetBadge } from './chips.js';
 import { $, h } from './dom.js';
 import { render } from './router.js';
 import { pg } from './table.js';
@@ -50,8 +51,7 @@ const T_COLS = {
   // the Targets quick filters (Qawk; read with the page's batch)
   fleet:        { label: 'Fleet', cell: t => {
     const f = FLEET_OF.get(t.controllerId);
-    return f ? h('span.flex', { style: 'gap:6px;white-space:nowrap' },
-      h('span.swatch-dot', { style: `--sw:${f.colour || '#8b8f98'}` }), f.name) : h('span.faint.nowrap', { title: 'in no fleet' }, 'no fleet');
+    return f ? fleetBadge(f.name, f.colour) :h('span.faint.nowrap', { title: 'in no fleet' }, 'no fleet');
   } },
   ip:           { label: 'IP', cell: t => h('span.mono.faint', t.ipAddress || '—') },
   targetType:   { label: 'Type', cell: t => h('span.dim', (t.targetType && (t.targetType.name || t.targetType)) || '—') },

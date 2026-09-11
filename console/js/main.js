@@ -5,6 +5,7 @@ import './idle.js';
 import './views/about.js';
 import './views/account.js';
 import './views/audit.js';
+import './views/centres.js';
 import './views/config.js';
 import './views/dashboard.js';
 import './views/deploy.js';

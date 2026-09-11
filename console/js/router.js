@@ -14,6 +14,7 @@ const NAV = [
   { sep: 'Fleet' },
   { id: 'targets', label: 'Targets', count: 'targets', ico: 'target' },
   { id: 'fleets', label: 'Fleets', ico: 'fleet', feature: 'fleets' },
+  { id: 'centres', label: 'Centres', ico: 'chip', feature: 'centres' },
   { id: 'systems', label: 'Systems', ico: 'box', feature: 'systems' },
   { id: 'filters', label: 'Filters', ico: 'filter' },
   { id: 'tags', label: 'Tags', ico: 'tag' },
@@ -130,7 +131,9 @@ function live() {
   const view = S.view;
   liveT = setTimeout(() => {
     if (S.view !== view) return;
-    if (document.hidden || $('#modal').open || $('#drawer').classList.contains('open')) { live(); return; }
+    const a = document.activeElement;
+    const typing = a && a.matches('input, select, textarea') && $('#view').contains(a);
+    if (document.hidden || typing || $('#modal').open || $('#drawer').classList.contains('open')) { live(); return; }
     render();
   }, v.live);
 }

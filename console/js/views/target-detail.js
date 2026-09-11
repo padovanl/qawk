@@ -1,5 +1,6 @@
 import { S, del, enc, get, post, put } from '../api.js';
 import { actionPill, pill } from '../badges.js';
+import { fleetBadge } from '../chips.js';
 import { hasBatch, statesOf } from '../batch.js';
 import { ask, closeDrawer, drawer, fail, toast } from '../chrome.js';
 import { loadAssignedInstalled } from '../columns.js';
@@ -84,7 +85,7 @@ function overviewPane(t, attrs, autoc, id) {
       fleetBox.replaceChildren(f
         ? h('span.flex', { style: 'gap:6px;cursor:pointer', title: 'its fleet\'s devices',
             onclick: () => { closeDrawer(); S.fleet = f.name; S.status = ''; S.q = ''; go('targets'); } },
-          h('span.swatch-dot', { style: `--sw:${f.colour || '#8b8f98'}` }), h('b', f.name))
+          fleetBadge(f.name, f.colour))
         : 'none');
     }).catch(() => { fleetBox.textContent = '—'; });
   }

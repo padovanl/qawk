@@ -1,5 +1,6 @@
 import { S, distributionSets, qawk } from '../api.js';
 import { bars } from '../bars.js';
+import { fleetBadge } from '../chips.js';
 import { ask, closeDrawer, drawer, fail, modal, toast } from '../chrome.js';
 import { h, icon } from '../dom.js';
 import { check as fiqlCheck, fiqlEditor } from '../fiql.js';
@@ -68,7 +69,7 @@ function lanes(fleets) {
     const from = byId.get(line[0].upstreamId);
     return h('div', { style: 'display:flex;flex-wrap:wrap;gap:10px;align-items:stretch' },
       from ? h('div.faint', { style: 'align-self:center;display:flex;gap:6px;align-items:center;font-size:12px' },
-        '↳ from', h('span.swatch-dot', { style: `--sw:${from.colour || '#8b8f98'}` }), h('b', from.name),
+        '↳ from', fleetBadge(from.name, from.colour),
         h('span', { style: 'font-size:22px;opacity:.5' }, '→')) : null,
       line.flatMap((f, i) => [i ? h('div', { style: 'align-self:center;font-size:22px;opacity:.5' }, '→') : null,
         card(f, fleets)]));
@@ -88,10 +89,12 @@ function card(f, fleets) {
   return h('div', { style: 'border:1px solid var(--line,#ddd);border-radius:10px;padding:10px 12px;min-width:250px;flex:1;max-width:380px' +
       (frozen ? ';background:repeating-linear-gradient(135deg,transparent 0 10px,rgba(90,150,255,.07) 10px 20px)' : '') },
     h('div.flex', { style: 'justify-content:space-between;gap:6px' },
-      h('span.flex', h('span.swatch-dot', { style: `--sw:${f.colour || '#8b8f98'}` }), h('b', f.name),
+      h('span.flex', fleetBadge(f.name, f.colour),
         f.temporary ? h('span.pill', 'temporary') : null),
       h('span.faint', `${f.members} device${f.members === 1 ? '' : 's'}`)),
     f.description ? h('div.faint', f.description) : null,
+    f.inSystems ? h('div.faint', { style: 'font-size:12px', title: 'a 6hd, its st05 and hyper: system deployments update them, not this release' },
+      `${f.inSystems.toLocaleString('en-US')} in systems — updated by system deployments`) : null,
     h('div', { style: 'margin:8px 0 4px' },
       f.distributionSet ? h('span.pill.ok', f.distributionSet) : h('span.faint', 'no release'), ' ', statusPill(r),
       r && r.forced ? h('span.pill.err', { title: r.reason }, 'forced') : null),
@@ -112,6 +115,7 @@ function card(f, fleets) {
     h('div.faint', { style: 'font-size:11px;margin-top:6px' },
       f.upstream ? `from ${f.upstream} when ≥${f.gate.minDevices} devices and ≥${f.gate.minSuccess}% run it` +
         (f.gate.soakMinutes ? `, ${f.gate.soakMinutes} min soak` : '') + (f.gate.approvalRequired ? ', approved' : '')
+        + (f.autoPromote ? ' · promotes itself when the gate opens' : ' · promoted by hand')
         : 'takes releases directly', f.rule ? ` · rule ${f.rule}` : ''),
     h('div.wrap', { style: 'margin-top:8px' },
       f.upstream
@@ -253,6 +257,10 @@ async function fleetDialog(existing, fleets, preset = {}) {
     fleets.filter(o => !existing || o.id !== existing.id).map(o =>
       h('option', { value: o.id, selected: f.upstreamId === o.id }, o.name)));
   const temp = h('input', { type: 'checkbox', checked: !!f.temporary });
+  // by hand by default: someone looks at the gate, decides, and promotes
+  const mode = h('select', [['manual', 'by hand: someone looks at the gate and promotes'],
+    ['auto', 'by itself, as soon as the gate opens']].map(([v, l]) =>
+    h('option', { value: v, selected: (f.autoPromote ? 'auto' : 'manual') === v }, l)));
   const minDev = num(f.gate.minDevices, 0), minOk = num(f.gate.minSuccess, 0, 100), soak = num(f.gate.soakMinutes, 0);
   const appr = h('input', { type: 'checkbox', checked: f.gate.approvalRequired });
   const wave = num(f.wavePercent, 0, 100), waveT = num(f.waveTimeoutMinutes, 1), thr = num(f.errorThreshold, 0, 100);
@@ -262,6 +270,7 @@ async function fleetDialog(existing, fleets, preset = {}) {
     h('label.f', 'Name', name), h('label.f', 'Description', desc), h('label.f', 'Colour', colour),
     h('label.f', 'Rule: devices in no fleet that match join this one', rule),
     h('label.f', 'Takes releases from', up),
+    h('label.f', 'Promotion from it', mode),
     h('label', { style: 'display:flex;gap:6px;align-items:center' }, temp,
       'temporary: devices come back to the fleet they came from (a trade show)'),
     h('div.f', h('span', 'Gate, checked on the upstream'), row(
@@ -275,7 +284,7 @@ async function fleetDialog(existing, fleets, preset = {}) {
     if (!name.value.trim()) throw new Error('a name is required');
     if (rule.value.trim()) { const v = fiqlCheck(rule.value, 'targets'); if (!v.ok) throw new Error(v.msg); }
     const b = { name: name.value.trim(), description: desc.value.trim(), colour: colour.value,
-      rule: rule.value.trim(), upstreamId: Number(up.value), temporary: temp.checked,
+      rule: rule.value.trim(), upstreamId: Number(up.value), temporary: temp.checked, autoPromote: mode.value === 'auto',
       gate: { minDevices: Number(minDev.value), minSuccess: Number(minOk.value), soakMinutes: Number(soak.value),
         approvalRequired: appr.checked },
       wavePercent: Number(wave.value), waveTimeoutMinutes: Number(waveT.value), errorThreshold: Number(thr.value),
