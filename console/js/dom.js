@@ -71,6 +71,8 @@ const ICONS = {
   next:    'M6 5l9 7-9 7zM17 5h2v14h-2z',
   edit:    'M4 20h4l10-10-4-4L4 16zM14 6l4 4',
   add:     'M12 5v14M5 12h14',
+  alert:   'M12 4l9.5 16h-19zM12 10v4.5M12 17.5h.01',
+  clock:   'M12 3a9 9 0 100 18 9 9 0 000-18zM12 7.5V12l3 2',
 };
 function icon(name, size = 15) {
   const ns = 'http://www.w3.org/2000/svg';

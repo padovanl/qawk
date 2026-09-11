@@ -1487,3 +1487,31 @@ dl.datagrid dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 }
 .empty b { color: var(--fg); font-size: 15px; font-weight: 600; margin-bottom: 2px; }
 table.t th { white-space: nowrap; }   /* "ASSIGNED / INSTALLED" on one line */
+
+/* stat cards (dashboard), after Tabler's: a tinted icon tile, a hairline of
+   the card's tone along its top, a small bar; an active tile breathes */
+.card.stat { display: flex; gap: 14px; align-items: flex-start; --tone: var(--fg-faint);
+             box-shadow: inset 0 2px 0 color-mix(in srgb, var(--tone) 75%, transparent); }
+.card.stat.info { --tone: var(--info); }
+.card.stat.ok   { --tone: var(--ok); }
+.card.stat.err  { --tone: var(--err); }
+.card.stat.warn { --tone: var(--warn); }
+.card.stat.err .v { color: var(--err); }
+.stat-ico { flex: none; width: 42px; height: 42px; border-radius: 10px; display: grid; place-items: center;
+            color: var(--tone); background: color-mix(in srgb, var(--tone) 15%, transparent); }
+.stat-body { flex: 1; min-width: 0; }
+.stat-body .v { margin-top: 4px; }
+.stat-bar { height: 4px; border-radius: 99px; margin-top: 10px; overflow: hidden;
+            background: color-mix(in srgb, var(--fg) 9%, transparent); }
+.stat-bar i { display: block; height: 100%; border-radius: 99px; background: var(--tone);
+              transition: width .6s cubic-bezier(.4, 0, .2, 1); }
+.cards > div[style*="cursor:pointer"] .card { transition: transform .15s, border-color .15s, background .15s; }
+.cards > div[style*="cursor:pointer"]:hover .card { transform: translateY(-2px); }
+.card.stat.live .stat-ico { animation: tile-breathe 1.8s ease-out infinite; }
+.card.stat.live .stat-ico .ico { animation: tile-nudge 1.8s ease-in-out infinite; }
+@keyframes tile-breathe {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--tone) 45%, transparent); }
+  70%  { box-shadow: 0 0 0 9px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes tile-nudge { 50% { transform: translateY(-2px); } }

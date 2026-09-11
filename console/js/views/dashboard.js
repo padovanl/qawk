@@ -2,7 +2,7 @@ import { S, fiql, get, qawk } from '../api.js';
 import { PHASE_WORDS, TARGET_PILL, phasesOf } from '../badges.js';
 import { hasBatch, statesOf } from '../batch.js';
 import { fleetBadge } from '../chips.js';
-import { h } from '../dom.js';
+import { h, icon } from '../dom.js';
 import { VIEWS, drawNav, go } from '../router.js';
 import { card } from '../table.js';
 import { ago } from '../util.js';
@@ -49,6 +49,45 @@ const fmt = n => Number(n || 0).toLocaleString('en-US');
 const TROUBLE = ['halted', 'paused', 'rolling_back', 'waiting_for_approval'];
 
 const clickable = (node, onclick, title) => h('div', { style: 'cursor:pointer', title, onclick }, node);
+
+/* Tabler's stat card: a tinted icon tile, the label, the number, a line
+ * under it -- and for the devices a thin bar of those polling on time. The
+ * tone follows the number: red only when something failed, amber only when
+ * something waits; a tile whose card is at work breathes. */
+function stat(label, n, sub, ico, tone, bar) {
+  return h('div.card.stat.' + tone,
+    h('div.stat-ico', icon(ico, 20)),
+    h('div.stat-body', h('div.k', label),
+      h('div.v', { 'data-n': n ?? '' }, n === null || n === undefined ? '—' : fmt(n)),
+      sub ? h('div.sub', sub) : null,
+      bar !== undefined ? h('div.stat-bar', h('i', { style: `width:${bar.toFixed(1)}%` })) : null));
+}
+
+/* The numbers count up to what they became: from nothing when the page
+ * opens, from the old value when the live update changes them. */
+const shownN = new WeakMap();
+function countUp(el) {
+  const to = Number(el.getAttribute('data-n'));
+  if (el.getAttribute('data-n') === '' || !Number.isFinite(to)) return;
+  const from = shownN.has(el) ? shownN.get(el) : 0;
+  shownN.set(el, to);
+  if (from === to) { el.textContent = fmt(to); return; }
+  const t0 = performance.now(), ms = 700;
+  const step = t => {
+    const k = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+    el.textContent = fmt(Math.round(from + (to - from) * e));
+    if (k < 1 && shownN.get(el) === to) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+if (typeof MutationObserver !== 'undefined' && document.getElementById('view')) {
+  new MutationObserver(ms => {
+    for (const m of ms) {
+      if (m.type === 'attributes') { if (m.target.matches('.stat .v')) countUp(m.target); continue; }
+      for (const n of m.addedNodes) if (n.querySelectorAll) n.querySelectorAll('.stat .v[data-n]').forEach(countUp);
+    }
+  }).observe(document.getElementById('view'), { subtree: true, childList: true, attributes: true, attributeFilter: ['data-n'] });
+}
 
 function targetOf(a) {
   const m = (((a._links || {}).self || {}).href || '').match(/\/targets\/([^/]+)\/actions\//);
@@ -101,15 +140,17 @@ VIEWS.dash = {
 
     root.replaceChildren(h('div.stack',
       h('div.cards',
-        clickable(card('Devices', fmt(tg.total), over ? `${fmt(over)} not polling` : 'all polling on time'),
+        clickable(stat('Devices', tg.total, over ? `${fmt(over)} not polling` : 'all polling on time', 'target',
+          over ? 'warn' : 'info', tg.total ? 100 * (tg.total - (over || 0)) / tg.total : 0),
           () => { S.q = over && cutoff ? `lastcontrollerrequestat=lt=${cutoff}` : ''; S.status = ''; go('targets'); },
           over ? 'the devices that stopped polling' : 'every device'),
-        clickable(card('In progress', deps ? fmt(deps.length) : '—',
-          deps ? `${fmt(updating)} device${updating === 1 ? '' : 's'} updating` : 'needs Qawk'), () => go('inprog')),
-        clickable(card('Failed', fmt(errors), errors ? 'their last update failed' : 'no device in error'),
-          () => { S.q = ''; S.status = 'error'; go('targets'); }, 'the devices in error'),
-        clickable(card('To approve', fmt(approvals.length), approvals.length ? 'releases waiting for a second person' : 'nothing waiting'),
-          () => go('fleets'))),
+        clickable(stat('In progress', deps ? deps.length : null,
+          deps ? `${fmt(updating)} device${updating === 1 ? '' : 's'} updating` : 'needs Qawk', 'deploy',
+          deps && deps.length ? 'info.live' : 'mute'), () => go('inprog')),
+        clickable(stat('Failed', errors, errors ? 'their last update failed' : 'no device in error', 'alert',
+          errors ? 'err' : 'ok'), () => { S.q = ''; S.status = 'error'; go('targets'); }, 'the devices in error'),
+        clickable(stat('To approve', approvals.length, approvals.length ? 'releases waiting for a second person' : 'nothing waiting',
+          'clock', approvals.length ? 'warn.live' : 'mute'), () => go('fleets'))),
       attentionPanel({ errors, failed, fstates, trouble, over, cutoff }),
       deps ? inProgressPanelFrom(deps, 5) : null,
       fleetStatus(byStatus, virgin, phases, tg.content.length)));
