@@ -45,7 +45,7 @@ async function rawGet(path) {
 }
 
 VIEWS.systems = {
-  title: 'Systems',
+  title: 'Orchestrator',
   live: 4000,
   bar: () => [
     h('button.btn.sm.primary', { onclick: () => deploymentDialog() }, icon('deploy', 14), 'deploy a manifest'),

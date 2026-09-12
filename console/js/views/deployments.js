@@ -18,14 +18,21 @@ import { ago } from '../util.js';
 const has = () => ((serverInfo() || {}).features || []).includes('deployments');
 const fmt = n => Number(n || 0).toLocaleString('en-US');
 const KIND = { fleet: ['fleet', 'fleet release'], rollout: ['rollout', 'rollout'], manual: ['deploy', 'assigned by hand'],
-  system: ['box', 'system deployment'] };
+  system: ['box', 'orchestrator'] };
+
+// "name:version" -> the devices told to install that set
+function setQuery(d) {
+  const nv = String(d.distributionSet || d.title || '');
+  const i = nv.lastIndexOf(':');
+  return i > 0 ? `assignedds.name==${nv.slice(0, i)};assignedds.version==${nv.slice(i + 1)}` : `assignedds.id==${d.distributionSetId}`;
+}
 
 function open(d, status) {
   S.q = ''; S.fleet = ''; S.status = status || '';
   if (d.kind === 'rollout') { go('ro'); return; }
   if (d.kind === 'system') { go('systems'); return; }
   if (d.kind === 'fleet') S.fleet = d.title;
-  else S.q = `assignedds.id==${d.distributionSetId}`;
+  else S.q = setQuery(d);
   go('targets');
 }
 
@@ -110,4 +117,4 @@ VIEWS.inprog = {
   },
 };
 
-export { KIND, has as hasDeployments, inProgressPanel, inProgressPanelFrom };
+export { KIND, has as hasDeployments, setQuery, inProgressPanel, inProgressPanelFrom };

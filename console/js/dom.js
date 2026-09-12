@@ -1,3 +1,5 @@
+import { TB } from './tabler-icons.js';
+
 /* ------------------------------------------------------------------ utils */
 const $ = (s, r = document) => r.querySelector(s);
 
@@ -85,6 +87,8 @@ function icon(name, size = 15) {
   svg.setAttribute('stroke-linecap', 'round');
   svg.setAttribute('stroke-linejoin', 'round');
   svg.classList.add('ico');
+  // a Tabler icon when there is one by that name (tabler-icons.js)
+  if (TB[name]) { svg.innerHTML = TB[name]; return svg; }
   const path = document.createElementNS(ns, 'path');
   path.setAttribute('d', ICONS[name] || ICONS.info);
   svg.append(path);

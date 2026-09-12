@@ -1,27 +1,29 @@
 import { S, fiql, get, qawk } from '../api.js';
-import { PHASE_WORDS, TARGET_PILL, phasesOf } from '../badges.js';
-import { hasBatch, statesOf } from '../batch.js';
-import { fleetBadge } from '../chips.js';
+import { PHASE_WORDS, phasesOf } from '../badges.js';
+import { bars } from '../bars.js';
+import { hasBatch, hasFeature, statesOf } from '../batch.js';
+import { fleetBadge, typeBadge } from '../chips.js';
 import { h, icon } from '../dom.js';
 import { VIEWS, drawNav, go } from '../router.js';
-import { card } from '../table.js';
+import { serverInfo } from '../server.js';
 import { ago } from '../util.js';
-import { hasDeployments, inProgressPanelFrom } from './deployments.js';
+import { hasDeployments, setQuery } from './deployments.js';
 import { openTarget } from './target-detail.js';
 
-/* ------- dashboard: what needs someone, what is moving, how the fleet stands
+/* ------- dashboard: an eye on the whole console ---------------------------
  *
- * EVERYTHING AT ONCE. This page used to ask in rounds -- the counts, then
- * the overdue, then the phases, then what was in progress, then the latest
- * actions -- each waiting for the one before, so every slow answer added to
- * the next. Now every request leaves together, and the page is as slow as
- * its slowest answer, not as the sum of them.
+ * Laid out as Tabler's dashboards are (tabler.io, MIT), with its icons. From
+ * the top: the numbers; the channels, dev to prod; what is moving and what
+ * needs someone; how the devices stand -- by update, by type, by centre; the
+ * orchestrator, the rollouts, the catalogue; and who did what, on which
+ * server. Every widget opens its page. Every row is a list row: a tile with
+ * an icon in its tone, a title with its badges, a line under it, a number on
+ * the right, a chevron when it opens something. A widget with nothing to say
+ * says so, and how to get something there.
  *
- * AND ONLY WHAT SAYS SOMETHING. "Latest actions" listed the twenty newest
- * actions of anything: at ten thousand devices, twenty idle simulated ones.
- * In its place: what needs someone -- devices whose update failed, with what
- * they said; releases halted by their threshold; rollouts paused; systems
- * rolled back; approvals waiting; devices that stopped polling. */
+ * EVERYTHING AT ONCE. Every request leaves together, and the page is as slow
+ * as its slowest answer, not as the sum of them. The counts are limit=1
+ * queries: the server counts, the browser does not. */
 const phaseClass = label => {
   const base = label.replace(/ \(part \d+\)$/, '');
   const hit = PHASE_WORDS.find(([k]) => k === base);
@@ -38,20 +40,23 @@ async function overdueCutoff() {
       const [p, o] = await Promise.all([get('/system/configs/pollingTime'), get('/system/configs/pollingOverdueTime')]);
       const ms = hms(p.value) + hms(o.value);
       if (!Number.isFinite(ms)) return null;
-      pollCfg = { at: Date.now(), ms };
+      pollCfg = { at: Date.now(), ms, poll: p.value, grace: o.value };
     }
     return Date.now() - pollCfg.ms;
   } catch (_) { return null; }
 }
 
 const STATUSES = ['registered', 'pending', 'in_sync', 'error', 'unknown'];
+const DEVICE_TYPES = ['neo-intel', '6hd', 'st05', 'hyper'];
 const fmt = n => Number(n || 0).toLocaleString('en-US');
+const plural = (n, one, many = one + 's') => `${fmt(n)} ${n === 1 ? one : many}`;
 const TROUBLE = ['halted', 'paused', 'rolling_back', 'waiting_for_approval'];
+const soft = p => p.catch(() => null);
 
 const clickable = (node, onclick, title) => h('div', { style: 'cursor:pointer', title, onclick }, node);
 
 /* Tabler's stat card: a tinted icon tile, the label, the number, a line
- * under it -- and for the devices a thin bar of those polling on time. The
+ * under it, and a thin bar when the number is a share of something. The
  * tone follows the number: red only when something failed, amber only when
  * something waits; a tile whose card is at work breathes. */
 function stat(label, n, sub, ico, tone, bar) {
@@ -94,20 +99,59 @@ function targetOf(a) {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+/* ------- the widgets' parts: a card with a header, and list rows --------- */
+const widget = (title, ico, extra, body, page) => h('div.panel.w',
+  h('h3.whead', h('span.wtitle', icon(ico, 16), title), h('span.wextra', extra || null,
+    page ? h('button.wlink', { title: 'open the page', onclick: () => go(page) }, 'open', icon('chevron-right', 14)) : null)),
+  body);
+
+function row({ key, tile, tone, colour, title, meta, right, below, onclick }) {
+  return h('div.lrow' + (onclick ? '.click' : '') + (tone ? '.tone-' + tone : ''),
+    { 'data-key': key, onclick, style: colour ? `--tone:${colour}` : null },
+    h('div.ltile', icon(tile, 18)),
+    h('div.lmain', h('div.ltitle', title), meta ? h('div.lmeta', meta) : null, below || null),
+    right ? h('div.lright', right) : null,
+    onclick ? h('span.lchev', icon('chevron-right', 16)) : null);
+}
+
+const emptyRow = (tile, title, text, tone = 'mute') => h('div.lrow.tone-' + tone,
+  h('div.ltile', icon(tile, 18)), h('div.lmain', h('div.ltitle', h('b', title)), h('div.lmeta', text)));
+
+// a share of a whole: a bar with its legend, each part opening what it counts
+function share(parts, total, open, badge) {
+  return [
+    h('div.dist', parts.map(([k, n, c, word]) => h('i', { 'data-key': k, style: `flex:${n} 1 0;background:${c}`,
+      title: `${word} · ${fmt(n)}` }))),
+    h('div.dlegend', parts.map(([k, n, c, word, tip]) => h('button.ditem', { 'data-key': k, title: tip || word, onclick: () => open(k) },
+      h('span.ddot', { style: `background:${c}` }), h('span.dword', badge ? badge(k, word) : word), h('b', fmt(n)),
+      h('span.faint', `${Math.round(100 * n / (total || 1))}%`)))),
+  ];
+}
+
 VIEWS.dash = {
   title: 'Dashboard',
   async render(root) {
     const count = q => get('/targets?limit=1&q=' + fiql(q)).then(r => r.total);
     const cutoffP = overdueCutoff();
-    const [tg, totals, installedInSync, cutoff, over, deps, fails] = await Promise.all([
-      get('/targets?limit=60&sort=lastControllerRequestAt:DESC'),
-      Promise.all(STATUSES.map(s => count(`updatestatus==${s}`).catch(() => 0))),
-      count('updatestatus==in_sync;installedat=ge=0').catch(() => null),
-      cutoffP,
-      cutoffP.then(c => (c === null ? null : count(`lastcontrollerrequestat=lt=${c}`))).catch(() => null),
-      hasDeployments() ? qawk.get('/deployments').then(r => r.content || []).catch(() => []) : Promise.resolve(null),
-      get('/actions?limit=6&sort=id:DESC&q=' + fiql('status==error')).catch(() => ({ content: [], total: 0 })),
-    ]);
+    const [tg, totals, installedInSync, cutoff, over, deps, fails, fleets, centres, sdeps, stypes, ros, dss, sms, audit, types] =
+      await Promise.all([
+        get('/targets?limit=60&sort=lastControllerRequestAt:DESC'),
+        Promise.all(STATUSES.map(s => count(`updatestatus==${s}`).catch(() => 0))),
+        count('updatestatus==in_sync;installedat=ge=0').catch(() => null),
+        cutoffP,
+        cutoffP.then(c => (c === null ? null : count(`lastcontrollerrequestat=lt=${c}`))).catch(() => null),
+        hasDeployments() ? qawk.get('/deployments').then(r => r.content || []).catch(() => []) : Promise.resolve(null),
+        get('/actions?limit=6&sort=id:DESC&q=' + fiql('status==error')).catch(() => ({ content: [], total: 0 })),
+        hasFeature('fleets') ? qawk.get('/fleets').then(r => r.content || []).catch(() => []) : Promise.resolve(null),
+        hasFeature('centres') ? soft(qawk.get('/centres')) : Promise.resolve(null),
+        hasFeature('systems') ? soft(qawk.get('/systemdeployments')) : Promise.resolve(null),
+        hasFeature('systems') ? soft(qawk.get('/systemtypes')) : Promise.resolve(null),
+        soft(get('/rollouts?limit=4&sort=id:DESC')),
+        soft(get('/distributionsets?limit=4&sort=id:DESC')),
+        soft(get('/softwaremodules?limit=1')),
+        hasFeature('audit') ? soft(qawk.get('/audit?limit=60')) : Promise.resolve(null),
+        Promise.all(DEVICE_TYPES.map(t => count(`attribute.device_type==${t}`).catch(() => 0))),
+      ]);
     S.counts.targets = tg.total;
     drawNav();
 
@@ -134,96 +178,323 @@ VIEWS.dash = {
     phs.forEach(ph => { if (ph && ph.label) phases[ph.label] = (phases[ph.label] || 0) + 1; });
 
     const errors = byStatus.error || 0;
+    const upToDate = byStatus.in_sync || 0;
     const trouble = (deps || []).filter(d => TROUBLE.includes(d.status));
     const approvals = trouble.filter(d => d.status === 'waiting_for_approval');
     const updating = (deps || []).reduce((n, d) => n + (d.open || 0), 0);
+    const cl = centres ? centres.content || [] : [];
+    const placed = cl.filter(c => c.fleetId).length;
 
-    root.replaceChildren(h('div.stack',
+    const pair = (a, b) => (a && b ? h('div.dash-2', a, b) : a || b);
+    root.replaceChildren(h('div.stack.dash',
       h('div.cards',
-        clickable(stat('Devices', tg.total, over ? `${fmt(over)} not polling` : 'all polling on time', 'target',
+        clickable(stat('Devices', tg.total, over ? `${fmt(over)} not polling` : 'all polling on time', 'device-desktop',
           over ? 'warn' : 'info', tg.total ? 100 * (tg.total - (over || 0)) / tg.total : 0),
-          () => { S.q = over && cutoff ? `lastcontrollerrequestat=lt=${cutoff}` : ''; S.status = ''; go('targets'); },
-          over ? 'the devices that stopped polling' : 'every device'),
+          () => { S.q = over && cutoff ? `lastcontrollerrequestat=lt=${cutoff}` : ''; S.status = ''; go('targets'); }),
+        clickable(stat('Up to date', upToDate, tg.total ? `${Math.round(100 * upToDate / tg.total)}% of the devices` : 'no device',
+          'rosette-discount-check', upToDate ? 'ok' : 'mute', tg.total ? 100 * upToDate / tg.total : 0),
+          () => { S.q = ''; S.status = 'in_sync'; go('targets'); }),
         clickable(stat('In progress', deps ? deps.length : null,
-          deps ? `${fmt(updating)} device${updating === 1 ? '' : 's'} updating` : 'needs Qawk', 'deploy',
+          deps ? `${plural(updating, 'device')} updating` : 'needs Qawk', 'rocket',
           deps && deps.length ? 'info.live' : 'mute'), () => go('inprog')),
-        clickable(stat('Failed', errors, errors ? 'their last update failed' : 'no device in error', 'alert',
-          errors ? 'err' : 'ok'), () => { S.q = ''; S.status = 'error'; go('targets'); }, 'the devices in error'),
-        clickable(stat('To approve', approvals.length, approvals.length ? 'releases waiting for a second person' : 'nothing waiting',
-          'clock', approvals.length ? 'warn.live' : 'mute'), () => go('fleets'))),
-      attentionPanel({ errors, failed, fstates, trouble, over, cutoff }),
-      deps ? inProgressPanelFrom(deps, 5) : null,
-      fleetStatus(byStatus, virgin, phases, tg.content.length)));
+        clickable(stat('Failed', errors, errors ? 'their last update failed' : 'no device in error', 'alert-triangle',
+          errors ? 'err' : 'ok'), () => { S.q = ''; S.status = 'error'; go('targets'); }),
+        clickable(stat('To approve', approvals.length, approvals.length ? 'waiting for a second person' : 'nothing waiting',
+          'clock', approvals.length ? 'warn.live' : 'mute'), () => go('fleets')),
+        centres ? clickable(stat('Centres', cl.length, cl.length ? `${fmt(placed)} in a channel` : 'none reported yet',
+          'building-store', cl.length ? 'info' : 'mute'), () => go('centres')) : null),
+      h('div.dash-main',
+        h('div.dash-col',
+          fleets ? pipelineWidget(fleets) : null,
+          deps ? progressWidget(deps) : null,
+          pair(updateWidget(byStatus, virgin, phases, tg.content.length), typesWidget(types, tg.total)),
+          pair(sdeps ? orchestratorWidget(sdeps.content || [], stypes ? stypes.content || [] : []) : null,
+            ros ? rolloutsWidget(ros) : null),
+          audit ? activityWidget(audit.content || [], fleets || []) : null),
+        h('div.dash-col',
+          attentionWidget({ errors, failed, fstates, trouble, over, cutoff }),
+          centres ? centresWidget(cl, fleets || [], centres.field) : null,
+          dss ? catalogueWidget(dss, sms) : null,
+          serverWidget()))));
   },
 };
 
-function attentionPanel({ errors, failed, fstates, trouble, over, cutoff }) {
-  const rows = [];
-  for (const d of trouble) {
-    rows.push(h('div', { style: 'cursor:pointer;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap',
-      onclick: () => go(d.kind === 'fleet' ? 'fleets' : d.kind === 'rollout' ? 'ro' : d.kind === 'system' ? 'systems' : 'inprog') },
-    h('span.pill.' + (d.status === 'waiting_for_approval' ? 'amber' : 'err'), String(d.status).replace(/_/g, ' ')),
-    d.kind === 'fleet' ? fleetBadge(d.title, d.colour) : h('b', d.title), d.distributionSet && d.kind !== 'manual' ? h('span.faint', d.distributionSet) : null,
-    h('span.faint', { style: 'font-size:12px' }, (d.detail || '').split('\n').pop())));
-  }
-  if (errors) {
-    rows.push(h('div', { style: 'cursor:pointer;margin-top:4px', onclick: () => { S.q = ''; S.status = 'error'; go('targets'); } },
-      h('span.pill.err', `${fmt(errors)} device${errors === 1 ? '' : 's'} in error`),
-      h('span.faint', { style: 'margin-left:8px;font-size:12px' }, 'their last update failed — show them')));
-    for (const a of failed) {
-      const st = fstates.get(a._t);
-      const msg = st && st.statuses && st.statuses.length ? (st.statuses[0].messages || []).join(' ') : '';
-      const set = st && st.assigned ? `${st.assigned.name} ${st.assigned.version}` : '';
-      rows.push(h('div', { style: 'cursor:pointer;display:flex;gap:10px;align-items:baseline;padding-left:12px;font-size:12px',
-        title: msg, onclick: () => openTarget(a._t) },
-      h('span.mono', { style: 'white-space:nowrap' }, a._t), set ? h('span.faint', { style: 'white-space:nowrap' }, set) : null,
-      h('span', { style: 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0' }, msg || 'failed'),
-      h('span.faint', { style: 'white-space:nowrap' }, ago(a.lastModifiedAt || a.createdAt))));
-    }
-  }
-  if (over) {
-    rows.push(h('div', { style: 'cursor:pointer;margin-top:4px',
-      onclick: () => { S.q = cutoff ? `lastcontrollerrequestat=lt=${cutoff}` : ''; S.status = ''; go('targets'); } },
-    h('span.pill.amber', `${fmt(over)} not polling`),
-    h('span.faint', { style: 'margin-left:8px;font-size:12px' }, 'no poll within the polling interval and its grace — show them')));
-  }
-  return h('div.panel', h('h3', 'Needs attention'), h('div.body.stack', { style: 'gap:6px' },
-    rows.length ? rows : h('div', h('span.pill.ok', 'nothing'), h('span.faint', { style: 'margin-left:8px' },
-      'no failed device, no halted release, no approval waiting, every device polling'))));
+/* ------- the channels: dev -> beta -> prod, and the temporary ones apart --- */
+function pipelineWidget(fleets) {
+  const byId = new Map(fleets.map(f => [f.id, f]));
+  // follow the upstream links: the channels with none first, then their
+  // downstream, in order; the temporary ones at the end
+  const chain = [], seen = new Set();
+  const add = f => {
+    if (seen.has(f.id)) return;
+    seen.add(f.id); chain.push(f);
+    fleets.filter(d => d.upstreamId === f.id && !d.temporary).forEach(add);
+  };
+  fleets.filter(f => !f.temporary && !(f.upstreamId && byId.has(f.upstreamId))).forEach(add);
+  fleets.filter(f => !f.temporary).forEach(add);
+  const temps = fleets.filter(f => f.temporary);
+  const step = f => {
+    const p = f.progress, r = f.release;
+    const pct = p && p.members ? Math.round(100 * p.onRelease / p.members) : 0;
+    const halted = r && r.status === 'halted';
+    return h('div.pstep' + (halted ? '.bad' : ''), { 'data-key': 'p' + f.id, style: `--tone:${f.colour || '#8b8f98'}`,
+      title: f.description || f.name, onclick: () => go('fleets') },
+    h('div.ptop', fleetBadge(f.name, f.colour), h('span.faint', plural(f.members, 'device'))),
+    h('div.prel', f.distributionSet ? h('b', f.distributionSet) : h('span.faint', 'no release yet')),
+    h('div.ppills',
+      r ? h('span.pill.' + (halted ? 'err' : r.status === 'completed' ? 'ok' : r.status === 'active' ? 'live' : 'mute'), r.status) : null,
+      f.pending ? h('span.pill.amber', 'awaiting approval') : null,
+      f.freeze && f.freeze.active ? h('span.pill.info', 'frozen') : null,
+      f.upstream ? h('span.pill', f.autoPromote ? 'promotes itself' : 'promoted by hand') : null,
+      f.inSystems ? h('span.pill', { title: 'updated by the orchestrator, not by this release' }, `${fmt(f.inSystems)} in systems`) : null),
+    f.distributionSet && p && p.members ? h('div.pbar',
+      bars([[p.onRelease, 'ok'], [p.active, 'run'], [p.failed, 'err']], p.members, { key: 'pipe' + f.id }),
+      h('span.ppct', `${pct}%`)) : null);
+  };
+  const flow = [];
+  chain.forEach((f, i) => {
+    if (i) flow.push(h('div.parrow', { 'data-key': 'a' + f.id }, icon('arrow-right', 18)));
+    flow.push(step(f));
+  });
+  if (temps.length) flow.push(h('div.psep', { 'data-key': 'sep', title: 'temporary channels: machines lent for a while' },
+    h('span', 'lent')), ...temps.map(step));
+  return widget('Channels', 'route', h('span.faint.wcount', plural(fleets.length, 'channel')), h('div.body',
+    fleets.length ? h('div.pipe', flow)
+      : emptyRow('route', 'No channel yet', 'create dev, beta and prod on the Fleets page; each release goes through them in order')),
+  'fleets');
 }
 
+/* ------- in progress: every deployment going on, with how far it got ----- */
+const KIND_ICON = { fleet: 'route', rollout: 'stack-2', manual: 'hand-finger', system: 'sitemap' };
+const KIND_WORD = { fleet: 'channel release', rollout: 'rollout', manual: 'assigned by hand', system: 'orchestrator' };
+
+function openDeployment(d) {
+  S.q = ''; S.fleet = ''; S.status = '';
+  if (d.kind === 'rollout') { go('ro'); return; }
+  if (d.kind === 'system') { go('systems'); return; }
+  if (d.kind === 'fleet') S.fleet = d.title;
+  else S.q = setQuery(d);
+  go('targets');
+}
+
+function progressWidget(deps) {
+  const list = deps.slice(0, 5);
+  return widget('In progress', 'rocket', deps.length ? h('span.pill.info', String(deps.length)) : null, h('div.body.list',
+    list.length ? list.map(d => {
+      const pct = d.total ? Math.round(100 * d.done / d.total) : 0;
+      const work = (d.downloading || 0) + (d.installing || 0) + (d.confirming || 0);
+      const bad = d.status === 'halted' || d.status === 'paused';
+      return row({ key: `${d.kind}:${d.title}`, tile: KIND_ICON[d.kind] || 'rocket', tone: bad ? 'err' : 'info',
+        colour: d.kind === 'fleet' ? d.colour : null,
+        title: [d.kind === 'fleet' ? fleetBadge(d.title, d.colour) : h('b', d.title), h('span.faint', KIND_WORD[d.kind] || d.kind),
+          d.distributionSet && d.kind !== 'manual' ? h('span.pill.ok', d.distributionSet) : null,
+          h('span.pill.' + (bad ? 'err' : d.status === 'waiting_for_approval' ? 'amber' : 'live'), String(d.status).replace(/_/g, ' '))],
+        meta: `${fmt(d.done)} of ${fmt(d.total)} done` + (work ? ` · ${fmt(work)} at work` : '')
+          + (d.failed ? ` · ${fmt(d.failed)} failed` : '')
+          + ((d.waiting || 0) + (d.scheduled || 0) ? ` · ${fmt((d.waiting || 0) + (d.scheduled || 0))} waiting` : '')
+          + (d.since ? ' · started ' + ago(d.since) : '') + (d.by && d.by.length ? ' · by ' + d.by.slice(0, 2).join(', ') : ''),
+        right: h('div.lpct', `${pct}%`),
+        below: h('div', { style: 'margin-top:9px' },
+          bars([[d.done, 'ok'], [work, 'run'], [d.failed, 'err']], d.total, { key: `dash:${d.kind}:${d.title}` })),
+        onclick: () => openDeployment(d) });
+    }) : emptyRow('rocket', 'Nothing is being deployed',
+      'channel releases, rollouts, orchestrator deployments and sets assigned by hand show here while devices work on them'),
+    deps.length > list.length ? h('div.lmore', { onclick: () => go('inprog') }, `all ${deps.length} in progress`) : null),
+  'inprog');
+}
+
+/* ------- needs attention: what someone has to look at, or all clear ------ */
+function attentionWidget({ errors, failed, fstates, trouble, over, cutoff }) {
+  const rows = [];
+  for (const d of trouble) {
+    const wait = d.status === 'waiting_for_approval';
+    rows.push(row({ key: `t:${d.kind}:${d.title}`, tile: wait ? 'clock' : 'alert-triangle', tone: wait ? 'warn' : 'err',
+      title: [d.kind === 'fleet' ? fleetBadge(d.title, d.colour) : h('b', d.title),
+        h('span.pill.' + (wait ? 'amber' : 'err'), String(d.status).replace(/_/g, ' '))],
+      meta: (d.distributionSet && d.kind !== 'manual' ? d.distributionSet + ' · ' : '') + (d.detail || '').split('\n').pop(),
+      onclick: () => go(d.kind === 'fleet' ? 'fleets' : d.kind === 'rollout' ? 'ro' : d.kind === 'system' ? 'systems' : 'inprog') }));
+  }
+  if (errors) {
+    rows.push(row({ key: 'errors', tile: 'circle-x', tone: 'err',
+      title: h('b', `${plural(errors, 'device')} in error`), meta: 'their last update failed',
+      below: failed.length ? h('div.lsub', failed.map(a => {
+        const st = fstates.get(a._t);
+        const msg = st && st.statuses && st.statuses.length ? (st.statuses[0].messages || []).join(' ') : '';
+        const set = st && st.assigned ? `${st.assigned.name} ${st.assigned.version}` : '';
+        return h('div.lsubrow', { 'data-key': 'e' + a.id, title: msg, onclick: e => { e.stopPropagation(); openTarget(a._t); } },
+          h('span.mono', a._t), set ? h('span.faint', set) : null, h('span.lmsg', msg || 'failed'),
+          h('span.faint', ago(a.lastModifiedAt || a.createdAt)));
+      })) : null,
+      onclick: () => { S.q = ''; S.status = 'error'; go('targets'); } }));
+  }
+  if (over) {
+    rows.push(row({ key: 'over', tile: 'wifi-off', tone: 'warn', title: h('b', `${fmt(over)} not polling`),
+      meta: 'no poll within the polling interval and its grace',
+      onclick: () => { S.q = cutoff ? `lastcontrollerrequestat=lt=${cutoff}` : ''; S.status = ''; go('targets'); } }));
+  }
+  return widget('Needs attention', 'alert-triangle', rows.length ? h('span.pill.err', String(rows.length)) : null, h('div.body.list',
+    rows.length ? rows : emptyRow('circle-check', 'All clear',
+      'no failed device, no halted release, no approval waiting, every device polling', 'ok')));
+}
+
+/* ------- devices by update: one bar over all of them, and its legend ----- */
 /* hawkBit's words mean something else on a dashboard: five thousand devices
  * online and polling, simply never given an update, showed as "registered"
  * -- read as "just arrived", or "stuck". Plain words, hawkBit's in the tip. */
 const WORD = {
   in_sync: ['up to date', 'in_sync: running what it was last given'],
+  virgin: ['never installed', 'in sync for hawkBit -- nothing pending -- but this server has never installed anything on them'],
   pending: ['updating', 'pending: an update is on its way to it, or being installed'],
   error: ['update failed', 'error: its last update failed'],
   registered: ['never updated', 'registered: known to the server and polling, never given an update'],
   unknown: ['unknown', 'unknown: the server has no status for it yet'],
 };
+const DIST = [
+  ['in_sync', 'var(--ok)'], ['virgin', 'color-mix(in srgb, var(--ok) 45%, transparent)'], ['pending', 'var(--info)'],
+  ['error', 'var(--err)'], ['registered', 'color-mix(in srgb, var(--fg) 32%, transparent)'], ['unknown', 'var(--warn)'],
+];
 
-function fleetStatus(byStatus, virgin, phases, sample) {
-  return h('div.panel', h('h3', 'Devices by update'), h('div.body.wrap',
-    Object.keys(byStatus).length || virgin
-      ? Object.entries(byStatus).flatMap(([k, v]) => {
-          // "pending" is broken out into what those devices are doing; the
-          // bucket itself stays clickable, since hawkBit's filter only knows
-          // the five words.
-          const [word, tip] = WORD[k] || [k.replace(/_/g, ' '), k];
-          const bucket = h('button.btn.sm', { title: tip, onclick: () => { S.q = ''; S.status = k; go('targets'); } },
-            h('span.pill.' + (TARGET_PILL[k] || 'mute'), `${word} · ${fmt(v)}`));
-          if (k !== 'pending' || !Object.keys(phases).length) return [bucket];
-          return [bucket].concat(Object.entries(phases).map(([label, n]) =>
-            h('button.btn.sm', {
-              title: `of the ${sample} devices seen most recently: what they report doing`,
-              onclick: () => { S.q = ''; S.status = 'pending'; go('targets'); },
-            }, h('span.pill.' + phaseClass(label), `${label} · ${n} of the last ${sample}`))));
-        })
-        .concat(virgin ? [h('button.btn.sm', {
-            title: 'in sync as far as hawkBit is concerned: nothing pending, '
-                 + 'but this server has never installed anything on them',
-            onclick: () => { S.q = ''; S.status = 'in_sync'; go('targets'); } },
-          h('span.pill.mute', `never installed · ${fmt(virgin)}`))] : [])
-      : h('span.faint', 'no targets registered yet')));
+function updateWidget(byStatus, virgin, phases, sample) {
+  const parts = DIST.map(([k, c]) => [k, k === 'virgin' ? virgin : byStatus[k] || 0, c, WORD[k][0], WORD[k][1]]).filter(([, n]) => n);
+  const total = parts.reduce((a, [, n]) => a + n, 0);
+  return widget('Devices by update', 'activity', h('span.faint.wcount', plural(total, 'device')), h('div.body',
+    total ? [
+      share(parts, total, k => { S.q = ''; S.fleet = ''; S.status = k === 'virgin' ? 'in_sync' : k; go('targets'); }),
+      Object.keys(phases).length ? h('div.dphases', h('span.faint', `updating, of the ${sample} seen last:`),
+        Object.entries(phases).map(([l, n]) => h('span.pill.' + phaseClass(l), `${l} · ${n}`))) : null,
+    ] : h('div.faint', 'no device registered yet')), 'targets');
+}
+
+/* ------- device types: neo-intel alone, the 6hd with its st05 and hyper --- */
+const TYPE_COLOUR = { 'neo-intel': 'var(--info)', '6hd': 'var(--accent)', st05: 'var(--ok)', hyper: 'var(--warn)' };
+function typesWidget(types, total) {
+  const known = types.reduce((a, n) => a + n, 0);
+  const parts = DEVICE_TYPES.map((t, i) => [t, types[i], TYPE_COLOUR[t], t, `attribute.device_type==${t}`]).filter(([, n]) => n);
+  if (total > known) parts.push(['other', total - known, 'color-mix(in srgb, var(--fg) 22%, transparent)', 'not reported',
+    'devices that do not report attribute.device_type (simulated ones, older images)']);
+  return widget('Device types', 'cpu', h('span.faint.wcount', `${fmt(known)} report${known === 1 ? 's' : ''} it`), h('div.body',
+    total ? share(parts, total, k => { S.q = k === 'other' ? '' : `attribute.device_type==${k}`; S.status = ''; S.fleet = ''; go('targets'); },
+      (k, word) => (k === 'other' ? word : typeBadge(k)))
+      : h('div.faint', 'no device registered yet')), 'targets');
+}
+
+/* ------- centres: the biggest, their channel, those in none -------------- */
+function centresWidget(cl, fleets, field) {
+  const byId = new Map(fleets.map(f => [f.id, f]));
+  const top = [...cl].sort((a, b) => b.devices - a.devices).slice(0, 5);
+  const loose = cl.filter(c => !c.fleetId).length;
+  return widget('Centres', 'building-store', h('span.faint.wcount', plural(cl.length, 'centre')), h('div.body.list',
+    cl.length ? [
+      top.map(c => {
+        const f = byId.get(c.fleetId);
+        return row({ key: 'c' + c.centre, tile: 'map-pin', colour: f ? f.colour : null, tone: f ? null : 'mute',
+          title: [h('b.mono', c.centre), f ? fleetBadge(f.name, f.colour) : h('span.pill.amber', 'no channel')],
+          meta: plural(c.devices, 'device'),
+          onclick: () => { S.q = `${field}==${c.centre}`; S.status = ''; S.fleet = ''; go('targets'); } });
+      }),
+      loose ? h('div.lmore', { onclick: () => go('centres') }, `${plural(loose, 'centre')} in no channel — put them in one`) : null,
+    ] : emptyRow('building-store', 'No centre yet', `no device reports ${field}; the devices of a centre follow its channel`)),
+  'centres');
+}
+
+/* ------- orchestrator: systems updated as a whole ------------------------ */
+const SD_CLS = { draft: 'mute', running: 'live', paused: 'amber', finished: 'ok', failed: 'err', aborted: 'mute' };
+function orchestratorWidget(sdeps, stypes) {
+  const list = [...sdeps].sort((a, b) => b.id - a.id).slice(0, 4);
+  return widget('Orchestrator', 'sitemap', h('span.faint.wcount', plural(stypes.length, 'system type')), h('div.body.list',
+    list.length ? list.map(d => {
+      const c = d.counts || {};
+      const back = (c.rolled_back || 0) + (c.rolling_back || 0);
+      return row({ key: 'sd' + d.id, tile: 'sitemap',
+        tone: d.status === 'failed' ? 'err' : back ? 'warn' : d.status === 'running' ? 'info' : 'mute',
+        title: [h('b', d.name), h('span.pill.' + (SD_CLS[d.status] || 'mute'), d.status)],
+        meta: `${d.manifest} · ${d.fleet ? 'channel ' + d.fleet : 'every channel'} · ${fmt(c.succeeded)} of ${plural(d.total || 0, 'system')} updated`
+          + (back ? ` · ${fmt(back)} rolled back` : ''),
+        below: d.total ? h('div', { style: 'margin-top:8px' }, bars([[c.succeeded, 'ok'], [c.running, 'run'],
+          [c.rolling_back, 'back'], [c.rolled_back, 'err']], d.total, { key: 'dsd' + d.id })) : null,
+        onclick: () => go('systems') });
+    }) : emptyRow('sitemap', stypes.length ? 'Nothing orchestrated yet' : 'No system type yet',
+      stypes.length ? 'deploy a manifest: each system in order, one that fails goes back as a whole'
+        : 'describe a system -- a 6hd, its two st05 and a hyper -- then write a manifest for it')),
+  'systems');
+}
+
+/* ------- rollouts: hawkBit's, the latest ---------------------------------- */
+const RO_CLS = { running: 'live', ready: 'info', starting: 'info', creating: 'mute', paused: 'amber', finished: 'ok',
+  stopped: 'mute', deleting: 'mute', waiting_for_approval: 'amber', approval_denied: 'err', error_creating: 'err', error_starting: 'err' };
+function rolloutsWidget(ros) {
+  const list = ros.content || [];
+  return widget('Rollouts', 'stack-2', h('span.faint.wcount', plural(ros.total || 0, 'rollout')), h('div.body.list',
+    list.length ? list.map(r => {
+      const p = r.totalTargetsPerStatus || {};
+      const done = p.finished || 0, err = p.error || 0, run = p.running || 0;
+      return row({ key: 'ro' + r.id, tile: 'stack-2', tone: err ? 'err' : r.status === 'running' ? 'info' : 'mute',
+        title: [h('b', r.name), h('span.pill.' + (RO_CLS[r.status] || 'mute'), String(r.status).replace(/_/g, ' '))],
+        meta: `${fmt(done)} of ${plural(r.totalTargets || 0, 'device')} done` + (err ? ` · ${fmt(err)} failed` : '')
+          + (r.createdAt ? ' · ' + ago(r.createdAt) : '') + (r.createdBy ? ' · by ' + r.createdBy : ''),
+        below: r.totalTargets ? h('div', { style: 'margin-top:8px' },
+          bars([[done, 'ok'], [run, 'run'], [err, 'err']], r.totalTargets, { key: 'dro' + r.id })) : null,
+        onclick: () => go('ro') });
+    }) : emptyRow('stack-2', 'No rollout yet', 'a rollout updates a filter of devices in groups, the next when the last is done')),
+  'ro');
+}
+
+/* ------- catalogue: what can be deployed --------------------------------- */
+function catalogueWidget(dss, sms) {
+  const list = dss.content || [];
+  return widget('Catalogue', 'package', h('span.faint.wcount', `${plural(dss.total || 0, 'set')} · ${plural(sms ? sms.total : 0, 'module')}`),
+    h('div.body.list',
+      list.length ? list.map(d => row({ key: 'ds' + d.id, tile: 'package', tone: 'info',
+        title: [h('b', d.name), h('span.pill.ok', d.version)],
+        meta: (d.modules || []).map(m => m.typeName || m.type).join(' + ') + (d.createdAt ? ' · added ' + ago(d.createdAt) : '')
+          + (d.createdBy ? ' by ' + d.createdBy : ''),
+        onclick: () => go('ds') }))
+        : emptyRow('package', 'Nothing to deploy yet', 'upload a module, then put it in a distribution set')),
+    'ds');
+}
+
+/* ------- activity: who changed what, from the audit log ------------------- */
+const DONE = { approve: 'approved', reject: 'rejected', promote: 'promoted', start: 'started', pause: 'paused',
+  resume: 'resumed', abort: 'aborted', rollback: 'rolled back', halt: 'halted', freeze: 'froze', unfreeze: 'unfroze' };
+const VERB = { POST: 'created', PUT: 'changed', PATCH: 'changed', DELETE: 'deleted' };
+const NOUN = { fleets: 'channel', releases: 'release', distributionsets: 'set', softwaremodules: 'module', targets: 'device',
+  rollouts: 'rollout', systemdeployments: 'orchestrator deployment', systemtypes: 'system type', manifests: 'manifest',
+  centres: 'centres', users: 'user', tokens: 'API token', targetfilters: 'filter', targettags: 'tag', system: 'configuration' };
+function said(e, fleets) {
+  const p = e.path.replace(/^\/(rest|qawk)\/v1\//, '').split('/').filter(Boolean);
+  let verb = VERB[e.method] || e.method.toLowerCase();
+  if (DONE[p[p.length - 1]]) verb = e.method === 'DELETE' && p[p.length - 1] === 'freeze' ? (p.pop(), 'unfroze') : DONE[p.pop()];
+  if (p[p.length - 1] === 'assignedTargets') { p.pop(); verb = 'assigned'; }
+  if (p[p.length - 1] === 'targets' && p[0] === 'fleets') { p.pop(); verb = 'moved devices into'; }
+  const [kind, id] = p;
+  const f = kind === 'fleets' && id ? fleets.find(x => String(x.id) === id) : null;
+  const what = f ? fleetBadge(f.name, f.colour)
+    : h('span', (NOUN[kind] || kind || '') + (id && !/^(settings|configs)$/.test(id) ? ' ' + decodeURIComponent(id) : ''));
+  return [verb, what, verb === 'assigned' ? h('span', 'to devices') : null];
+}
+function activityWidget(audit, fleets) {
+  const writes = audit.filter(e => e.method !== 'GET' && e.status < 400).slice(0, 8);
+  return widget('Recent activity', 'history', null, h('div.body.list',
+    writes.length ? writes.map(e => {
+      const [verb, what, tail] = said(e, fleets);
+      const tone = e.method === 'DELETE' && verb !== 'unfroze' ? 'err' : verb === 'approved' ? 'ok' : verb === 'rolled back' ? 'warn' : 'info';
+      return h('div.arow.tone-' + tone, { 'data-key': 'au' + e.id, title: `${e.method} ${e.path} · from ${e.address}`, onclick: () => go('audit') },
+        h('span.adot'), h('span.atext', h('b', e.user), ' ', verb, ' ', what, tail ? [' ', tail] : null),
+        h('span.faint.atime', ago(e.at)));
+    }) : emptyRow('history', 'Nothing changed lately', 'every change made on this server, by whom, shows here')),
+  'audit');
+}
+
+/* ------- the server: which, what it can do, how the devices poll --------- */
+function serverWidget() {
+  const i = serverInfo() || {};
+  const kv = (k, v) => h('div.skv', h('span.faint', k), h('span', v));
+  return widget('Server', 'server-2', i.name ? h('span.pill.live', 'online') : null, h('div.body',
+    h('div.skvs',
+      kv('server', `${i.name || 'hawkBit'} ${i.version || ''}`),
+      i.hawkbit ? kv('speaks', `hawkBit ${i.hawkbit} (DDI and management API)`) : null,
+      i.tenant ? kv('tenant', i.tenant) : null,
+      pollCfg ? kv('polling', `every ${pollCfg.poll.replace(/^00:/, '')}, late after ${pollCfg.grace.replace(/^00:/, '')} more`) : null,
+      kv('features', `${(i.features || []).length} of Qawk's on`)),
+    null), 'about');
 }

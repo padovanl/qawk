@@ -106,7 +106,7 @@ function noteTargets(list) {
 S.deploySeen = null;
 S.actionsSeen = null;
 const fmtN = n => Number(n || 0).toLocaleString('en-US');
-const KIND_WORD = { fleet: 'fleet', rollout: 'rollout', manual: 'assigned by hand:', system: 'system deployment' };
+const KIND_WORD = { fleet: 'fleet', rollout: 'rollout', manual: 'assigned by hand:', system: 'orchestrator' };
 
 function openable(t) {
   if (t) { t.style.cursor = 'pointer'; t.title = 'open In progress'; t.addEventListener('click', () => go('inprog')); }

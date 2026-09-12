@@ -37,6 +37,7 @@ const FIELDS = {
     { f: 'targettype.key', d: 'target type key' },
     { f: 'assignedds.name', d: 'set it was told to install', dyn: 'ds' },
     { f: 'assignedds.version', d: 'version it was told to install' },
+    { f: 'assignedds.id', d: 'id of the set it was told to install (Qawk)' },
     { f: 'installedds.name', d: 'set it actually runs', dyn: 'ds' },
     { f: 'installedds.version', d: 'version it actually runs' },
     { f: 'lastcontrollerrequestat', d: 'last poll — ' + TIME, t: 'num' },
