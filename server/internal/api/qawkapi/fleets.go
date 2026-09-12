@@ -48,6 +48,7 @@ func releaseJSON(r *model.FleetRelease) any {
 		"reason": r.Reason, "gateReport": r.GateReport, "requestedBy": r.RequestedBy, "requestedAt": r.RequestedAt,
 		"decidedBy": r.DecidedBy, "decidedAt": r.DecidedAt, "startedAt": r.StartedAt, "finishedAt": r.FinishedAt,
 		"waves": r.Waves, "lastWaveAt": r.LastWaveAt,
+		"manifestId": r.ManifestID, "manifest": r.ManifestLabel, "systemDeploymentId": r.SystemDeploymentID,
 	}
 }
 
@@ -62,14 +63,22 @@ func fleetJSON(st service.FleetState) map[string]any {
 		"wavePercent": f.WavePercent, "waveTimeoutMinutes": f.WaveTimeoutMinutes, "errorThreshold": f.ErrorThreshold,
 		"freeze":  nil,
 		"members": f.Members, "onRelease": f.OnRelease, "updating": f.Updating, "failed": f.Failed,
-		"inSystems": f.InSystems,
-		"release":   releaseJSON(st.Release), "pending": releaseJSON(st.Pending), "progress": nil,
+		"inSystems":  f.InSystems,
+		"manifestId": f.ManifestID, "manifest": f.ManifestLabel, "systems": nil,
+		"orchestrator": map[string]any{"maxParallel": f.Orchestrator.MaxParallel, "maxFailed": f.Orchestrator.MaxFailed,
+			"byCentre": f.Orchestrator.ByCentre},
+		"release": releaseJSON(st.Release), "pending": releaseJSON(st.Pending), "progress": nil,
 		"createdAt": f.CreatedAt, "createdBy": f.CreatedBy, "lastModifiedAt": f.LastModifiedAt,
 		"lastModifiedBy": f.LastModifiedBy,
 	}
 	if f.FreezeReason != nil {
 		m["freeze"] = map[string]any{"reason": *f.FreezeReason, "from": f.FreezeFrom, "until": f.FreezeUntil,
 			"active": f.Frozen(httpx.Now())}
+	}
+	if o := st.Systems; o != nil {
+		m["systems"] = map[string]any{"deploymentId": o.Deployment.ID, "name": o.Deployment.Name,
+			"status": o.Deployment.Status, "reason": o.Deployment.Reason, "total": o.Total, "counts": o.Counts,
+			"centre": o.Centre, "byCentre": o.Deployment.ByGroup}
 	}
 	if p := st.Progress; p != nil {
 		m["progress"] = map[string]any{"members": p.Members, "onRelease": p.OnRelease, "active": p.Active,
@@ -121,6 +130,14 @@ type fleetBody struct {
 	WavePercent        *int      `json:"wavePercent"`
 	WaveTimeoutMinutes *int      `json:"waveTimeoutMinutes"`
 	ErrorThreshold     *int      `json:"errorThreshold"`
+	ManifestID         *int64    `json:"manifestId"`
+	Orchestrator       *orchBody `json:"orchestrator"`
+}
+
+type orchBody struct {
+	MaxParallel *int  `json:"maxParallel"`
+	MaxFailed   *int  `json:"maxFailed"`
+	ByCentre    *bool `json:"byCentre"`
 }
 
 func setInt(dst *int, v *int) {
@@ -169,6 +186,13 @@ func (b fleetBody) apply(f *model.Fleet) {
 	setInt(&f.WavePercent, b.WavePercent)
 	setInt(&f.WaveTimeoutMinutes, b.WaveTimeoutMinutes)
 	setInt(&f.ErrorThreshold, b.ErrorThreshold)
+	if o := b.Orchestrator; o != nil {
+		setInt(&f.Orchestrator.MaxParallel, o.MaxParallel)
+		setInt(&f.Orchestrator.MaxFailed, o.MaxFailed)
+		if o.ByCentre != nil {
+			f.Orchestrator.ByCentre = *o.ByCentre
+		}
+	}
 }
 
 func (a *API) createFleet(w http.ResponseWriter, r *http.Request) {
@@ -177,13 +201,17 @@ func (a *API) createFleet(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteError(w, e)
 		return
 	}
-	f := model.Fleet{Gate: model.Gate{MinDevices: 1, MinSuccess: 100}, WaveTimeoutMinutes: 60}
+	f := model.Fleet{Gate: model.Gate{MinDevices: 1, MinSuccess: 100}, WaveTimeoutMinutes: 60,
+		Orchestrator: model.Orchestration{MaxParallel: 4, ByCentre: true}}
 	b.apply(&f)
-	var release *int64
+	var release, manifest *int64
 	if b.DistributionSetID != nil && *b.DistributionSetID != 0 {
 		release = b.DistributionSetID
+		if b.ManifestID != nil && *b.ManifestID != 0 {
+			manifest = b.ManifestID
+		}
 	}
-	id, err := a.svc.SaveFleet(r.Context(), auth.User(r.Context()), f, release)
+	id, err := a.svc.SaveFleet(r.Context(), auth.User(r.Context()), f, release, manifest)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
@@ -232,7 +260,15 @@ func (a *API) updateFleet(w http.ResponseWriter, r *http.Request) {
 	if d := b.DistributionSetID; d != nil && !(f.DSID == nil && *d == 0) && !(f.DSID != nil && *f.DSID == *d) {
 		release = d
 	}
-	if _, err := a.svc.SaveFleet(r.Context(), auth.User(r.Context()), f, release); err != nil {
+	// a change of manifest, with the same set, is a release too
+	var manifest *int64
+	if m := b.ManifestID; m != nil {
+		if f.ManifestID == nil && *m == 0 || f.ManifestID != nil && *f.ManifestID == *m {
+			m = nil
+		}
+		manifest = m
+	}
+	if _, err := a.svc.SaveFleet(r.Context(), auth.User(r.Context()), f, release, manifest); err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
@@ -357,16 +393,17 @@ func (a *API) promote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		From   int64  `json:"from"`
-		Force  bool   `json:"force"`
-		Reason string `json:"reason"`
+		From         int64  `json:"from"`
+		Force        bool   `json:"force"`
+		Reason       string `json:"reason"`
+		Orchestrator *bool  `json:"orchestrator"` // the release's manifest comes along (default: yes)
 	}
 	if e := httpx.Decode(r, &b); e != nil || b.From == 0 {
 		httpx.WriteError(w, httpx.Validation("give the fleet to promote from: {\"from\": <id>}"))
 		return
 	}
 	rel, err := a.svc.Promote(r.Context(), auth.User(r.Context()), auth.Can(r.Context(), "APPROVE_ROLLOUT"),
-		id, b.From, b.Force, b.Reason)
+		id, b.From, b.Force, b.Reason, b.Orchestrator)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return

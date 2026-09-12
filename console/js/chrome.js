@@ -212,7 +212,7 @@ function serverGate(reachable) {
   const gate = h('div#offline.gate',
     h('div.gate-glow'),
     h('div.gate-card',
-      h('img.gate-logo', { src: 'logo.png', alt: 'QubicaAMF' }),
+      h('img.gate-logo', { src: 'qawk-logo.svg', alt: 'Qawk' }),
       h('h2', 'Waiting for the server'),
       h('p', 'hawkBit is not answering yet. It takes about a minute to start, '
            + 'so this usually clears itself.'),

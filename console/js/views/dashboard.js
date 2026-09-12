@@ -406,6 +406,9 @@ function pipelineWidget(fleets) {
       f.upstream ? h('span.pill', f.autoPromote ? 'promotes itself' : 'promoted by hand') : null,
       f.inSystems ? h('span.pill', { title: 'updated by the orchestrator, not by this release' }, `${fmt(f.inSystems)} in systems`) : null,
       p && p.failed ? h('span.pill.err', `${fmt(p.failed)} failed`) : null),
+    f.systems && f.systems.total ? h('div.psys', { title: `${f.manifest || ''}: the orchestrator on ${f.name}'s systems` },
+      icon('sitemap', 13), `${fmt((f.systems.counts || {}).succeeded)}/${fmt(f.systems.total)} systems`,
+      f.systems.centre ? h('span.faint', '· centre ' + f.systems.centre) : null) : null,
     f.distributionSet && p && p.members ? h('div.pbar',
       bars([[p.onRelease, 'ok'], [p.active, 'run'], [p.failed, 'err']], p.members, { key: 'pipe' + f.id }),
       h('span.ppct', { title: 'of its devices run the release' }, `${pct}%`)) : null);

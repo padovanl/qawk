@@ -66,6 +66,7 @@ type SystemDeployment struct {
 	MaxParallel int
 	MaxFailed   int
 	ActionType  string
+	ByGroup     bool // one group (centre) at a time
 	Status      string
 	Reason      string
 	StartedBy   *string
@@ -79,6 +80,7 @@ type SystemRun struct {
 	ID           int64
 	DeploymentID int64
 	SystemKey    string
+	Group        string // its centre
 	Status       string
 	CurrentOrder *int
 	Reason       string

@@ -457,6 +457,7 @@ func (a *API) systemDeploymentJSON(r *http.Request, d model.SystemDeployment, wi
 		"maxParallel": d.MaxParallel, "maxFailed": d.MaxFailed, "actionType": d.ActionType, "status": d.Status,
 		"reason": d.Reason, "startedBy": d.StartedBy, "startedAt": d.StartedAt, "finishedAt": d.FinishedAt,
 		"createdAt": d.CreatedAt, "createdBy": d.CreatedBy, "total": len(runs), "counts": counts,
+		"byCentre": d.ByGroup,
 	}
 	if withRuns {
 		comps, err := a.st.RunComponents(r.Context(), ids)
@@ -470,7 +471,7 @@ func (a *API) systemDeploymentJSON(r *http.Request, d model.SystemDeployment, wi
 				cs = append(cs, map[string]any{"componentType": c.ComponentType, "order": c.Order, "devices": c.Devices,
 					"onSet": c.OnSet, "back": c.Back})
 			}
-			list = append(list, map[string]any{"id": rn.ID, "system": rn.SystemKey, "status": rn.Status,
+			list = append(list, map[string]any{"id": rn.ID, "system": rn.SystemKey, "centre": rn.Group, "status": rn.Status,
 				"currentOrder": rn.CurrentOrder, "reason": rn.Reason, "startedAt": rn.StartedAt,
 				"finishedAt": rn.FinishedAt, "components": cs})
 		}
@@ -488,6 +489,7 @@ type systemDeploymentBody struct {
 	MaxParallel int      `json:"maxParallel"`
 	MaxFailed   int      `json:"maxFailed"`
 	ActionType  string   `json:"actionType"`
+	ByCentre    bool     `json:"byCentre"` // one centre at a time
 }
 
 func (a *API) sendSystemDeployment(w http.ResponseWriter, r *http.Request, id int64, status int) {
@@ -529,7 +531,7 @@ func (a *API) createSystemDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d := model.SystemDeployment{Name: b.Name, ManifestID: b.ManifestID, Systems: b.Systems, FleetID: b.FleetID,
-		Groups: b.Groups, MaxParallel: b.MaxParallel, MaxFailed: b.MaxFailed, ActionType: b.ActionType}
+		Groups: b.Groups, MaxParallel: b.MaxParallel, MaxFailed: b.MaxFailed, ActionType: b.ActionType, ByGroup: b.ByCentre}
 	if len(d.Systems) == 0 {
 		d.Systems = nil
 	}

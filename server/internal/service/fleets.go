@@ -61,6 +61,16 @@ type FleetState struct {
 	Release  *model.FleetRelease
 	Progress *model.ReleaseProgress
 	Pending  *model.FleetRelease
+	Systems  *Orchestrated // the orchestrator of the current release, when it has one
+}
+
+// Orchestrated is how the orchestrator of a release is taking the fleet's
+// systems: its deployment, its systems by state, the centre it is on.
+type Orchestrated struct {
+	Deployment model.SystemDeployment
+	Total      int
+	Counts     map[string]int
+	Centre     string
 }
 
 func (s *Service) FleetState(ctx context.Context, f model.Fleet) (FleetState, error) {
@@ -77,6 +87,23 @@ func (s *Service) FleetState(ctx context.Context, f model.Fleet) (FleetState, er
 		}
 		st.Progress = &p
 	}
+	if rel != nil && rel.SystemDeploymentID != nil {
+		if d, err := s.st.SystemDeployment(ctx, s.st.DB(), *rel.SystemDeploymentID); err == nil {
+			runs, err := s.st.Runs(ctx, s.st.DB(), d.ID)
+			if err != nil {
+				return st, err
+			}
+			o := &Orchestrated{Deployment: d, Total: len(runs), Counts: map[string]int{}}
+			for _, r := range runs {
+				o.Counts[r.Status]++
+				if o.Centre == "" && d.ByGroup &&
+					(r.Status == model.RunPending || r.Status == model.RunRunning || r.Status == model.RunRollingBack) {
+					o.Centre = r.Group
+				}
+			}
+			st.Systems = o
+		}
+	}
 	st.Pending, err = s.st.PendingRelease(ctx, s.st.DB(), f.ID)
 	return st, err
 }
@@ -90,8 +117,10 @@ func since(r *model.FleetRelease) int64 {
 
 // SaveFleet validates a fleet and stores it. release, when not nil, is the
 // set the fleet is given directly (0: none) -- refused for a fleet with an
-// upstream, which takes releases by promotion.
-func (s *Service) SaveFleet(ctx context.Context, user string, f model.Fleet, release *int64) (int64, error) {
+// upstream, which takes releases by promotion. manifest, when not nil, is the
+// manifest that goes with it, for the fleet's systems (0: none; nil with a
+// set: the one it has).
+func (s *Service) SaveFleet(ctx context.Context, user string, f model.Fleet, release, manifest *int64) (int64, error) {
 	if strings.TrimSpace(f.Name) == "" {
 		return 0, httpx.Validation("a fleet needs a name")
 	}
@@ -108,6 +137,12 @@ func (s *Service) SaveFleet(ctx context.Context, user string, f model.Fleet, rel
 	}
 	if f.WaveTimeoutMinutes == 0 {
 		f.WaveTimeoutMinutes = 60
+	}
+	if f.Orchestrator.MaxParallel == 0 {
+		f.Orchestrator.MaxParallel = 4
+	}
+	if f.Orchestrator.MaxParallel < 0 || f.Orchestrator.MaxFailed < 0 {
+		return 0, httpx.Validation("the orchestrator's systems at a time, and systems that may fail, cannot be negative")
 	}
 	for _, c := range []struct {
 		v    int
@@ -144,14 +179,20 @@ func (s *Service) SaveFleet(ctx context.Context, user string, f model.Fleet, rel
 				return err
 			}
 		}
-		if release == nil {
+		if release == nil && manifest == nil {
 			return nil
 		}
 		cur, err := s.st.Fleet(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		return s.releaseDirect(ctx, tx, user, cur, *release, now)
+		ds := int64(0)
+		if release != nil {
+			ds = *release
+		} else if cur.DSID != nil {
+			ds = *cur.DSID
+		}
+		return s.releaseDirect(ctx, tx, user, cur, ds, manifest, now)
 	})
 	return id, err
 }
@@ -174,8 +215,31 @@ func (s *Service) checkUpstream(ctx context.Context, tx pgx.Tx, id, up int64) er
 	return httpx.Validation("the pipeline is too long")
 }
 
-// releaseDirect gives a fleet with no upstream a release (0: none).
-func (s *Service) releaseDirect(ctx context.Context, tx pgx.Tx, user string, f model.Fleet, dsID int64, now int64) error {
+// sameID: a nullable id and an id (0: none) name the same thing.
+func sameID(p *int64, v int64) bool {
+	if p == nil {
+		return v == 0
+	}
+	return *p == v
+}
+
+func deref64(p *int64) int64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
+// releaseDirect gives a fleet with no upstream a release (0: none), with the
+// manifest for its systems (nil: the one it has; 0: none).
+func (s *Service) releaseDirect(ctx context.Context, tx pgx.Tx, user string, f model.Fleet, dsID int64, manifest *int64, now int64) error {
+	mid := f.ManifestID
+	if manifest != nil {
+		mid = nil
+		if *manifest != 0 {
+			mid = manifest
+		}
+	}
 	if dsID == 0 {
 		if f.DSID == nil {
 			return nil
@@ -183,9 +247,15 @@ func (s *Service) releaseDirect(ctx context.Context, tx pgx.Tx, user string, f m
 		if err := s.st.SetFleetDS(ctx, tx, user, now, f.ID, nil); err != nil {
 			return err
 		}
+		if err := s.st.SetFleetManifest(ctx, tx, f.ID, nil); err != nil {
+			return err
+		}
+		if err := s.st.EndReleaseDeployments(ctx, tx, f.ID, 0, f.Name+" was given no release", now); err != nil {
+			return err
+		}
 		return s.st.EndReleases(ctx, tx, f.ID, now)
 	}
-	if f.DSID != nil && *f.DSID == dsID {
+	if f.DSID != nil && *f.DSID == dsID && sameID(f.ManifestID, deref64(mid)) {
 		return nil
 	}
 	if f.UpstreamID != nil {
@@ -200,7 +270,14 @@ func (s *Service) releaseDirect(ctx context.Context, tx pgx.Tx, user string, f m
 		return err
 	}
 	r := model.FleetRelease{FleetID: f.ID, DSID: &dsID, DSLabel: ds.Label(), Status: model.ReleaseActive,
-		RequestedBy: user, RequestedAt: now}
+		RequestedBy: user, RequestedAt: now, ManifestID: mid}
+	if mid != nil {
+		m, err := s.st.Manifest(ctx, tx, *mid)
+		if err != nil {
+			return httpx.Validation(fmt.Sprintf("there is no manifest %d", *mid))
+		}
+		r.ManifestLabel = m.Name
+	}
 	if f.Gate.ApprovalRequired {
 		r.Status = model.ReleasePending
 	}
@@ -208,14 +285,87 @@ func (s *Service) releaseDirect(ctx context.Context, tx pgx.Tx, user string, f m
 	if err != nil || r.Status == model.ReleasePending {
 		return err
 	}
-	return s.startRelease(ctx, tx, user, f.ID, id, dsID, now)
+	r.ID = id
+	return s.startRelease(ctx, tx, user, f, r, now)
 }
 
-func (s *Service) startRelease(ctx context.Context, tx pgx.Tx, user string, fleet, id, dsID, now int64) error {
-	if err := s.st.SetFleetDS(ctx, tx, user, now, fleet, &dsID); err != nil {
+// startRelease makes r the fleet's release: its set for the devices that
+// stand alone, and -- when it carries a manifest -- the orchestrator for the
+// fleet's systems. What the orchestrator was doing for the release it
+// supersedes stops.
+func (s *Service) startRelease(ctx context.Context, tx pgx.Tx, user string, f model.Fleet, r model.FleetRelease, now int64) error {
+	if err := s.st.SetFleetDS(ctx, tx, user, now, f.ID, r.DSID); err != nil {
 		return err
 	}
-	return s.st.StartRelease(ctx, tx, fleet, id, now)
+	if err := s.st.SetFleetManifest(ctx, tx, f.ID, r.ManifestID); err != nil {
+		return err
+	}
+	if err := s.st.StartRelease(ctx, tx, f.ID, r.ID, now); err != nil {
+		return err
+	}
+	if err := s.st.EndReleaseDeployments(ctx, tx, f.ID, r.ID, fmt.Sprintf("superseded by release %d", r.ID), now); err != nil {
+		return err
+	}
+	return s.orchestrate(ctx, tx, user, f, r, now)
+}
+
+// orchestrate starts, for a release that carries a manifest, the system
+// deployment that takes the fleet's systems with it: every system whose
+// devices are all in the fleet, a few at a time, centre by centre if the
+// fleet says so -- in each system the manifest's order, and a system that
+// fails goes back on its own. With no system in the fleet it has nothing to
+// do and says so.
+func (s *Service) orchestrate(ctx context.Context, tx pgx.Tx, user string, f model.Fleet, r model.FleetRelease, now int64) error {
+	if r.ManifestID == nil {
+		return nil
+	}
+	m, err := s.st.Manifest(ctx, tx, *r.ManifestID)
+	if err != nil {
+		return httpx.Validation(fmt.Sprintf("there is no manifest %d", *r.ManifestID))
+	}
+	for _, c := range m.Components {
+		if _, err := s.checkAssignable(ctx, tx, c.DSID); err != nil {
+			return httpx.Validation(fmt.Sprintf("%s: %s", c.ComponentType, err.Error()))
+		}
+	}
+	fid := f.ID
+	d := model.SystemDeployment{Name: fmt.Sprintf("%s · %s · release %d", f.Name, m.Name, r.ID), ManifestID: m.ID,
+		FleetID: &fid, MaxParallel: max(1, f.Orchestrator.MaxParallel), MaxFailed: f.Orchestrator.MaxFailed,
+		ActionType: f.ActionType, ByGroup: f.Orchestrator.ByCentre}
+	id, err := s.st.CreateSystemDeployment(ctx, tx, user, now, d)
+	if err != nil {
+		return err
+	}
+	if d, err = s.st.SystemDeployment(ctx, tx, id); err != nil {
+		return err
+	}
+	keys, groups, note, err := s.scope(ctx, d)
+	if err != nil {
+		// what it says, not the error code in front of it
+		why := err.Error()
+		if i := strings.Index(why, ": "); i > 0 && strings.HasPrefix(why, "hawkbit.") {
+			why = why[i+2:]
+		}
+		d.Status, d.FinishedAt, d.Reason = model.SDFinished, &now, why
+	} else {
+		if err := s.st.CreateRuns(ctx, tx, id, keys, groups); err != nil {
+			return err
+		}
+		d.Status, d.StartedBy, d.StartedAt, d.Reason = model.SDRunning, &user, &now, note
+	}
+	if err := s.st.SetSystemDeploymentState(ctx, tx, d); err != nil {
+		return err
+	}
+	return s.st.SetReleaseSystemDeployment(ctx, tx, r.ID, id)
+}
+
+// systemsDone: the release's orchestrator, if it has one, has finished.
+func (s *Service) systemsDone(ctx context.Context, rel *model.FleetRelease) bool {
+	if rel.SystemDeploymentID == nil {
+		return rel.ManifestID == nil
+	}
+	d, err := s.st.SystemDeployment(ctx, s.st.DB(), *rel.SystemDeploymentID)
+	return err == nil && d.Status == model.SDFinished
 }
 
 func deref(p *string) string {
@@ -276,13 +426,33 @@ func (s *Service) gate(ctx context.Context, dst, src model.Fleet, rel *model.Fle
 		fmt.Sprintf("%d%% of %s runs it (at least %d%%)", pct, src.Name, g.MinSuccess))
 	check(soak >= int64(g.SoakMinutes),
 		fmt.Sprintf("it has been in %s for %d minutes (at least %d)", src.Name, soak, g.SoakMinutes))
+	// the systems too: the release is through the upstream once its
+	// orchestrator has taken the upstream's systems
+	if rel.ManifestID != nil {
+		line := fmt.Sprintf("the orchestrator has not started on %s's systems", src.Name)
+		done := false
+		if rel.SystemDeploymentID != nil {
+			if d, err := s.st.SystemDeployment(ctx, s.st.DB(), *rel.SystemDeploymentID); err == nil {
+				done = d.Status == model.SDFinished
+				line = fmt.Sprintf("the orchestrator took %s's systems with %s: %s", src.Name, rel.ManifestLabel, d.Status)
+				if d.Reason != "" {
+					line += " (" + d.Reason + ")"
+				}
+			}
+		}
+		check(done, line)
+	}
 	return strings.Join(lines, "\n"), open, nil
 }
 
 // Promote asks for to to get the release from runs: "prod gets what beta
 // has". Through the gate, or past it with force, a reason and APPROVE_ROLLOUT;
 // then at once, or once someone else approves.
-func (s *Service) Promote(ctx context.Context, user string, canForce bool, to, from int64, force bool, reason string) (model.FleetRelease, error) {
+//
+// orchestrator: whether the release's manifest comes along, for the fleet's
+// systems (nil: yes, when it has one -- as a promotion by itself does).
+func (s *Service) Promote(ctx context.Context, user string, canForce bool, to, from int64, force bool, reason string,
+	orchestrator *bool) (model.FleetRelease, error) {
 	var out model.FleetRelease
 	err := s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
 		dst, err := s.st.Fleet(ctx, tx, to)
@@ -332,6 +502,9 @@ func (s *Service) Promote(ctx context.Context, user string, canForce bool, to, f
 		r := model.FleetRelease{FleetID: to, DSID: rel.DSID, DSLabel: ds.Label(), FromFleetID: &from,
 			FromFleetName: src.Name, Status: model.ReleaseActive, Forced: !open, Reason: strings.TrimSpace(reason),
 			GateReport: report, RequestedBy: user, RequestedAt: now}
+		if orchestrator == nil || *orchestrator {
+			r.ManifestID, r.ManifestLabel = rel.ManifestID, rel.ManifestLabel
+		}
 		if dst.Gate.ApprovalRequired {
 			r.Status = model.ReleasePending
 		}
@@ -339,8 +512,9 @@ func (s *Service) Promote(ctx context.Context, user string, canForce bool, to, f
 		if err != nil {
 			return err
 		}
+		r.ID = id
 		if r.Status == model.ReleaseActive {
-			if err := s.startRelease(ctx, tx, user, to, id, *rel.DSID, now); err != nil {
+			if err := s.startRelease(ctx, tx, user, dst, r, now); err != nil {
 				return err
 			}
 		}
@@ -381,7 +555,7 @@ func (s *Service) Approve(ctx context.Context, user string, id int64, note strin
 		if err := s.st.DecideRelease(ctx, tx, id, model.ReleaseActive, user, note, now); err != nil {
 			return err
 		}
-		if err := s.startRelease(ctx, tx, user, r.FleetID, id, *r.DSID, now); err != nil {
+		if err := s.startRelease(ctx, tx, user, f, r, now); err != nil {
 			return err
 		}
 		out, err = s.st.Release(ctx, tx, id)
@@ -580,7 +754,7 @@ func (s *Service) autoPromote(ctx context.Context, f model.Fleet, now int64) {
 	if _, open, err := s.gate(ctx, f, src, rel, now); err != nil || !open {
 		return
 	}
-	r, err := s.Promote(ctx, "system", false, f.ID, *f.UpstreamID, false, "promoted by itself: the gate opened")
+	r, err := s.Promote(ctx, "system", false, f.ID, *f.UpstreamID, false, "promoted by itself: the gate opened", nil)
 	if err != nil {
 		s.log.Warn("automatic promotion", "fleet", f.Name, "err", err)
 		return
@@ -593,6 +767,14 @@ func (s *Service) deliver(ctx context.Context, f model.Fleet, now int64) error {
 	rel, err := s.st.CurrentRelease(ctx, s.st.DB(), f.ID)
 	if err != nil || rel == nil || rel.Status == model.ReleaseHalted || rel.DSID == nil || *rel.DSID != *f.DSID {
 		return err
+	}
+	// the orchestrator failed -- more systems went back than the fleet allows:
+	// the release stops, as it does when too many devices fail
+	if rel.Status == model.ReleaseActive && rel.SystemDeploymentID != nil {
+		if d, err := s.st.SystemDeployment(ctx, s.st.DB(), *rel.SystemDeploymentID); err == nil && d.Status == model.SDFailed {
+			s.log.Warn("fleet release halted by its orchestrator", "fleet", f.Name, "reason", d.Reason)
+			return s.st.HaltRelease(ctx, rel.ID, "halted: the orchestrator: "+d.Reason, now)
+		}
 	}
 	dsID, from := *f.DSID, since(rel)
 	ds, err := s.st.DistributionSet(ctx, s.st.DB(), dsID)
@@ -626,7 +808,10 @@ func (s *Service) deliver(ctx context.Context, f model.Fleet, now int64) error {
 		return err
 	}
 	if len(ids) == 0 {
-		if rel.Status == model.ReleaseActive && p.Active == 0 && p.Members > 0 && p.OnRelease == p.Members {
+		// done: the devices that stand alone on it (a fleet of systems only
+		// has none), and the orchestrator finished with the systems
+		standalone := p.OnRelease == p.Members && (p.Members > 0 || rel.ManifestID != nil)
+		if rel.Status == model.ReleaseActive && p.Active == 0 && standalone && s.systemsDone(ctx, rel) {
 			s.log.Info("fleet release completed", "fleet", f.Name, "set", ds.Label(), "devices", p.Members)
 			return s.st.CompleteRelease(ctx, rel.ID, now)
 		}

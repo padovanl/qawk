@@ -329,14 +329,14 @@ func (s *Store) SetByLabel(ctx context.Context, label string) (int64, error) {
 const sdCols = `d.id, d.name, d.manifest_id, (SELECT m.name FROM manifests m WHERE m.id = d.manifest_id), d.systems,
 	d.fleet_id, (SELECT f.name FROM fleets f WHERE f.id = d.fleet_id), d.groups,
 	d.max_parallel, d.max_failed, d.action_type, d.status, d.reason, d.started_by, d.started_at, d.finished_at,
-	d.created_at, d.created_by, d.last_modified_at, d.last_modified_by`
+	d.created_at, d.created_by, d.last_modified_at, d.last_modified_by, d.by_group`
 
 func scanSD(r pgx.Row) (model.SystemDeployment, error) {
 	var d model.SystemDeployment
 	err := r.Scan(&d.ID, &d.Name, &d.ManifestID, &d.Manifest, &d.Systems, &d.FleetID, &d.Fleet, &d.Groups,
 		&d.MaxParallel, &d.MaxFailed, &d.ActionType,
 		&d.Status, &d.Reason, &d.StartedBy, &d.StartedAt, &d.FinishedAt, &d.CreatedAt, &d.CreatedBy,
-		&d.LastModifiedAt, &d.LastModifiedBy)
+		&d.LastModifiedAt, &d.LastModifiedBy, &d.ByGroup)
 	return d, err
 }
 
@@ -388,10 +388,10 @@ func (s *Store) SystemDeployment(ctx context.Context, q Q, id int64) (model.Syst
 func (s *Store) CreateSystemDeployment(ctx context.Context, tx pgx.Tx, user string, now int64, d model.SystemDeployment) (int64, error) {
 	var id int64
 	err := tx.QueryRow(ctx, `INSERT INTO system_deployments (tenant, name, manifest_id, systems, fleet_id, groups,
-		max_parallel, max_failed, action_type, created_at, created_by, last_modified_at, last_modified_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $10, $11) RETURNING id`,
+		max_parallel, max_failed, action_type, created_at, created_by, last_modified_at, last_modified_by, by_group)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $10, $11, $12) RETURNING id`,
 		s.tenant, d.Name, d.ManifestID, d.Systems, d.FleetID, d.Groups, d.MaxParallel, d.MaxFailed, d.ActionType,
-		now, user).Scan(&id)
+		now, user, d.ByGroup).Scan(&id)
 	return id, err
 }
 
@@ -410,10 +410,10 @@ func (s *Store) DeleteSystemDeployment(ctx context.Context, tx pgx.Tx, id int64)
 // ------------------------------------------------------------ runs
 
 const runCols = `r.id, r.deployment_id, r.system_key, r.status, r.current_order, r.reason, r.started_at, r.stage_at,
-	r.rollback_at, r.finished_at`
+	r.rollback_at, r.finished_at, r.group_key`
 
 func (s *Store) Runs(ctx context.Context, q Q, deployment int64) ([]model.SystemRun, error) {
-	rows, err := q.Query(ctx, "SELECT "+runCols+" FROM system_runs r WHERE r.deployment_id = $1 ORDER BY r.system_key", deployment)
+	rows, err := q.Query(ctx, "SELECT "+runCols+" FROM system_runs r WHERE r.deployment_id = $1 ORDER BY r.group_key, r.system_key", deployment)
 	if err != nil {
 		return nil, err
 	}
@@ -422,7 +422,7 @@ func (s *Store) Runs(ctx context.Context, q Q, deployment int64) ([]model.System
 	for rows.Next() {
 		var r model.SystemRun
 		if err := rows.Scan(&r.ID, &r.DeploymentID, &r.SystemKey, &r.Status, &r.CurrentOrder, &r.Reason, &r.StartedAt,
-			&r.StageAt, &r.RollbackAt, &r.FinishedAt); err != nil {
+			&r.StageAt, &r.RollbackAt, &r.FinishedAt, &r.Group); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -434,13 +434,15 @@ func (s *Store) Run(ctx context.Context, q Q, deployment, id int64) (model.Syste
 	var r model.SystemRun
 	err := q.QueryRow(ctx, "SELECT "+runCols+" FROM system_runs r WHERE r.deployment_id = $1 AND r.id = $2", deployment, id).
 		Scan(&r.ID, &r.DeploymentID, &r.SystemKey, &r.Status, &r.CurrentOrder, &r.Reason, &r.StartedAt, &r.StageAt,
-			&r.RollbackAt, &r.FinishedAt)
+			&r.RollbackAt, &r.FinishedAt, &r.Group)
 	return r, notFound(err, "SystemRun", id)
 }
 
-func (s *Store) CreateRuns(ctx context.Context, tx pgx.Tx, deployment int64, keys []string) error {
-	_, err := tx.Exec(ctx, `INSERT INTO system_runs (deployment_id, system_key) SELECT $1, unnest($2::text[])
-		ON CONFLICT DO NOTHING`, deployment, keys)
+// CreateRuns records the systems a deployment takes, each with its centre.
+func (s *Store) CreateRuns(ctx context.Context, tx pgx.Tx, deployment int64, keys, groups []string) error {
+	_, err := tx.Exec(ctx, `INSERT INTO system_runs (deployment_id, system_key, group_key)
+		SELECT $1, u.k, u.g FROM unnest($2::text[], $3::text[]) AS u(k, g) ON CONFLICT DO NOTHING`,
+		deployment, keys, groups)
 	return err
 }
 

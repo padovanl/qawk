@@ -44,6 +44,20 @@ type Fleet struct {
 	// AutoPromote: promoted by the engine as soon as its gate opens. False
 	// (the default): by hand, when someone decides.
 	AutoPromote bool
+
+	// The orchestrator: the manifest of the fleet's release, for the members
+	// that are part of a system (a 6hd with its st05 and hyper), which the
+	// release's set cannot update -- and how its systems are taken.
+	ManifestID    *int64
+	ManifestLabel *string
+	Orchestrator  Orchestration
+}
+
+// Orchestration is how a fleet's release updates the fleet's systems.
+type Orchestration struct {
+	MaxParallel int  // systems at a time
+	MaxFailed   int  // systems that may fail before the rest are left alone
+	ByCentre    bool // one centre at a time: the next once every system of the last is done
 }
 
 // Gate is what a fleet's upstream must show before a release may enter it.
@@ -96,6 +110,11 @@ type FleetRelease struct {
 	Waves           int
 	LastWaveAt      *int64
 	FailureBaseline int
+	// the orchestrator: the manifest for the fleet's systems, and the system
+	// deployment the release started with it
+	ManifestID         *int64
+	ManifestLabel      string
+	SystemDeploymentID *int64
 }
 
 // ReleaseProgress is how a fleet's release is going.

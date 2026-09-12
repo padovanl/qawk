@@ -11,7 +11,7 @@
 FROM python:3-alpine
 
 WORKDIR /app
-COPY serve.py index.html style.css fonts.css logo.png favicon.png favicon.ico /app/
+COPY serve.py index.html style.css fonts.css logo.png favicon.png favicon.ico qawk-logo.svg qawk-logo.png /app/
 COPY fonts/ /app/fonts/
 COPY js/ /app/js/
 # which build this is: an open console reads it and reloads itself when a new

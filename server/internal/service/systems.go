@@ -339,67 +339,15 @@ func (s *Service) DeleteSystemDeployment(ctx context.Context, user string, id in
 // SystemDeploymentCommand is start, pause, resume or abort.
 func (s *Service) SystemDeploymentCommand(ctx context.Context, user string, id int64, cmd, reason string) error {
 	var d model.SystemDeployment
-	var keys []string
+	var keys, groups []string
 	var note string
 	if cmd == "start" {
 		var err error
 		if d, err = s.st.SystemDeployment(ctx, s.st.DB(), id); err != nil {
 			return err
 		}
-		m, err := s.st.Manifest(ctx, s.st.DB(), d.ManifestID)
-		if err != nil {
+		if keys, groups, note, err = s.scope(ctx, d); err != nil {
 			return err
-		}
-		all, err := s.Systems(ctx, m.SystemTypeID)
-		if err != nil {
-			return err
-		}
-		have := map[string]SystemInstance{}
-		for _, in := range all {
-			have[in.Key] = in
-		}
-		// the channel: every device of the system in it; the centres: its own among them
-		inScope := func(in SystemInstance) bool {
-			if d.FleetID != nil && (in.Mixed || in.FleetID != *d.FleetID) {
-				return false
-			}
-			return len(d.Groups) == 0 || slices.Contains(d.Groups, in.Group)
-		}
-		leftOut := 0
-		if d.Systems == nil {
-			for _, in := range all {
-				switch {
-				case inScope(in):
-					keys = append(keys, in.Key)
-				case d.FleetID != nil && in.Mixed && slices.Contains(in.Fleets, *d.FleetID) &&
-					(len(d.Groups) == 0 || slices.Contains(d.Groups, in.Group)):
-					leftOut++
-				}
-			}
-		} else {
-			for _, k := range d.Systems {
-				in, ok := have[k]
-				if !ok {
-					return httpx.Validation(fmt.Sprintf("no device of %s says it is in system %q", m.SystemType, k))
-				}
-				if !inScope(in) {
-					return httpx.Validation(fmt.Sprintf("system %q is not in the deployment's channel and centres", k))
-				}
-				keys = append(keys, k)
-			}
-		}
-		if len(keys) == 0 {
-			scope := ""
-			if d.Fleet != nil {
-				scope += " in " + *d.Fleet
-			}
-			if len(d.Groups) > 0 {
-				scope += " in " + strings.Join(d.Groups, ", ")
-			}
-			return httpx.Validation("no system of type " + m.SystemType + scope + " has any device yet")
-		}
-		if leftOut > 0 {
-			note = fmt.Sprintf("%d system(s) left out: their devices are not all in %s", leftOut, *d.Fleet)
 		}
 	}
 	return s.st.Tx(ctx, user, func(tx pgx.Tx, now int64) error {
@@ -424,7 +372,7 @@ func (s *Service) SystemDeploymentCommand(ctx context.Context, user string, id i
 					return httpx.Validation(fmt.Sprintf("%s: %s", c.ComponentType, err.Error()))
 				}
 			}
-			if err := s.st.CreateRuns(ctx, tx, id, keys); err != nil {
+			if err := s.st.CreateRuns(ctx, tx, id, keys, groups); err != nil {
 				return err
 			}
 			d.Status, d.StartedBy, d.StartedAt, d.Reason = model.SDRunning, &user, &now, note
@@ -452,6 +400,78 @@ func (s *Service) SystemDeploymentCommand(ctx context.Context, user string, id i
 		}
 		return s.st.SetSystemDeploymentState(ctx, tx, d)
 	})
+}
+
+// scope finds the systems a deployment takes: of its manifest's type, in its
+// channel and centres, or the ones it names -- with each one's centre, in the
+// order they are taken (the centres in turn, when it goes one at a time).
+func (s *Service) scope(ctx context.Context, d model.SystemDeployment) (keys, groups []string, note string, err error) {
+	m, err := s.st.Manifest(ctx, s.st.DB(), d.ManifestID)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	all, err := s.Systems(ctx, m.SystemTypeID)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	have := map[string]SystemInstance{}
+	for _, in := range all {
+		have[in.Key] = in
+	}
+	// the channel: every device of the system in it; the centres: its own among them
+	inScope := func(in SystemInstance) bool {
+		if d.FleetID != nil && (in.Mixed || in.FleetID != *d.FleetID) {
+			return false
+		}
+		return len(d.Groups) == 0 || slices.Contains(d.Groups, in.Group)
+	}
+	var picked []SystemInstance
+	leftOut := 0
+	if d.Systems == nil {
+		for _, in := range all {
+			switch {
+			case inScope(in):
+				picked = append(picked, in)
+			case d.FleetID != nil && in.Mixed && slices.Contains(in.Fleets, *d.FleetID) &&
+				(len(d.Groups) == 0 || slices.Contains(d.Groups, in.Group)):
+				leftOut++
+			}
+		}
+	} else {
+		for _, k := range d.Systems {
+			in, ok := have[k]
+			if !ok {
+				return nil, nil, "", httpx.Validation(fmt.Sprintf("no device of %s says it is in system %q", m.SystemType, k))
+			}
+			if !inScope(in) {
+				return nil, nil, "", httpx.Validation(fmt.Sprintf("system %q is not in the deployment's channel and centres", k))
+			}
+			picked = append(picked, in)
+		}
+	}
+	if len(picked) == 0 {
+		where := ""
+		if d.Fleet != nil {
+			where += " in " + *d.Fleet
+		}
+		if len(d.Groups) > 0 {
+			where += " in " + strings.Join(d.Groups, ", ")
+		}
+		return nil, nil, "", httpx.Validation("no system of type " + m.SystemType + where + " has any device yet")
+	}
+	sort.SliceStable(picked, func(i, j int) bool {
+		if picked[i].Group != picked[j].Group {
+			return picked[i].Group < picked[j].Group
+		}
+		return picked[i].Key < picked[j].Key
+	})
+	for _, in := range picked {
+		keys, groups = append(keys, in.Key), append(groups, in.Group)
+	}
+	if leftOut > 0 && d.Fleet != nil {
+		note = fmt.Sprintf("%d system(s) left out: their devices are not all in %s", leftOut, *d.Fleet)
+	}
+	return keys, groups, note, nil
 }
 
 func ifNote(n string) string {
@@ -647,6 +667,17 @@ func (s *Service) stepSystemDeployment(ctx context.Context, d model.SystemDeploy
 			return s.st.SetSystemDeploymentState(ctx, s.st.DB(), d)
 		}
 		return nil
+	}
+	// One centre at a time: only the systems of the first centre not done yet
+	// -- the runs come in centre order -- start; the next centre when it is.
+	if d.ByGroup {
+		for _, r := range runs {
+			if r.Status == model.RunPending || r.Status == model.RunRunning || r.Status == model.RunRollingBack {
+				centre := r.Group
+				pending = slices.DeleteFunc(pending, func(p model.SystemRun) bool { return p.Group != centre })
+				break
+			}
+		}
 	}
 	for _, r := range pending {
 		if active >= d.MaxParallel {

@@ -529,6 +529,42 @@ A system type's centre is the centre field unless the type names another
 6hd:16:6hd=1,st05=2,hyper=1:centers=4:ring=prod` shares simulated systems
 out among four centres; `test/centres.py` is the end-to-end test.
 
+### Releases through the orchestrator
+
+A channel's release is one set for every member, which a 6hd and the st05
+and hyper under it cannot share. So a release may carry, besides its set, a
+**manifest**: when the release starts in a channel, the set goes to the
+devices that stand alone (a neo-intel) and the **orchestrator** takes the
+channel's systems with the manifest — a few systems at a time, **one centre
+at a time** if the channel says so (the next centre once every system of the
+last is done), in each system the manifest's order, a system that fails put
+back as a whole.
+
+- **Promoted, the manifest comes along**, by hand or by itself; a promotion by
+  hand may leave it behind (`"orchestrator": false`): the set alone, the
+  systems left as they are.
+- **The release is complete** once its devices that stand alone run the set
+  and the orchestrator has finished; the **gate** into the next channel checks
+  the systems too (*the orchestrator took beta's systems … finished*).
+- **More systems failed than the channel allows**: the orchestrator fails,
+  and the release **halts**, as it does when too many devices fail.
+- A new release supersedes the old one's orchestrator: the systems it had not
+  started are skipped.
+
+| | |
+|---|---|
+| `PUT /qawk/v1/fleets/{id}` `{"distributionSetId": 12, "manifestId": 3}` | a release with a set and a manifest (a channel with no upstream) |
+| `PUT /qawk/v1/fleets/{id}` `{"orchestrator": {"maxParallel": 4, "maxFailed": 0, "byCentre": true}}` | how the channel's systems are taken |
+| `POST /qawk/v1/fleets/{id}/promote` `{"from": 2, "orchestrator": false}` | promoted without the manifest (default: with it) |
+| `POST /qawk/v1/systemdeployments` `{..., "byCentre": true}` | a system deployment by hand, one centre at a time |
+
+A fleet shows its release's `manifest` and, under `systems`, how the
+orchestrator is going: its deployment, the systems by state, the centre it is
+on. The console has it on the Fleets page — the release dialog takes a
+manifest, the promotion says whether the orchestrator comes along, a fleet's
+settings say how — and in the dashboard's channels. `test/orchestrated.py` is
+the end-to-end test.
+
 ### OpenTelemetry
 
 Qawk sends its metrics and traces to an OpenTelemetry collector over
@@ -747,6 +783,11 @@ python3 ota/qawk/test/systems.py http://localhost:18080
 # centres in channels, devices following their centre, a device lent to a
 # temporary channel, releases leaving systems alone, deployments by channel
 python3 ota/qawk/test/centres.py http://localhost:18080
+
+# a channel's release through the orchestrator: the set for the devices that
+# stand alone, the manifest for the systems, centre by centre; promoted with or
+# without it; the gate waiting for the systems; halted when they fail
+python3 ota/qawk/test/orchestrated.py http://localhost:18080
 
 # promotion by hand (the default), by itself, by itself with approval
 python3 ota/qawk/test/autopromote.py http://localhost:18080

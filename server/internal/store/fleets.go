@@ -19,6 +19,8 @@ const fleetCols = `f.id, f.name, f.description, f.colour, f.rule, f.ds_id,
 	f.gate_min_devices, f.gate_min_success, f.gate_soak_minutes, f.approval_required,
 	f.wave_percent, f.wave_timeout_minutes, f.error_threshold,
 	f.freeze_reason, f.freeze_from, f.freeze_until,
+	f.manifest_id, (SELECT m.name FROM manifests m WHERE m.id = f.manifest_id),
+	f.orch_max_parallel, f.orch_max_failed, f.orch_by_centre,
 	f.created_at, f.created_by, f.last_modified_at, f.last_modified_by,
 	(SELECT count(*) FROM targets t WHERE t.fleet_id = f.id),
 	(SELECT count(*) FROM targets t WHERE t.fleet_id = f.id AND f.ds_id IS NOT NULL AND t.installed_ds_id = f.ds_id),
@@ -33,6 +35,7 @@ func scanFleet(r pgx.Row) (model.Fleet, error) {
 		&f.Gate.MinDevices, &f.Gate.MinSuccess, &f.Gate.SoakMinutes, &f.Gate.ApprovalRequired,
 		&f.WavePercent, &f.WaveTimeoutMinutes, &f.ErrorThreshold,
 		&f.FreezeReason, &f.FreezeFrom, &f.FreezeUntil,
+		&f.ManifestID, &f.ManifestLabel, &f.Orchestrator.MaxParallel, &f.Orchestrator.MaxFailed, &f.Orchestrator.ByCentre,
 		&f.CreatedAt, &f.CreatedBy, &f.LastModifiedAt, &f.LastModifiedBy,
 		&f.Members, &f.OnRelease, &f.Updating, &f.Failed, &f.InSystems)
 	return f, err
@@ -67,13 +70,15 @@ func (s *Store) CreateFleet(ctx context.Context, tx pgx.Tx, user string, now int
 		INSERT INTO fleets (tenant, name, description, colour, rule, action_type,
 		                    upstream_id, temporary, gate_min_devices, gate_min_success, gate_soak_minutes,
 		                    approval_required, wave_percent, wave_timeout_minutes, error_threshold,
-		                    created_at, created_by, last_modified_at, last_modified_by, auto_promote)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $16, $17, $18)
+		                    created_at, created_by, last_modified_at, last_modified_by, auto_promote,
+		                    orch_max_parallel, orch_max_failed, orch_by_centre)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $16, $17, $18,
+		        $19, $20, $21)
 		RETURNING id`,
 		s.tenant, f.Name, f.Description, f.Colour, f.Rule, f.ActionType,
 		f.UpstreamID, f.Temporary, f.Gate.MinDevices, f.Gate.MinSuccess, f.Gate.SoakMinutes,
 		f.Gate.ApprovalRequired, f.WavePercent, f.WaveTimeoutMinutes, f.ErrorThreshold, now, user,
-		f.AutoPromote).Scan(&id)
+		f.AutoPromote, f.Orchestrator.MaxParallel, f.Orchestrator.MaxFailed, f.Orchestrator.ByCentre).Scan(&id)
 	return id, err
 }
 
@@ -83,12 +88,20 @@ func (s *Store) UpdateFleet(ctx context.Context, tx pgx.Tx, user string, now int
 		       upstream_id = $8, temporary = $9, gate_min_devices = $10, gate_min_success = $11,
 		       gate_soak_minutes = $12, approval_required = $13, wave_percent = $14,
 		       wave_timeout_minutes = $15, error_threshold = $16,
-		       last_modified_at = $17, last_modified_by = $18, auto_promote = $19
+		       last_modified_at = $17, last_modified_by = $18, auto_promote = $19,
+		       orch_max_parallel = $20, orch_max_failed = $21, orch_by_centre = $22
 		WHERE tenant = $1 AND id = $2`,
 		s.tenant, f.ID, f.Name, f.Description, f.Colour, f.Rule, f.ActionType,
 		f.UpstreamID, f.Temporary, f.Gate.MinDevices, f.Gate.MinSuccess,
 		f.Gate.SoakMinutes, f.Gate.ApprovalRequired, f.WavePercent,
-		f.WaveTimeoutMinutes, f.ErrorThreshold, now, user, f.AutoPromote)
+		f.WaveTimeoutMinutes, f.ErrorThreshold, now, user, f.AutoPromote,
+		f.Orchestrator.MaxParallel, f.Orchestrator.MaxFailed, f.Orchestrator.ByCentre)
+	return err
+}
+
+// SetFleetManifest sets the manifest of the release a fleet runs (nil: none).
+func (s *Store) SetFleetManifest(ctx context.Context, tx pgx.Tx, id int64, m *int64) error {
+	_, err := tx.Exec(ctx, `UPDATE fleets SET manifest_id = $3 WHERE tenant = $1 AND id = $2`, s.tenant, id, m)
 	return err
 }
 
@@ -206,13 +219,14 @@ func (s *Store) Progress(ctx context.Context, fleet, ds, since int64) (model.Rel
 const releaseCols = `r.id, r.fleet_id, (SELECT f.name FROM fleets f WHERE f.id = r.fleet_id),
 	r.ds_id, r.ds_label, r.from_fleet_id, r.from_fleet_name, r.status, r.forced, r.reason, r.gate_report,
 	r.requested_by, r.requested_at, r.decided_by, r.decided_at, r.started_at, r.finished_at,
-	r.waves, r.last_wave_at, r.failure_baseline`
+	r.waves, r.last_wave_at, r.failure_baseline, r.manifest_id, r.manifest_label, r.system_deployment_id`
 
 func scanRelease(row pgx.Row) (model.FleetRelease, error) {
 	var r model.FleetRelease
 	err := row.Scan(&r.ID, &r.FleetID, &r.FleetName, &r.DSID, &r.DSLabel, &r.FromFleetID, &r.FromFleetName,
 		&r.Status, &r.Forced, &r.Reason, &r.GateReport, &r.RequestedBy, &r.RequestedAt,
-		&r.DecidedBy, &r.DecidedAt, &r.StartedAt, &r.FinishedAt, &r.Waves, &r.LastWaveAt, &r.FailureBaseline)
+		&r.DecidedBy, &r.DecidedAt, &r.StartedAt, &r.FinishedAt, &r.Waves, &r.LastWaveAt, &r.FailureBaseline,
+		&r.ManifestID, &r.ManifestLabel, &r.SystemDeploymentID)
 	return r, err
 }
 
@@ -220,10 +234,11 @@ func (s *Store) CreateRelease(ctx context.Context, tx pgx.Tx, r model.FleetRelea
 	var id int64
 	err := tx.QueryRow(ctx, `
 		INSERT INTO fleet_releases (tenant, fleet_id, ds_id, ds_label, from_fleet_id, from_fleet_name,
-		                            status, forced, reason, gate_report, requested_by, requested_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+		                            status, forced, reason, gate_report, requested_by, requested_at,
+		                            manifest_id, manifest_label)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id`,
 		s.tenant, r.FleetID, r.DSID, r.DSLabel, r.FromFleetID, r.FromFleetName,
-		r.Status, r.Forced, r.Reason, r.GateReport, r.RequestedBy, r.RequestedAt).Scan(&id)
+		r.Status, r.Forced, r.Reason, r.GateReport, r.RequestedBy, r.RequestedAt, r.ManifestID, r.ManifestLabel).Scan(&id)
 	return id, err
 }
 
@@ -330,5 +345,29 @@ func (s *Store) CompleteRelease(ctx context.Context, id, now int64) error {
 func (s *Store) MarkWave(ctx context.Context, id, now int64) error {
 	_, err := s.pool.Exec(ctx, `UPDATE fleet_releases SET waves = waves + 1, last_wave_at = $3 WHERE tenant = $1 AND id = $2`,
 		s.tenant, id, now)
+	return err
+}
+
+// SetReleaseSystemDeployment records the system deployment a release started.
+func (s *Store) SetReleaseSystemDeployment(ctx context.Context, q Q, id, sd int64) error {
+	_, err := q.Exec(ctx, `UPDATE fleet_releases SET system_deployment_id = $3 WHERE tenant = $1 AND id = $2`,
+		s.tenant, id, sd)
+	return err
+}
+
+// EndReleaseDeployments stops what the orchestrator was still doing for a
+// fleet's other releases: the release that supersedes them supersedes their
+// systems' updates too. The systems not started are skipped; one being
+// updated finishes its stage.
+func (s *Store) EndReleaseDeployments(ctx context.Context, tx pgx.Tx, fleet, keep int64, why string, now int64) error {
+	of := `SELECT r.system_deployment_id FROM fleet_releases r WHERE r.tenant = $1 AND r.fleet_id = $2
+		AND r.id <> $3 AND r.system_deployment_id IS NOT NULL`
+	if _, err := tx.Exec(ctx, `UPDATE system_runs SET status = 'skipped', reason = $4
+		WHERE status = 'pending' AND deployment_id IN (`+of+`)`, s.tenant, fleet, keep, why); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `UPDATE system_deployments SET status = 'aborted', reason = $4, finished_at = $5
+		WHERE tenant = $1 AND status IN ('draft', 'running', 'paused') AND id IN (`+of+`)`,
+		s.tenant, fleet, keep, why, now)
 	return err
 }
