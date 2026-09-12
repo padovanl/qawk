@@ -93,7 +93,7 @@ async function render(opts = {}) {
   $('#title').textContent = v.title;
   // The tab says where you are: with three consoles open on three servers, the
   // browser's tab strip is the only place that distinguishes them.
-  document.title = `${v.title} · hawkBit · QubicaAMF`;
+  document.title = `${v.title} · Qawk`;
   const bar = h('div', ...(v.bar ? v.bar() : []));
   if (fresh) $('#bar-extra').replaceChildren(...bar.childNodes); else patch($('#bar-extra'), bar);
   const mine = ++renderToken;
