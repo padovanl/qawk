@@ -994,6 +994,20 @@ nav button .ct { font-variant-numeric: tabular-nums; }
   --accent:#4caf7d; --accent-2:#6fd39c;
   --ok:#6fd39c; --warn:#d8b34a; --err:#e0685f; --info:#5fa8d3;
 }
+:root[data-theme="tokyo-night"] {
+  color-scheme: dark;
+  --bg:#1a1b26; --bg-2:#1f2335; --bg-3:#24283b; --line:#2a2f45; --line-2:#3b4261;
+  --fg:#c0caf5; --fg-dim:#a9b1d6; --fg-faint:#636b95;
+  --accent:#7aa2f7; --accent-2:#bb9af7;
+  --ok:#9ece6a; --warn:#e0af68; --err:#f7768e; --info:#7dcfff;
+}
+:root[data-theme="monokai"] {
+  color-scheme: dark;
+  --bg:#272822; --bg-2:#2d2e27; --bg-3:#34352d; --line:#3e3f36; --line-2:#56574b;
+  --fg:#f8f8f2; --fg-dim:#cfcfc2; --fg-faint:#8f908a;
+  --accent:#a6e22e; --accent-2:#e6db74;
+  --ok:#a6e22e; --warn:#e6db74; --err:#f92672; --info:#66d9ef;
+}
 
 /* ------------------------------------------------------------ theme picker */
 /* Each swatch paints itself with its own theme's variables, so the grid is a
@@ -1630,3 +1644,120 @@ table.t th { white-space: nowrap; }   /* "ASSIGNED / INSTALLED" on one line */
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 18%, transparent); }
 .atext { flex: 1; min-width: 0; display: flex; align-items: center; gap: 0 5px; flex-wrap: wrap; }
 .atime { flex: none; font-size: 12px; }
+
+/* notifications: grouped cards, "+N more", the bell; aside of an open drawer */
+.toast-wrap { max-width: min(380px, calc(100vw - 32px)); transition: right .16s ease-out; }
+body.drawer-open .toast-wrap { right: calc(min(620px, 92vw) + 16px); }
+@media (max-width: 760px) { body.drawer-open .toast-wrap { right: 16px; bottom: auto; top: 16px; } }
+.toast .tlines { display: flex; flex-direction: column; gap: 3px; }
+.toast .tsub { font-weight: 600; color: var(--fg); }
+.toast-n { position: absolute; top: 10px; right: 30px; font-size: 11px; font-weight: 700; color: var(--fg-faint); }
+.toast-more { align-self: flex-end; border: 1px solid var(--line-2); background: var(--bg-2); color: var(--fg-dim);
+              border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; cursor: pointer;
+              box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+.toast-more:hover { color: var(--fg); border-color: var(--accent); }
+.bell { position: relative; display: inline-grid; place-items: center; width: 32px; height: 32px; margin-left: 8px;
+        border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg-dim); cursor: pointer; }
+.bell:hover { color: var(--fg); background: var(--bg-3); }
+.bell .bell-n { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px;
+                background: var(--err); color: #fff; font-size: 10px; font-weight: 700; display: grid; place-items: center; }
+.bellpanel { position: fixed; top: 52px; right: 16px; width: min(420px, calc(100vw - 32px)); max-height: min(70vh, 560px);
+             display: flex; flex-direction: column; background: var(--bg-2); border: 1px solid var(--line-2);
+             border-radius: 10px; box-shadow: 0 16px 40px rgba(0,0,0,.35); z-index: 60; }
+.bp-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.bp-head b { flex: 1; }
+.bp-list { overflow: auto; }
+.bp-row { --tone: var(--info); display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 2px 10px; align-items: baseline;
+          padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.bp-row:last-child { border-bottom: 0; }
+.bp-row.err { --tone: var(--err); } .bp-row.ok { --tone: var(--ok); } .bp-row.warn { --tone: var(--warn); }
+.bp-row.unread { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.bp-row .m { grid-column: 2 / 4; font-size: 12px; color: var(--fg-dim); white-space: pre-wrap; }
+.bp-row .faint { font-size: 11px; }
+
+/* dashboard, third pass: a layout of one's own; what did not add up */
+.dash-main .dash-col.left { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-content: start; }
+.dash-col.left > .dw.wide { grid-column: 1 / -1; }
+@media (max-width: 900px) { .dash-main .dash-col.left { grid-template-columns: 1fr; } }
+.dw { position: relative; min-width: 0; display: flex; flex-direction: column; }
+.dw > .panel { flex: 1; }
+.dash.editing .dash-col { min-height: 140px; border-radius: 12px; outline: 1px dashed var(--line-2); outline-offset: 6px; }
+.dash.editing .dw { cursor: grab; }
+.dash.editing .dw > .panel { pointer-events: none; opacity: .92; }
+.dash.editing .dw.dragging { opacity: .4; }
+.dw.over-before::before, .dw.over-after::after { content: ''; position: absolute; left: 0; right: 0; height: 3px;
+  background: var(--accent); border-radius: 3px; z-index: 2; }
+.dw.over-before::before { top: -10px; } .dw.over-after::after { bottom: -10px; }
+.dw-tools { display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin-bottom: 6px; border-radius: 8px;
+            background: color-mix(in srgb, var(--accent) 13%, transparent); font-size: 12px; }
+.dw-grip { color: var(--accent); cursor: grab; display: inline-flex; }
+.dw-name { flex: 1; font-weight: 600; }
+.dw-hide { border: 0; background: transparent; color: var(--fg-dim); cursor: pointer; display: inline-flex; padding: 3px; border-radius: 6px; }
+.dw-hide:hover { color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent); }
+.dtray { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border: 1px dashed var(--accent);
+         border-radius: 10px; background: color-mix(in srgb, var(--accent) 6%, var(--bg-2)); }
+.dtray-k { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--fg-faint); }
+.dtray .grow { flex: 1; }
+.dchip { display: inline-flex; align-items: center; gap: 5px; }
+.seg { display: inline-flex; gap: 4px; }
+#bar-extra { gap: 8px; }
+.lpct { text-align: right; }
+.lpct small { display: block; font-size: 11px; font-weight: 400; color: var(--fg-faint); }
+.lsubrow { display: grid; grid-template-columns: minmax(0, 130px) minmax(0, 110px) minmax(0, 1fr) auto; gap: 10px; }
+.lsubrow > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pipe { overflow: visible; }
+.pstep { min-width: 0; }
+.ptop { flex-wrap: wrap; }
+.cfchip { display: inline-flex; align-items: center; gap: 6px; }
+.cfchip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.cfchip .cfn { font-variant-numeric: tabular-nums; }
+
+/* the pipeline, calmer: a hover is a coloured border, not a lift and a grey
+   fill; the lent channels after a plain dashed rule */
+.pstep, .pstep:hover { transform: none; background: transparent; }
+.pstep { transition: border-color .15s; }
+.pstep:hover { border-color: color-mix(in srgb, var(--tone) 60%, var(--line)); border-top-color: var(--tone); }
+.psep { flex: none; align-self: stretch; width: 0; padding: 0; margin: 0 6px; border-left: 1px dashed var(--line-2);
+        writing-mode: horizontal-tb; transform: none; }
+
+/* dashboard, fourth pass: one twelve-column grid; widgets moved with
+   SortableJS and resized by their right edge; the gallery; a pipeline that
+   wraps instead of spilling */
+.dgrid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; grid-auto-flow: row dense; align-items: start; }
+.dgrid > .dw { position: relative; min-width: 0; display: flex; flex-direction: column; }
+.dw.w3 { grid-column: span 3; } .dw.w4 { grid-column: span 4; } .dw.w6 { grid-column: span 6; }
+.dw.w8 { grid-column: span 8; } .dw.w12 { grid-column: span 12; }
+@media (max-width: 1300px) { .dw.w3, .dw.w4 { grid-column: span 6; } .dw.w8 { grid-column: span 12; } }
+@media (max-width: 860px)  { .dgrid > .dw { grid-column: span 12; } }
+.dgrid.editing > .dw { outline: 2px dashed color-mix(in srgb, var(--accent) 38%, transparent); outline-offset: 4px; border-radius: 10px; }
+.dgrid.editing > .dw > .panel { pointer-events: none; user-select: none; }
+.dgrid.editing .dw-tools { cursor: grab; user-select: none; }
+.dgrid.editing .dw-tools:active { cursor: grabbing; }
+.dw-size { font-size: 11px; color: var(--fg-faint); font-weight: 400; }
+.dw-ghost { outline: 2px dashed var(--accent) !important; background: color-mix(in srgb, var(--accent) 9%, transparent); border-radius: 10px; }
+.dw-ghost > * { opacity: 0; }
+.dw-flying { opacity: .96 !important; box-shadow: 0 26px 60px rgba(0,0,0,.45); transform: rotate(1deg) scale(1.01); border-radius: 10px; }
+.dw-resize { position: absolute; top: 46px; bottom: 10px; right: -10px; width: 14px; cursor: ew-resize; z-index: 3; }
+.dw-resize::after { content: ''; position: absolute; top: 50%; left: 5px; width: 4px; height: 44px; margin-top: -22px; border-radius: 4px;
+                    background: var(--accent); opacity: .55; transition: opacity .12s, height .12s; }
+.dw-resize:hover::after, .dw.resizing .dw-resize::after { opacity: 1; height: 64px; margin-top: -32px; }
+.dgrid.editing > .dw.resizing { outline: 2px solid var(--accent); }
+.wgal-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.wgal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.wcard { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 8px 12px; padding: 12px; border: 1px solid var(--line);
+         border-radius: 10px; cursor: pointer; transition: border-color .12s, background .12s; }
+.wcard:hover { border-color: var(--line-2); background: color-mix(in srgb, var(--fg) 3%, transparent); }
+.wcard.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.wcard-ico { grid-row: 1 / 3; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+             color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.wcard-body .faint { font-size: 12px; margin-top: 3px; }
+.wcard-state { grid-column: 2; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--fg-dim); }
+.wcard.on .wcard-state { color: var(--accent); font-weight: 600; }
+.pipe { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px 28px; }
+.pipe .parrow, .pipe .psep { display: none; }
+.pstep { position: relative; }
+.pstep.chain + .pstep.chain::before { content: '→'; position: absolute; left: -21px; top: 50%; transform: translateY(-50%);
+                                      color: var(--fg-faint); font-size: 15px; }
+.pstep.temp { border-style: dashed; border-top-style: solid; }
+.pbar { min-width: 0; }
+.pbar .bars { min-width: 0; }

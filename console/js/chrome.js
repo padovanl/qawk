@@ -2,22 +2,143 @@ import { S } from './api.js';
 import { $, h, icon, patch } from './dom.js';
 
 /* --------------------------------------------------------------- chrome */
-function toast(title, msg, kind = 'info', ms = 6000) {
-  /* A cross, because six seconds is either too long for something you have
-     already read or too short for something you have not. The timer also stops
-     while the pointer is over it: a failure worth reading is exactly the one
-     that slides away as you reach for it. */
-  const t = h('div.toast.' + kind,
-    h('button.toast-x', { title: 'dismiss', onclick: () => t.remove() }, '\u00d7'),
-    h('b', title), msg ? h('div.m', msg) : null);
-  $('#toasts').append(t);
-  let timer = ms ? setTimeout(() => t.remove(), ms) : null;
-  if (timer) {
-    t.addEventListener('pointerenter', () => { clearTimeout(timer); timer = null; });
-    t.addEventListener('pointerleave', () => { timer = setTimeout(() => t.remove(), 1800); });
+/* NOTIFICATIONS. With a live console several arrive at once -- "Started" and
+ * "Rollout running" for the same rollout, a device failing and its release
+ * halting -- and they piled up over whatever someone was reading. So:
+ *
+ *   - a toast about the SAME THING (an id both mention: a rollout, a device)
+ *     joins the card already showing it, as one more line;
+ *   - the same toast again is counted (x2), not repeated;
+ *   - at most three cards show; the rest wait behind "+N more";
+ *   - every one is kept in the bell, top right: the last fifty, unread counted;
+ *   - with the drawer open they sit to its left, not on it.
+ *
+ * A cross on each, because six seconds is either too long for something you
+ * have already read or too short for something you have not; the timer stops
+ * while the pointer is over a card. */
+const NOTES = [];               // newest first: {title, msg, kind, at, read}
+const MAX_SHOWN = 3;
+let hiddenN = 0;
+// what a toast is about: the ids it mentions (a rollout's at-1789..., a device's
+// sim-dev-003) -- long tokens with a digit, not a set's name:version
+const about = s => new Set((String(s).match(/[\w.+-]*\d[\w.+-]*/g) || []).filter(t => t.length >= 8 && /-/.test(t)));
+const RANK = { info: 0, ok: 1, warn: 2, err: 3 };
+
+function arm(card, ms) {
+  clearTimeout(card.__timer);
+  card.__ms = ms;
+  card.__timer = ms && !card.__hover ? setTimeout(() => dismiss(card), ms) : null;
+}
+function dismiss(card) {
+  clearTimeout(card.__timer);
+  card.remove();
+  if (!$('#toasts').querySelector('.toast')) { hiddenN = 0; drawMore(); }
+}
+function drawMore() {
+  const wrap = $('#toasts');
+  let more = wrap.querySelector('.toast-more');
+  if (!hiddenN) { if (more) more.remove(); return; }
+  if (!more) {
+    more = h('button.toast-more', { onclick: () => { openBell(); } });
+    wrap.prepend(more);
   }
+  more.textContent = `+${hiddenN} more \u2014 open the notifications`;
+}
+
+function toast(title, msg, kind = 'info', ms = 6000) {
+  NOTES.unshift({ title, msg: msg || '', kind, at: Date.now(), read: false });
+  NOTES.length = Math.min(NOTES.length, 50);
+  drawBell();
+  const wrap = $('#toasts');
+  const cards = [...wrap.querySelectorAll('.toast')];
+  const text = msg || '';
+
+  const same = cards.find(c => c.__title === title && c.__msg === text);
+  if (same) {
+    same.__n = (same.__n || 1) + 1;
+    same.querySelector('.toast-n').textContent = '\u00d7' + same.__n;
+    arm(same, ms);
+    return same;
+  }
+  const keys = about(`${title} ${text}`);
+  const kin = keys.size ? cards.find(c => [...keys].some(k => c.__keys.has(k))) : null;
+  if (kin) {
+    keys.forEach(k => kin.__keys.add(k));
+    kin.__title = title; kin.__msg = text;
+    kin.querySelector('b.tt').textContent = title;
+    const lines = kin.querySelector('.tlines');
+    lines.append(h('div.m', h('span.tsub', title), ' ', text));
+    while (lines.children.length > 4) lines.firstChild.remove();
+    if (RANK[kind] > RANK[kin.__kind]) { kin.classList.replace(kin.__kind, kind); kin.__kind = kind; }
+    arm(kin, Math.max(ms, kin.__ms || 0));
+    return kin;
+  }
+
+  const t = h('div.toast.' + kind,
+    h('button.toast-x', { title: 'dismiss', onclick: () => dismiss(t) }, '\u00d7'),
+    h('b.tt', title), h('span.toast-n'), h('div.tlines', text ? h('div.m', text) : null));
+  Object.assign(t, { __title: title, __msg: text, __keys: keys, __kind: kind });
+  t.addEventListener('pointerenter', () => { t.__hover = true; clearTimeout(t.__timer); });
+  t.addEventListener('pointerleave', () => { t.__hover = false; if (t.__ms) t.__timer = setTimeout(() => dismiss(t), 1800); });
+  wrap.append(t);
+  arm(t, ms);
+  const shown = [...wrap.querySelectorAll('.toast')];
+  for (const old of shown.slice(0, Math.max(0, shown.length - MAX_SHOWN))) { dismiss(old); hiddenN++; }
+  drawMore();
   return t;
 }
+
+/* The bell: every notification of this session, newest first. */
+function drawBell() {
+  const b = document.getElementById('bell');
+  if (!b) return;
+  if (!b.firstChild) {
+    b.append(icon('bell', 17), h('span.bell-n'));
+    b.onclick = () => (document.getElementById('bellpanel') ? closeBell() : openBell());
+  }
+  const n = NOTES.filter(x => !x.read).length;
+  const badge = b.querySelector('.bell-n');
+  badge.textContent = n > 99 ? '99+' : String(n);
+  badge.hidden = !n;
+  b.title = n ? `${n} unread notification${n === 1 ? '' : 's'}` : 'notifications';
+  const panel = document.getElementById('bellpanel');
+  if (panel) fillBell(panel);
+}
+const since = at => {
+  const s = Math.round((Date.now() - at) / 1000);
+  return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)}m ago` : `${Math.floor(s / 3600)}h ago`;
+};
+function fillBell(panel) {
+  panel.querySelector('.bp-list').replaceChildren(...(NOTES.length ? NOTES.map(x =>
+    h('div.bp-row.' + x.kind + (x.read ? '' : '.unread'), h('span.adot'), h('b', x.title), h('span.faint', since(x.at)),
+      x.msg ? h('div.m', x.msg) : null))
+    : [h('div.empty', 'Nothing yet \u2014 deployments, devices and the catalogue will say things here')]));
+}
+function openBell() {
+  closeBell();
+  const panel = h('div#bellpanel.bellpanel',
+    h('div.bp-head', h('b', 'Notifications'),
+      h('button.btn.sm', { onclick: () => { NOTES.length = 0; drawBell(); } }, 'clear'),
+      h('button.btn.sm', { onclick: closeBell }, '\u00d7')),
+    h('div.bp-list'));
+  document.body.append(panel);
+  fillBell(panel);
+  NOTES.forEach(x => { x.read = true; });
+  [...$('#toasts').querySelectorAll('.toast')].forEach(dismiss);
+  hiddenN = 0; drawMore();
+  setTimeout(() => drawBell(), 1200);
+  setTimeout(() => document.addEventListener('pointerdown', outside), 0);
+}
+function outside(e) {
+  if (e.target.closest && (e.target.closest('#bellpanel') || e.target.closest('#bell'))) return;
+  closeBell();
+}
+function closeBell() {
+  const p = document.getElementById('bellpanel');
+  if (p) p.remove();
+  document.removeEventListener('pointerdown', outside);
+}
+if (typeof document !== 'undefined' && document.getElementById && document.getElementById('bell')) drawBell();
 const fail = e => toast('Failed', e.message || String(e), 'err', 12000);
 
 function modal(title, bodyNodes, onOk, okLabel = 'OK') {
@@ -127,6 +248,7 @@ function drawer(title, node, build) {
   $('#drawer-body').replaceChildren(node);
   drawerBuild = build || null;
   $('#drawer').classList.add('open'); $('#scrim').classList.add('open');
+  document.body.classList.add('drawer-open');
 }
 async function refreshDrawer() {
   const build = drawerBuild;
@@ -138,6 +260,7 @@ async function refreshDrawer() {
 }
 function closeDrawer() {
   $('#drawer').classList.remove('open'); $('#scrim').classList.remove('open');
+  document.body.classList.remove('drawer-open');
   drawerBuild = null;
   S.sel = null;
 }

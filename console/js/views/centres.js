@@ -37,9 +37,9 @@ VIEWS.centres = {
     const channels = fleets.filter(f => !f.temporary);
     for (const k of [...picked]) if (!d.content.some(c => c.centre === k)) picked.delete(k);
     const count = id => d.content.filter(c => (id === '-' ? !c.fleetId : c.fleetId === id)).length;
-    const chip = (v, label, n, colour) => h('button.btn.sm' + (chanFilter === v ? '.primary' : ''),
+    const chip = (v, label, n, colour) => h('button.btn.sm.cfchip' + (chanFilter === v ? '.on' : ''),
       { onclick: () => { chanFilter = chanFilter === v ? '' : v; render(); } },
-      colour ? h('span.swatch-dot', { style: `--sw:${colour}` }) : null, `${label} · ${fmt(n)}`);
+      colour ? fleetBadge(label, colour) : h('span.pill', label), h('b.cfn', fmt(n)));
 
     const tableBox = h('div');
     const drawTable = () => {

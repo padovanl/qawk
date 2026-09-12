@@ -11,6 +11,7 @@ const THEMES = [
   ['nord', 'nord'], ['dracula', 'dracula'], ['gruvbox', 'gruvbox'],
   ['solarized-dark', 'solarized dark'], ['solarized-light', 'solarized light'],
   ['amber', 'amber'], ['mono', 'mono'], ['paper', 'paper'],
+  ['tokyo-night', 'tokyo night'], ['monokai', 'monokai'],
 ];
 function theme() {
   const v = localStorage.getItem('hb-theme');

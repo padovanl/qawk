@@ -2,9 +2,10 @@ import { S, fiql, get, qawk } from '../api.js';
 import { PHASE_WORDS, phasesOf } from '../badges.js';
 import { bars } from '../bars.js';
 import { hasBatch, hasFeature, statesOf } from '../batch.js';
+import { drawer, refreshDrawer } from '../chrome.js';
 import { fleetBadge, typeBadge } from '../chips.js';
 import { h, icon } from '../dom.js';
-import { VIEWS, drawNav, go } from '../router.js';
+import { VIEWS, drawNav, go, render } from '../router.js';
 import { serverInfo } from '../server.js';
 import { ago } from '../util.js';
 import { hasDeployments, setQuery } from './deployments.js';
@@ -99,6 +100,153 @@ function targetOf(a) {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
+/* ------- the layout: Basic, Full, or one's own ---------------------------
+ *
+ * Eleven widgets are a lot to take in at once. The page starts BASIC -- the
+ * channels, what is moving, what needs someone, the devices by update -- and
+ * FULL is one click away. "customize" goes further: the widgets sit on a
+ * twelve-column grid; each is dragged by its bar -- SortableJS (MIT,
+ * js/vendor): the widget itself follows the pointer and the others make room
+ * as it goes -- and resized by pulling its right edge, from a quarter of the
+ * row to all of it; the gallery puts widgets on the page and takes them off.
+ * What someone arranges stays in their browser, for them. While a widget is
+ * moved or resized the live beat waits: it would put everything back. */
+const WIDGETS = {           // id: [name, icon, what it shows]
+  channels: ['Channels', 'route', 'dev → beta → prod: each channel with its release, how far it got, what waits'],
+  inprog: ['In progress', 'rocket', 'every deployment going on: channel releases, rollouts, the orchestrator, sets given by hand'],
+  attention: ['Needs attention', 'alert-triangle', 'failed devices, halted releases, approvals waiting, devices not polling'],
+  update: ['Devices by update', 'activity', 'every device by where its last update stands'],
+  types: ['Device types', 'cpu', 'neo-intel, 6hd, st05, hyper, and those that do not say'],
+  centres: ['Centres', 'building-store', 'the biggest centres, their channel, those in none'],
+  orchestrator: ['Orchestrator', 'sitemap', 'systems updated as a whole: the latest orchestrator deployments'],
+  rollouts: ['Rollouts', 'stack-2', "hawkBit's rollouts, the latest, with how far their groups got"],
+  catalogue: ['Catalogue', 'package', 'the latest distribution sets and what they carry'],
+  activity: ['Recent activity', 'history', 'who changed what, from the audit log'],
+  server: ['Server', 'server-2', 'which server, what it speaks, how the devices poll'],
+};
+const SIZES = [3, 4, 6, 8, 12];
+const SIZE_WORD = { 3: 'a quarter', 4: 'a third', 6: 'half', 8: 'two thirds', 12: 'full width' };
+const PRESETS = {
+  basic: [['channels', 8], ['attention', 4], ['inprog', 8], ['update', 4]],
+  full: [['channels', 8], ['attention', 4], ['inprog', 8], ['centres', 4], ['update', 4], ['types', 4],
+    ['catalogue', 4], ['orchestrator', 6], ['rollouts', 6], ['activity', 8], ['server', 4]],
+};
+const LAYOUT_KEY = 'qawk-dash-layout';
+const fromPreset = p => ({ order: PRESETS[p].map(([id]) => id), size: Object.fromEntries(PRESETS[p]), preset: p });
+function loadLayout() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LAYOUT_KEY));
+    if (v && Array.isArray(v.order)) {
+      const size = {};
+      for (const [k, n] of Object.entries(v.size || {})) if (WIDGETS[k] && SIZES.includes(n)) size[k] = n;
+      return { order: v.order.filter(id => WIDGETS[id]), size, preset: v.preset || 'custom' };
+    }
+  } catch (_) { /* no storage: the default */ }
+  return fromPreset('basic');
+}
+const L = Object.assign({ edit: false, dragging: false, resizing: false }, loadLayout());
+const sizeOf = id => L.size[id] || (PRESETS.full.find(([k]) => k === id) || [0, 6])[1];
+function saveLayout() {
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify({ order: L.order, size: L.size, preset: L.preset })); } catch (_) { /* per viewer only */ }
+}
+function redraw() {
+  const be = document.getElementById('bar-extra');
+  if (be && VIEWS.dash.bar) be.replaceChildren(...VIEWS.dash.bar());
+  render();
+}
+function usePreset(p) { Object.assign(L, fromPreset(p)); saveLayout(); redraw(); refreshDrawer(); }
+function toggleWidget(id) {
+  L.order = L.order.includes(id) ? L.order.filter(x => x !== id) : [...L.order, id];
+  L.preset = 'custom'; saveLayout(); redraw(); refreshDrawer();
+}
+
+// Moving: SortableJS on the grid, and only while customizing. Loaded when
+// first needed -- nobody who only looks pays for it.
+async function arrange() {
+  const el = document.querySelector('#view .dgrid');
+  if (!el) return;
+  if (!L.edit) { if (el.__sortable) { el.__sortable.destroy(); el.__sortable = null; } return; }
+  if (el.__sortable) return;
+  const Sortable = (await import('../vendor/sortable.esm.js')).default;
+  if (el.__sortable || !L.edit) return;
+  el.__sortable = Sortable.create(el, {
+    draggable: '.dw', handle: '.dw-tools', filter: '.dw-hide', preventOnFilter: false,
+    animation: 220, easing: 'cubic-bezier(.2, .8, .2, 1)',
+    forceFallback: true, fallbackOnBody: true, fallbackTolerance: 4,
+    ghostClass: 'dw-ghost', chosenClass: 'dw-chosen', fallbackClass: 'dw-flying',
+    onStart: () => { L.dragging = true; },
+    onEnd: () => {
+      L.dragging = false;
+      L.order = [...el.children].map(n => n.dataset.id).filter(Boolean);
+      L.preset = 'custom'; saveLayout(); redraw();
+    },
+  });
+}
+
+// Resizing: pull the right edge; the width snaps to a quarter, a third, half,
+// two thirds or the whole row, and changes as the pointer goes.
+function startResize(e, id) {
+  e.preventDefault(); e.stopPropagation();
+  const item = e.currentTarget.closest('.dw');
+  const gridEl = item.parentElement;
+  const gap = parseFloat(getComputedStyle(gridEl).columnGap) || 16;
+  const col = (gridEl.getBoundingClientRect().width + gap) / 12;
+  const left = item.getBoundingClientRect().left;
+  const tag = item.querySelector('.dw-size');
+  let n = sizeOf(id);
+  L.resizing = true; item.classList.add('resizing');
+  const move = ev => {
+    const want = (ev.clientX - left + gap) / col;
+    const m = SIZES.reduce((a, b) => (Math.abs(b - want) < Math.abs(a - want) ? b : a));
+    if (m === n) return;
+    item.classList.replace('w' + n, 'w' + m); n = m;
+    if (tag) tag.textContent = SIZE_WORD[n];
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
+    L.resizing = false; item.classList.remove('resizing');
+    L.size[id] = n; L.preset = 'custom'; saveLayout(); redraw();
+  };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+}
+
+function grid(W) {
+  return h('div.dgrid' + (L.edit ? '.editing' : ''), { 'data-key': 'grid' },
+    L.order.filter(id => W[id]).map(id => h('div.dw.w' + sizeOf(id), { 'data-key': 'w-' + id, 'data-id': id },
+      L.edit ? h('div.dw-tools', { title: 'drag to move it' },
+        h('span.dw-grip', icon('grip-vertical', 16)), h('span.dw-name', WIDGETS[id][0]),
+        h('span.dw-size', SIZE_WORD[sizeOf(id)]),
+        h('button.dw-hide', { title: 'take it off the page', onclick: () => toggleWidget(id) }, icon('eye-off', 15))) : null,
+      W[id],
+      L.edit ? h('div.dw-resize', { title: 'pull to resize', onpointerdown: e => startResize(e, id) }) : null)));
+}
+
+// The gallery: every widget, what it shows, on the page or not.
+function gallery() {
+  const on = new Set(L.order);
+  return h('div.wgal',
+    h('div.wgal-top', h('span.dtray-k', 'Start from'),
+      h('div.seg', ['basic', 'full'].map(p => h('button.btn.sm' + (L.preset === p ? '.primary' : ''),
+        { onclick: () => usePreset(p) }, p === 'basic' ? 'Basic' : 'Full'))),
+      h('span.faint', `${on.size} of ${Object.keys(WIDGETS).length} on the page`)),
+    h('div.wgal-grid', Object.entries(WIDGETS).map(([id, [name, ico, desc]]) => h('div.wcard' + (on.has(id) ? '.on' : ''),
+      { 'data-key': id, title: on.has(id) ? 'take it off the page' : 'put it on the page', onclick: () => toggleWidget(id) },
+      h('div.wcard-ico', icon(ico, 22)),
+      h('div.wcard-body', h('b', name), h('div.faint', desc)),
+      h('span.wcard-state', on.has(id) ? [icon('check', 14), 'on the page'] : [icon('eye', 14), 'add'])))));
+}
+const openGallery = () => drawer('Widgets', gallery(), () => gallery());
+
+function editTray() {
+  return h('div.dtray', { 'data-key': 'tray' },
+    h('span.dtray-k', 'Customizing'),
+    h('span.faint', 'drag a widget by its bar · pull its right edge to resize it'),
+    h('span.grow'),
+    h('button.btn.sm', { onclick: openGallery }, icon('layout-grid', 14), 'widgets'),
+    h('button.btn.sm', { title: 'back to Basic', onclick: () => usePreset('basic') }, 'reset'),
+    h('button.btn.sm.primary', { onclick: () => { L.edit = false; redraw(); } }, icon('check', 14), 'done'));
+}
+
 /* ------- the widgets' parts: a card with a header, and list rows --------- */
 const widget = (title, ico, extra, body, page) => h('div.panel.w',
   h('h3.whead', h('span.wtitle', icon(ico, 16), title), h('span.wextra', extra || null,
@@ -130,7 +278,14 @@ function share(parts, total, open, badge) {
 
 VIEWS.dash = {
   title: 'Dashboard',
+  bar: () => [
+    h('div.seg', ['basic', 'full'].map(p => h('button.btn.sm' + (L.preset === p ? '.primary' : ''),
+      { title: p === 'basic' ? 'the essentials' : 'every widget', onclick: () => usePreset(p) }, p === 'basic' ? 'Basic' : 'Full'))),
+    L.edit ? h('button.btn.sm', { onclick: openGallery }, icon('layout-grid', 14), 'widgets') : null,
+    h('button.btn.sm' + (L.edit ? '.primary' : ''), { title: 'move, resize, add and remove widgets',
+      onclick: () => { L.edit = !L.edit; redraw(); } }, icon('adjustments-horizontal', 14), 'customize')],
   async render(root) {
+    if (L.dragging || L.resizing) throw new Error('the layout is being changed');
     const count = q => get('/targets?limit=1&q=' + fiql(q)).then(r => r.total);
     const cutoffP = overdueCutoff();
     const [tg, totals, installedInSync, cutoff, over, deps, fails, fleets, centres, sdeps, stypes, ros, dss, sms, audit, types] =
@@ -185,8 +340,20 @@ VIEWS.dash = {
     const cl = centres ? centres.content || [] : [];
     const placed = cl.filter(c => c.fleetId).length;
 
-    const pair = (a, b) => (a && b ? h('div.dash-2', a, b) : a || b);
-    root.replaceChildren(h('div.stack.dash',
+    const W = {
+      channels: fleets ? pipelineWidget(fleets) : null,
+      inprog: deps ? progressWidget(deps) : null,
+      update: updateWidget(byStatus, virgin, phases, tg.content.length),
+      types: typesWidget(types, tg.total),
+      orchestrator: sdeps ? orchestratorWidget(sdeps.content || [], stypes ? stypes.content || [] : []) : null,
+      rollouts: ros ? rolloutsWidget(ros) : null,
+      activity: audit ? activityWidget(audit.content || [], fleets || []) : null,
+      attention: attentionWidget({ errors, failed, fstates, trouble, over, cutoff }),
+      centres: centres ? centresWidget(cl, fleets || [], centres.field) : null,
+      catalogue: dss ? catalogueWidget(dss, sms) : null,
+      server: serverWidget(),
+    };
+    root.replaceChildren(h('div.stack.dash' + (L.edit ? '.editing' : ''),
       h('div.cards',
         clickable(stat('Devices', tg.total, over ? `${fmt(over)} not polling` : 'all polling on time', 'device-desktop',
           over ? 'warn' : 'info', tg.total ? 100 * (tg.total - (over || 0)) / tg.total : 0),
@@ -203,19 +370,9 @@ VIEWS.dash = {
           'clock', approvals.length ? 'warn.live' : 'mute'), () => go('fleets')),
         centres ? clickable(stat('Centres', cl.length, cl.length ? `${fmt(placed)} in a channel` : 'none reported yet',
           'building-store', cl.length ? 'info' : 'mute'), () => go('centres')) : null),
-      h('div.dash-main',
-        h('div.dash-col',
-          fleets ? pipelineWidget(fleets) : null,
-          deps ? progressWidget(deps) : null,
-          pair(updateWidget(byStatus, virgin, phases, tg.content.length), typesWidget(types, tg.total)),
-          pair(sdeps ? orchestratorWidget(sdeps.content || [], stypes ? stypes.content || [] : []) : null,
-            ros ? rolloutsWidget(ros) : null),
-          audit ? activityWidget(audit.content || [], fleets || []) : null),
-        h('div.dash-col',
-          attentionWidget({ errors, failed, fstates, trouble, over, cutoff }),
-          centres ? centresWidget(cl, fleets || [], centres.field) : null,
-          dss ? catalogueWidget(dss, sms) : null,
-          serverWidget()))));
+      L.edit ? editTray() : null,
+      grid(W)));
+    setTimeout(arrange, 60);
   },
 };
 
@@ -233,31 +390,27 @@ function pipelineWidget(fleets) {
   fleets.filter(f => !f.temporary && !(f.upstreamId && byId.has(f.upstreamId))).forEach(add);
   fleets.filter(f => !f.temporary).forEach(add);
   const temps = fleets.filter(f => f.temporary);
-  const step = f => {
+  const step = (f, kind) => {
     const p = f.progress, r = f.release;
     const pct = p && p.members ? Math.round(100 * p.onRelease / p.members) : 0;
     const halted = r && r.status === 'halted';
-    return h('div.pstep' + (halted ? '.bad' : ''), { 'data-key': 'p' + f.id, style: `--tone:${f.colour || '#8b8f98'}`,
+    return h('div.pstep.' + kind + (halted ? '.bad' : ''), { 'data-key': 'p' + f.id, style: `--tone:${f.colour || '#8b8f98'}`,
       title: f.description || f.name, onclick: () => go('fleets') },
     h('div.ptop', fleetBadge(f.name, f.colour), h('span.faint', plural(f.members, 'device'))),
     h('div.prel', f.distributionSet ? h('b', f.distributionSet) : h('span.faint', 'no release yet')),
     h('div.ppills',
       r ? h('span.pill.' + (halted ? 'err' : r.status === 'completed' ? 'ok' : r.status === 'active' ? 'live' : 'mute'), r.status) : null,
+      f.temporary ? h('span.pill', { title: 'a temporary channel: machines lent for a while' }, 'lent') : null,
       f.pending ? h('span.pill.amber', 'awaiting approval') : null,
       f.freeze && f.freeze.active ? h('span.pill.info', 'frozen') : null,
       f.upstream ? h('span.pill', f.autoPromote ? 'promotes itself' : 'promoted by hand') : null,
-      f.inSystems ? h('span.pill', { title: 'updated by the orchestrator, not by this release' }, `${fmt(f.inSystems)} in systems`) : null),
+      f.inSystems ? h('span.pill', { title: 'updated by the orchestrator, not by this release' }, `${fmt(f.inSystems)} in systems`) : null,
+      p && p.failed ? h('span.pill.err', `${fmt(p.failed)} failed`) : null),
     f.distributionSet && p && p.members ? h('div.pbar',
       bars([[p.onRelease, 'ok'], [p.active, 'run'], [p.failed, 'err']], p.members, { key: 'pipe' + f.id }),
-      h('span.ppct', `${pct}%`)) : null);
+      h('span.ppct', { title: 'of its devices run the release' }, `${pct}%`)) : null);
   };
-  const flow = [];
-  chain.forEach((f, i) => {
-    if (i) flow.push(h('div.parrow', { 'data-key': 'a' + f.id }, icon('arrow-right', 18)));
-    flow.push(step(f));
-  });
-  if (temps.length) flow.push(h('div.psep', { 'data-key': 'sep', title: 'temporary channels: machines lent for a while' },
-    h('span', 'lent')), ...temps.map(step));
+  const flow = [...chain.map(f => step(f, 'chain')), ...temps.map(f => step(f, 'temp'))];
   return widget('Channels', 'route', h('span.faint.wcount', plural(fleets.length, 'channel')), h('div.body',
     fleets.length ? h('div.pipe', flow)
       : emptyRow('route', 'No channel yet', 'create dev, beta and prod on the Fleets page; each release goes through them in order')),
@@ -293,7 +446,7 @@ function progressWidget(deps) {
           + (d.failed ? ` · ${fmt(d.failed)} failed` : '')
           + ((d.waiting || 0) + (d.scheduled || 0) ? ` · ${fmt((d.waiting || 0) + (d.scheduled || 0))} waiting` : '')
           + (d.since ? ' · started ' + ago(d.since) : '') + (d.by && d.by.length ? ' · by ' + d.by.slice(0, 2).join(', ') : ''),
-        right: h('div.lpct', `${pct}%`),
+        right: h('div.lpct', `${pct}%`, h('small', 'done')),
         below: h('div', { style: 'margin-top:9px' },
           bars([[d.done, 'ok'], [work, 'run'], [d.failed, 'err']], d.total, { key: `dash:${d.kind}:${d.title}` })),
         onclick: () => openDeployment(d) });
@@ -322,7 +475,7 @@ function attentionWidget({ errors, failed, fstates, trouble, over, cutoff }) {
         const msg = st && st.statuses && st.statuses.length ? (st.statuses[0].messages || []).join(' ') : '';
         const set = st && st.assigned ? `${st.assigned.name} ${st.assigned.version}` : '';
         return h('div.lsubrow', { 'data-key': 'e' + a.id, title: msg, onclick: e => { e.stopPropagation(); openTarget(a._t); } },
-          h('span.mono', a._t), set ? h('span.faint', set) : null, h('span.lmsg', msg || 'failed'),
+          h('span.mono', { title: a._t }, a._t), h('span.faint', set), h('span.lmsg', msg || 'failed'),
           h('span.faint', ago(a.lastModifiedAt || a.createdAt)));
       })) : null,
       onclick: () => { S.q = ''; S.status = 'error'; go('targets'); } }));
