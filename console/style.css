@@ -1765,3 +1765,6 @@ body.drawer-open .toast-wrap { right: calc(min(620px, 92vw) + 16px); }
 /* the channels' systems, taken by the release's orchestrator */
 .psys { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--fg-dim); }
 .psys .ico { color: var(--accent); }
+
+/* an empty count is no badge: [hidden] must win over the badge's own display */
+.bell .bell-n[hidden] { display: none; }

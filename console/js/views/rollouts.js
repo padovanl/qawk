@@ -42,6 +42,7 @@ VIEWS.ro = {
             h('span.faint.nowrap', { title: when(r.createdAt) }, ago(r.createdAt)),
             h('div.wrap',
               st === 'waiting_for_approval' ? actBtn('approve', () => post(`/rollouts/${r.id}/approve`)) : null,
+              st === 'waiting_for_approval' ? actBtn('deny', () => post(`/rollouts/${r.id}/deny`)) : null,
               st === 'ready' ? actBtn('start', () => post(`/rollouts/${r.id}/start`)) : null,
               st === 'running' ? actBtn('pause', () => post(`/rollouts/${r.id}/pause`)) : null,
               st === 'paused' ? actBtn('resume', () => post(`/rollouts/${r.id}/resume`)) : null,
@@ -75,6 +76,7 @@ async function openRollout(r) {
   // pushing the next one out without waiting for the success threshold.
   const controls = h('div.wrap',
     st === 'waiting_for_approval' ? actBtn('approve', () => post(`/rollouts/${r.id}/approve`)) : null,
+    st === 'waiting_for_approval' ? actBtn('deny', () => post(`/rollouts/${r.id}/deny`)) : null,
     st === 'ready' ? actBtn('start', () => post(`/rollouts/${r.id}/start`)) : null,
     st === 'running' ? actBtn('pause', () => post(`/rollouts/${r.id}/pause`)) : null,
     st === 'paused' ? actBtn('resume', () => post(`/rollouts/${r.id}/resume`)) : null,
