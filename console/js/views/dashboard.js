@@ -181,7 +181,7 @@ function saveLayout() {
 let LAST = null;
 function relayout() {
   const be = document.getElementById('bar-extra');
-  if (be && VIEWS.dash.bar) be.replaceChildren(...VIEWS.dash.bar());
+  if (be && VIEWS.dash.bar) be.replaceChildren(...VIEWS.dash.bar().filter(Boolean));   // a button not shown is null, not "null"
   const view = document.getElementById('view');
   if (!LAST || !view || !view.querySelector('.dash')) { render(); return; }
   const tmp = h('div');
