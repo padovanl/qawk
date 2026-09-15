@@ -102,7 +102,7 @@ function card(f, fleets) {
     h('div', { style: 'margin:8px 0 4px' },
       f.distributionSet ? h('span.pill.ok', f.distributionSet) : h('span.faint', 'no release'), ' ',
       f.manifest ? h('span.pill.info', { title: 'the manifest the orchestrator takes the systems with' }, f.manifest) : null,
-      ' ', statusPill(r),
+      ' ', r ? statusPill(r) : null,
       r && r.forced ? h('span.pill.err', { title: r.reason }, 'forced') : null),
     p ? h('div', h('div', { style: 'margin:6px 0 4px' }, bars([[p.onRelease, 'ok', `${p.onRelease} on it (${pct}%)`],
           [p.active, 'run', `${p.active} updating`], [p.failed, 'err', `${p.failed} failed`]], p.members, { key: 'fleet' + f.id })),
@@ -126,20 +126,20 @@ function card(f, fleets) {
         : 'takes releases directly', f.rule ? ` · rule ${f.rule}` : ''),
     h('div.wrap', { style: 'margin-top:8px' },
       f.upstream
-        ? h('button.btn.sm.primary', { onclick: () => promoteDialog(f, fleets) }, 'promote from ' + f.upstream)
-        : h('button.btn.sm.primary', { onclick: () => releaseDialog(f) }, 'release'),
-      r && r.status === 'halted' ? h('button.btn.sm', { onclick: () => resume(f) }, 'resume') : null,
-      h('button.btn.sm', { title: 'its devices, in Targets', onclick: () => openInTargets(f) }, 'devices'),
-      h('button.btn.sm', { title: 'add devices by id; send expo devices home', onclick: () => membersDrawer(f) }, 'manage'),
-      h('button.btn.sm', { onclick: () => historyDrawer(f) }, 'history'),
-      f.freeze ? h('button.btn.sm', { onclick: () => thaw(f) }, 'thaw') : h('button.btn.sm', { onclick: () => freezeDialog(f) }, 'freeze'),
-      f.temporary ? h('button.btn.sm', { onclick: () => sendHome(f) }, 'send devices home') : null,
-      h('button.btn.sm', { onclick: () => fleetDialog(f, fleets) }, 'edit'),
+        ? h('button.btn.sm.primary', { onclick: () => promoteDialog(f, fleets) }, icon('arrow-big-up-lines', 13), 'promote from ' + f.upstream)
+        : h('button.btn.sm.primary', { onclick: () => releaseDialog(f) }, icon('send', 13), 'release'),
+      r && r.status === 'halted' ? h('button.btn.sm', { onclick: () => resume(f) }, icon('player-play', 13), 'resume') : null,
+      h('button.btn.sm', { title: 'its devices, in Targets', onclick: () => openInTargets(f) }, icon('devices', 13), 'devices'),
+      h('button.btn.sm', { title: 'add devices by id; send expo devices home', onclick: () => membersDrawer(f) }, icon('adjustments-horizontal', 13), 'manage'),
+      h('button.btn.sm', { onclick: () => historyDrawer(f) }, icon('history', 13), 'history'),
+      f.freeze ? h('button.btn.sm', { onclick: () => thaw(f) }, icon('sun', 13), 'thaw') : h('button.btn.sm', { onclick: () => freezeDialog(f) }, icon('snowflake', 13), 'freeze'),
+      f.temporary ? h('button.btn.sm', { onclick: () => sendHome(f) }, icon('home', 13), 'send devices home') : null,
+      h('button.btn.sm', { onclick: () => fleetDialog(f, fleets) }, icon('pencil', 13), 'edit'),
       f.temporary ? null : h('button.btn.sm', { title: 'a new fleet that takes its releases from this one',
         onclick: () => fleetDialog(null, fleets, { upstreamId: f.id }) }, icon('plus', 13), 'next'),
       h('button.btn.sm.danger', { onclick: async () => {
           if (!await ask('Delete fleet', `${f.name}\nIts ${f.members} devices stay, in no fleet.`, { danger: true })) return;
-          try { await qawk.del('/fleets/' + f.id); render(); } catch (e) { fail(e); } } }, 'delete')));
+          try { await qawk.del('/fleets/' + f.id); render(); } catch (e) { fail(e); } } }, icon('trash', 13), 'delete')));
 }
 
 /* The release's orchestrator: the fleet's systems -- a 6hd, its st05 and
@@ -171,8 +171,8 @@ function approvals(list) {
           h('button.btn.sm.primary', {
             disabled: r.requestedBy.toLowerCase() === me().toLowerCase(),
             title: r.requestedBy.toLowerCase() === me().toLowerCase() ? 'four eyes: someone else approves what you asked for' : '',
-            onclick: () => decide(r, true) }, 'approve'),
-          h('button.btn.sm.danger', { onclick: () => decide(r, false) }, 'deny'))
+            onclick: () => decide(r, true) }, icon('check', 13), 'approve'),
+          h('button.btn.sm.danger', { onclick: () => decide(r, false) }, icon('x', 13), 'deny'))
           : h('span.faint', 'needs APPROVE_ROLLOUT')],
     })))));
 }
