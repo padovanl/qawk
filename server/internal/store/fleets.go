@@ -342,6 +342,15 @@ func (s *Store) CompleteRelease(ctx context.Context, id, now int64) error {
 	return err
 }
 
+// ReopenRelease puts a completed release back to active: devices joined its
+// fleet after it had reached everyone, and it is going to them too. Only a
+// completed one: a halted release stays halted until someone decides.
+func (s *Store) ReopenRelease(ctx context.Context, id int64) error {
+	_, err := s.pool.Exec(ctx, `UPDATE fleet_releases SET status = $3, finished_at = NULL
+		WHERE tenant = $1 AND id = $2 AND status = $4`, s.tenant, id, model.ReleaseActive, model.ReleaseCompleted)
+	return err
+}
+
 func (s *Store) MarkWave(ctx context.Context, id, now int64) error {
 	_, err := s.pool.Exec(ctx, `UPDATE fleet_releases SET waves = waves + 1, last_wave_at = $3 WHERE tenant = $1 AND id = $2`,
 		s.tenant, id, now)

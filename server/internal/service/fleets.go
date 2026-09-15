@@ -817,6 +817,18 @@ func (s *Service) deliver(ctx context.Context, f model.Fleet, now int64) error {
 		}
 		return nil
 	}
+	// A completed release with devices still to reach: they joined the fleet
+	// after it had reached everyone -- the crowd put in prod -- and it goes to
+	// them as it went to the others. It is active again while it does: left
+	// "completed", the card read "completed, 16%", which looks like a fault.
+	// It completes again by itself when they all run it.
+	if rel.Status == model.ReleaseCompleted {
+		if err := s.st.ReopenRelease(ctx, rel.ID); err != nil {
+			return err
+		}
+		s.log.Info("fleet release reopened: devices joined after it completed", "fleet", f.Name, "set", ds.Label(), "devices", len(ids))
+		rel.Status = model.ReleaseActive
+	}
 	if f.WavePercent > 0 {
 		// the next wave when this one is done, or has had its time
 		if p.Active > 0 && (rel.LastWaveAt == nil || now-*rel.LastWaveAt < int64(f.WaveTimeoutMinutes)*60_000) {
