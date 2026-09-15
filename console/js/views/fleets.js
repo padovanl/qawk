@@ -347,11 +347,13 @@ async function historyDrawer(f) {
   const build = async () => {
     const d = await qawk.get(`/fleets/${f.id}/releases?limit=100`);
     return d.content.length
-    ? tableOf(['When', 'Release', 'From', 'Status', 'Asked by', 'Decided by', 'Waves'], d.content.map(r => ({
+    // six columns in a drawer 620px wide: who asked and who decided share one
+    ? tableOf(['When', 'Release', 'From', 'Status', 'Who', 'Waves'], d.content.map(r => ({
         cells: [h('span.faint', when(r.requestedAt)), h('span.pill', r.distributionSet), r.from || h('span.faint', 'direct'),
           h('span', statusPill(r), r.forced ? h('span.pill.err', { title: r.reason }, 'forced') : null,
             r.reason ? h('div.faint', { style: 'font-size:11px;white-space:pre-line' }, r.reason) : null),
-          r.requestedBy, r.decidedBy || h('span.faint', '—'), String(r.waves)],
+          h('div', r.requestedBy, r.decidedBy ? h('div.faint', { style: 'font-size:11px' }, 'decided by ' + r.decidedBy) : null),
+          String(r.waves)],
       })))
     : h('div.empty', 'No release yet.');
   };

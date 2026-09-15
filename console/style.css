@@ -1498,6 +1498,10 @@ table.t thead th { z-index: 3; }
    the filter row sits under the header (35px tall) */
 #view table.t thead tr:first-child th { top: -16px; }
 #view table.t thead tr.filters th { top: 19px; }
+/* a drawer is 620px: its tables are tighter, and a header may wrap rather
+   than push the last column out of sight */
+#drawer table.t th, #drawer table.t td { padding: 8px 9px; }
+#drawer table.t th { white-space: normal; }
 table.t thead tr:last-child th { box-shadow: 0 1px 0 var(--line), 0 6px 12px -10px rgba(0, 0, 0, .5); }
 table.t td { padding: 10px 12px; }
 table.t tbody tr { transition: background .12s; }
