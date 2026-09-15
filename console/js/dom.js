@@ -134,6 +134,9 @@ function morph(from, to) {
     if (from.nodeValue !== to.nodeValue) from.nodeValue = to.nodeValue;
     return from;
   }
+  // what a library draws and moves (data-own: the dashboard's grid) is left to
+  // it; whoever built it merges what goes inside
+  if (to.hasAttribute('data-own')) return from;
   if (to.hasAttribute('data-pending') && !from.hasAttribute('data-pending')) return from;
   for (const { name } of [...from.attributes]) if (!to.hasAttribute(name)) from.removeAttribute(name);
   for (const { name, value } of [...to.attributes]) if (from.getAttribute(name) !== value) from.setAttribute(name, value);

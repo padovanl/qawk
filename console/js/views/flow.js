@@ -70,7 +70,8 @@ function makeEditor() {
       e('div', { className: 'rfc-top' },
         e('span', { className: 'rfc-ico', dangerouslySetInnerHTML: { __html: data.icon } }),
         e('div', { className: 'rfc-t' }, e('b', null, data.comp), e('span', null, data.count)),
-        e('span', { className: 'rfc-step', title: 'when it is updated' }, data.done ? '✓' : data.step)),
+        e('span', { className: 'rfc-step', title: 'when it is updated' }, data.done ? '✓' : data.step),
+        e('button', { className: 'rfc-x nodrag', title: 'take it out: not updated by this manifest', onClick: () => data.onDel(data.comp) }, '×')),
       e('div', { className: 'rfc-match', title: data.match }, data.match),
       e('select', { className: 'rfc-ds nodrag', value: data.ds || '', onChange: ev => data.onDs(data.comp, Number(ev.target.value) || '') },
         e('option', { value: '' }, '— which set —'),
@@ -91,7 +92,9 @@ function makeEditor() {
     const [play, setPlay] = useState(null);
     const [yin, setYin] = useState(null);
     const [sliding, setSliding] = useState(false);
-    const box = useRef(null), first = useRef(true);
+    // what to draw once the type is set: the manifest opened, or a YAML applied
+    // that names another type; a new manifest starts empty
+    const box = useRef(null), pending = useRef(m && m.components && m.components.length ? m.components : null);
 
     useEffect(() => {
       qawk.get(`/systemtypes/${type.id}/systems`).then(r => {
@@ -107,13 +110,9 @@ function makeEditor() {
       const es = [];
       if (arrows) for (const a of comps) for (const b of comps) if (at(b) === at(a) + 1) es.push(edge(a.componentType, b.componentType));
       setNodes(layout(ns, es)); setEdges(es);
-      setTimeout(() => rf.fitView({ padding: 0.38, duration: 700 }), 60);
+      setTimeout(() => rf.fitView({ padding: 0.38, duration: 700, maxZoom: 1 }), 60);
     }, []);
-    useEffect(() => {
-      if (first.current && m && m.components && m.components.length) build(m.components, true);
-      else build(type.components.map(c => ({ componentType: c.componentType, order: 10 })), false);
-      first.current = false;
-    }, [type.id]);
+    useEffect(() => { build(pending.current || [], true); pending.current = null; }, [type.id]);
 
     const lv = useMemo(() => levels(nodes.map(n => n.id), edges), [nodes, edges]);
     const steps = useMemo(() => {
@@ -122,11 +121,15 @@ function makeEditor() {
       return out.filter(Boolean);
     }, [nodes, lv]);
     const onDs = useCallback((comp, v) => setDs(d => ({ ...d, [comp]: v })), []);
+    const onDel = useCallback(comp => {
+      setNodes(ns => ns.filter(n => n.id !== comp));
+      setEdges(es => es.filter(x => x.source !== comp && x.target !== comp));
+    }, []);
     const view = nodes.map(n => {
       const l = lv.get(n.id) || 0, t = type.components.find(c => c.componentType === n.id) || {};
       return { ...n, data: { comp: n.id, hue: hue(n.id), icon: icon(ICON[n.id] || 'cpu', 20).outerHTML, match: t.match || '',
         count: dev.total[n.id] ? `${dev.per[n.id] > 1 ? `×${dev.per[n.id]} per system · ` : ''}${fmt(dev.total[n.id])} devices` : '',
-        step: `${nth(l + 1)}`, ds: ds[n.id], sets, onDs,
+        step: `${nth(l + 1)}`, ds: ds[n.id], sets, onDs, onDel,
         lit: play !== null && play === l, done: play !== null && (play === 'end' || l < play) } };
     });
     const edgesView = edges.map(x => {
@@ -143,10 +146,16 @@ function makeEditor() {
       setSliding(true); setNodes(ns => layout(ns, edges));
       setTimeout(() => { rf.fitView({ padding: 0.38, duration: 600 }); setTimeout(() => setSliding(false), 650); }, 30);
     };
+    // dropped: where it was let go; clicked: beside the others
     const add = (comp, where) => {
-      const r = box.current.getBoundingClientRect();
-      const p = rf.screenToFlowPosition(where || { x: r.left + r.width / 2, y: r.top + r.height / 2 });
-      setNodes(ns => ns.some(n => n.id === comp) ? ns : [...ns, { id: comp, type: 'comp', position: { x: p.x - NW / 2, y: p.y - NH / 2 }, data: {} }]);
+      const p = where && rf.screenToFlowPosition(where);
+      setNodes(ns => {
+        if (ns.some(n => n.id === comp)) return ns;
+        const last = ns.reduce((a, n) => (!a || n.position.x > a.position.x ? n : a), null);
+        const at = p ? { x: p.x - NW / 2, y: p.y - NH / 2 } : last ? { x: last.position.x + NW + 70, y: last.position.y } : { x: 0, y: 0 };
+        return [...ns, { id: comp, type: 'comp', position: at, data: {} }];
+      });
+      if (!where || !nodes.length) setTimeout(() => rf.fitView({ padding: 0.38, duration: 500, maxZoom: 1 }), 40);
     };
     const run = () => {
       if (!steps.length) return;
@@ -177,10 +186,10 @@ function makeEditor() {
         });
         if (!comps.length) throw new Error('no component_types in it');
         const t = types.find(x => (y.system_types_compatible || []).includes(x.name));
-        if (t && t.id !== type.id) { first.current = true; setType(t); }
         if (y.name) setName(y.name);
         setDs(d => ({ ...d, ...Object.fromEntries(comps.map(c => [c.componentType, c.distributionSetId])) }));
-        build(comps, true); setYin(null);
+        if (t && t.id !== type.id) { pending.current = comps; setType(t); } else build(comps, true);
+        setYin(null);
       } catch (err) { toast('That YAML does not read', err.message.split('\n')[0], 'err'); }
     };
     const save = async () => {
@@ -198,6 +207,7 @@ function makeEditor() {
     };
 
     const unused = type.components.map(c => c.componentType).filter(c => !nodes.some(n => n.id === c));
+    const grab = c => ev => { ev.dataTransfer.setData('application/x-comp', c); ev.dataTransfer.effectAllowed = 'move'; };
     const totalDev = nodes.reduce((a, n) => a + (dev.total[n.id] || 0), 0);
     return e('div', { className: 'rfx-shell' },
       e('div', { className: 'rfx-head' },
@@ -218,11 +228,21 @@ function makeEditor() {
           e(Panel, { position: 'top-left' }, e('div', { className: 'rfx-tools' },
             e('button', { className: 'rfx-play', onClick: run, disabled: play !== null || !steps.length }, play !== null ? 'playing…' : '▶  Play the order'),
             e('button', { className: 'rfx-tool', onClick: tidy }, 'Auto layout'))),
-          unused.length ? e(Panel, { position: 'top-right' }, e('div', { className: 'rfx-pal' },
-            e('span', null, 'Not in it yet'),
+          nodes.length && unused.length ? e(Panel, { position: 'top-right' }, e('div', { className: 'rfx-pal' },
+            e('span', null, 'Add'),
             unused.map(c => e('button', { key: c, className: 'rfx-chip', draggable: true, style: { '--hue': hue(c) }, title: 'click, or drag onto the canvas',
-              onDragStart: ev => { ev.dataTransfer.setData('application/x-comp', c); ev.dataTransfer.effectAllowed = 'move'; },
-              onClick: () => add(c) }, '+ ' + c)))) : null)),
+              onDragStart: grab(c), onClick: () => add(c) }, '+ ' + c)))) : null),
+        // a new manifest: nothing on the canvas until it is brought in
+        nodes.length ? null : e('div', { className: 'rfx-empty' },
+          e('b', null, 'What does this manifest update?'),
+          e('span', null, `Drag in the components of a ${type.name} it updates, or click them. Only those are updated; the others stay as they are.`),
+          e('div', { className: 'rfx-offer' }, unused.map(c => {
+            const t = type.components.find(x => x.componentType === c) || {};
+            return e('button', { key: c, className: 'rfx-pick', draggable: true, style: { '--hue': hue(c) }, onDragStart: grab(c), onClick: () => add(c) },
+              e('span', { className: 'rfc-ico', dangerouslySetInnerHTML: { __html: icon(ICON[c] || 'cpu', 20).outerHTML } }),
+              e('b', null, c),
+              e('span', null, dev.total[c] ? `${dev.per[c] > 1 ? `×${dev.per[c]} per system · ` : ''}${fmt(dev.total[c])} devices` : t.match || ''));
+          })))),
         e('div', { className: 'rfx-side' },
           e('label', { className: 'f' }, 'Name', e('input', { type: 'text', value: name, placeholder: `${type.name}-${new Date().toISOString().slice(0, 7)}`, onChange: ev => setName(ev.target.value) })),
           e('label', { className: 'f' }, 'For systems of type', e('select', { value: type.id, onChange: ev => setType(types.find(t => t.id === Number(ev.target.value))) },

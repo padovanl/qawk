@@ -4,7 +4,7 @@ import { bars } from '../bars.js';
 import { hasBatch, hasFeature, statesOf } from '../batch.js';
 import { drawer, refreshDrawer } from '../chrome.js';
 import { fleetBadge, typeBadge } from '../chips.js';
-import { h, icon } from '../dom.js';
+import { h, icon, patch } from '../dom.js';
 import { VIEWS, drawNav, go, render } from '../router.js';
 import { serverInfo } from '../server.js';
 import { ago } from '../util.js';
@@ -105,12 +105,15 @@ function targetOf(a) {
  * Eleven widgets are a lot to take in at once. The page starts BASIC -- the
  * channels, what is moving, what needs someone, the devices by update -- and
  * FULL is one click away. "customize" goes further: the widgets sit on a
- * twelve-column grid; each is dragged by its bar -- SortableJS (MIT,
- * js/vendor): the widget itself follows the pointer and the others make room
- * as it goes -- and resized by pulling its right edge, from a quarter of the
- * row to all of it; the gallery puts widgets on the page and takes them off.
- * What someone arranges stays in their browser, for them. While a widget is
- * moved or resized the live beat waits: it would put everything back. */
+ * twelve-column grid -- Gridstack (MIT, js/vendor) -- and one is picked up by
+ * its bar and follows the pointer; where it would land is drawn as it goes,
+ * the others make room, and everything slides up into the gaps, so a short
+ * widget leaves no hole under it. A side pulls it wider or narrower, a column
+ * at a time; its height is its content's. The gallery puts widgets on the
+ * page and takes them off. What someone arranges stays in their browser, for
+ * them. While a widget is moved or resized the live beat waits: it would put
+ * everything back. The live merge leaves the grid to Gridstack (data-own);
+ * each widget's content is merged into its place here. */
 const WIDGETS = {           // id: [name, icon, what it shows]
   channels: ['Channels', 'route', 'dev → beta → prod: each channel with its release, how far it got, what waits'],
   inprog: ['In progress', 'rocket', 'every deployment going on: channel releases, rollouts, the orchestrator, sets given by hand'],
@@ -124,106 +127,120 @@ const WIDGETS = {           // id: [name, icon, what it shows]
   activity: ['Recent activity', 'history', 'who changed what, from the audit log'],
   server: ['Server', 'server-2', 'which server, what it speaks, how the devices poll'],
 };
-const SIZES = [3, 4, 6, 8, 12];
+const COLS = 12;
 const SIZE_WORD = { 3: 'a quarter', 4: 'a third', 6: 'half', 8: 'two thirds', 12: 'full width' };
+const sizeWord = w => SIZE_WORD[w] || `${w} of ${COLS} columns`;
 const PRESETS = {
   basic: [['channels', 8], ['attention', 4], ['inprog', 8], ['update', 4]],
   full: [['channels', 8], ['attention', 4], ['inprog', 8], ['centres', 4], ['update', 4], ['types', 4],
     ['catalogue', 4], ['orchestrator', 6], ['rollouts', 6], ['activity', 8], ['server', 4]],
 };
-const LAYOUT_KEY = 'qawk-dash-layout';
-const fromPreset = p => ({ order: PRESETS[p].map(([id]) => id), size: Object.fromEntries(PRESETS[p]), preset: p });
+// a preset as places on the grid: left to right, a new row when one is full;
+// the rows slide up to meet once the heights are known
+function pack(list) {
+  const pos = {};
+  let x = 0, y = 0;
+  for (const [id, w] of list) {
+    if (x + w > COLS) { x = 0; y += 1; }
+    pos[id] = { x, y: y * 100, w };
+    x += w;
+  }
+  return pos;
+}
+const LAYOUT_KEY = 'qawk-dash-grid';
+const OLD_KEY = 'qawk-dash-layout';          // an order and widths, before the grid
+const fromPreset = p => ({ pos: pack(PRESETS[p]), preset: p });
+const defaultW = id => (PRESETS.full.find(([k]) => k === id) || [0, 6])[1];
 function loadLayout() {
   try {
     const v = JSON.parse(localStorage.getItem(LAYOUT_KEY));
-    if (v && Array.isArray(v.order)) {
-      const size = {};
-      for (const [k, n] of Object.entries(v.size || {})) if (WIDGETS[k] && SIZES.includes(n)) size[k] = n;
-      return { order: v.order.filter(id => WIDGETS[id]), size, preset: v.preset || 'custom' };
+    if (v && v.pos) {
+      const pos = {};
+      for (const [k, q] of Object.entries(v.pos)) {
+        if (WIDGETS[k] && q && [q.x, q.y, q.w].every(Number.isFinite)) pos[k] = { x: q.x, y: q.y, w: q.w, h: q.h };
+      }
+      return { pos, preset: v.preset || 'custom' };
+    }
+    const o = JSON.parse(localStorage.getItem(OLD_KEY));
+    if (o && Array.isArray(o.order)) {
+      return { pos: pack(o.order.filter(id => WIDGETS[id]).map(id => [id, (o.size || {})[id] || defaultW(id)])), preset: o.preset || 'custom' };
     }
   } catch (_) { /* no storage: the default */ }
   return fromPreset('basic');
 }
-const L = Object.assign({ edit: false, dragging: false, resizing: false }, loadLayout());
-const sizeOf = id => L.size[id] || (PRESETS.full.find(([k]) => k === id) || [0, 6])[1];
+const L = Object.assign({ edit: false, dragging: false }, loadLayout());
 function saveLayout() {
-  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify({ order: L.order, size: L.size, preset: L.preset })); } catch (_) { /* per viewer only */ }
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify({ pos: L.pos, preset: L.preset })); } catch (_) { /* per viewer only */ }
 }
 function redraw() {
   const be = document.getElementById('bar-extra');
   if (be && VIEWS.dash.bar) be.replaceChildren(...VIEWS.dash.bar());
   render();
 }
-function usePreset(p) { Object.assign(L, fromPreset(p)); saveLayout(); redraw(); refreshDrawer(); }
+function usePreset(p) { Object.assign(L, fromPreset(p)); G.reset = true; saveLayout(); redraw(); refreshDrawer(); }
 function toggleWidget(id) {
-  L.order = L.order.includes(id) ? L.order.filter(x => x !== id) : [...L.order, id];
+  if (L.pos[id]) delete L.pos[id]; else L.pos[id] = { x: 0, y: 10000, w: defaultW(id) };
   L.preset = 'custom'; saveLayout(); redraw(); refreshDrawer();
 }
 
-// Moving: SortableJS on the grid, and only while customizing. Loaded when
-// first needed -- nobody who only looks pays for it.
-async function arrange() {
+// The grid: made once per visit of the page. Every live beat merges each
+// widget's content into its place and lets it take the height it needs.
+const G = { grid: null, el: null, items: new Map(), reset: false };
+function keep() {
+  if (!G.grid || G.grid.getColumn() !== COLS) return;      // a narrow screen rearranges for itself
+  for (const n of G.grid.save(false)) if (n.id && L.pos[n.id]) L.pos[n.id] = { x: n.x, y: n.y, w: n.w, h: n.h };
+  saveLayout();
+}
+const tools = id => (L.edit ? h('div.dw-tools', { title: 'drag to move it' },
+  h('span.dw-grip', icon('grip-vertical', 16)), h('span.dw-name', WIDGETS[id][0]),
+  h('span.dw-size', sizeWord((L.pos[id] || {}).w)),
+  h('button.dw-hide', { title: 'take it off the page', onclick: () => toggleWidget(id) }, icon('eye-off', 15))) : null);
+
+function sync(W) {
   const el = document.querySelector('#view .dgrid');
-  if (!el) return;
-  if (!L.edit) { if (el.__sortable) { el.__sortable.destroy(); el.__sortable = null; } return; }
-  if (el.__sortable) return;
-  const Sortable = (await import('../vendor/sortable.esm.js')).default;
-  if (el.__sortable || !L.edit) return;
-  el.__sortable = Sortable.create(el, {
-    draggable: '.dw', handle: '.dw-tools', filter: '.dw-hide', preventOnFilter: false,
-    animation: 220, easing: 'cubic-bezier(.2, .8, .2, 1)',
-    forceFallback: true, fallbackOnBody: true, fallbackTolerance: 4,
-    ghostClass: 'dw-ghost', chosenClass: 'dw-chosen', fallbackClass: 'dw-flying',
-    onStart: () => { L.dragging = true; },
-    onEnd: () => {
-      L.dragging = false;
-      L.order = [...el.children].map(n => n.dataset.id).filter(Boolean);
-      L.preset = 'custom'; saveLayout(); redraw();
-    },
-  });
+  if (!el || !window.GridStack || L.dragging) return;
+  if (G.el !== el || G.reset) {
+    if (G.grid) G.grid.destroy(false);
+    el.replaceChildren(); G.items.clear();
+    G.el = el; G.reset = false;
+    G.grid = window.GridStack.init({
+      column: COLS, cellHeight: 8, margin: 8, float: false, animate: true, sizeToContent: true,
+      staticGrid: !L.edit, draggable: { handle: '.dw-tools' }, resizable: { handles: 'e, w', autoHide: false },
+      columnOpts: { breakpoints: [{ w: 720, c: 1 }, { w: 1150, c: 6 }] },
+    }, el);
+    G.grid.on('dragstart resizestart', () => { L.dragging = true; });
+    G.grid.on('dragstop resizestop', () => { L.dragging = false; L.preset = 'custom'; keep(); redraw(); });
+    G.grid.on('change', () => keep());
+    G.grid.on('resize', (_, item) => {
+      const t = item.querySelector('.dw-size');
+      if (t && item.gridstackNode) t.textContent = sizeWord(item.gridstackNode.w);
+    });
+  }
+  if (G.grid.opts.staticGrid !== !L.edit) G.grid.setStatic(!L.edit);
+  const ids = Object.keys(L.pos).filter(id => W[id]);
+  G.grid.batchUpdate();
+  for (const [id, item] of G.items) if (!ids.includes(id)) { G.grid.removeWidget(item); G.items.delete(id); }
+  for (const id of ids) {
+    const content = h('div', h('div.dw', { 'data-id': id }, tools(id), W[id]));
+    let item = G.items.get(id);
+    if (item) patch(item.querySelector('.grid-stack-item-content'), content);
+    else {
+      // filled before it is made a widget: Gridstack measures it at once
+      const q = L.pos[id];
+      item = h('div.grid-stack-item', { 'data-id': id }, h('div.grid-stack-item-content', ...content.childNodes));
+      el.append(item);
+      G.grid.makeWidget(item, { id, x: q.x, y: q.y, w: Math.min(q.w, COLS), h: q.h || 24, minW: 3 });
+      G.items.set(id, item);
+    }
+  }
+  G.grid.batchUpdate(false);
+  for (const item of G.items.values()) G.grid.resizeToContent(item);
 }
-
-// Resizing: pull the right edge; the width snaps to a quarter, a third, half,
-// two thirds or the whole row, and changes as the pointer goes.
-function startResize(e, id) {
-  e.preventDefault(); e.stopPropagation();
-  const item = e.currentTarget.closest('.dw');
-  const gridEl = item.parentElement;
-  const gap = parseFloat(getComputedStyle(gridEl).columnGap) || 16;
-  const col = (gridEl.getBoundingClientRect().width + gap) / 12;
-  const left = item.getBoundingClientRect().left;
-  const tag = item.querySelector('.dw-size');
-  let n = sizeOf(id);
-  L.resizing = true; item.classList.add('resizing');
-  const move = ev => {
-    const want = (ev.clientX - left + gap) / col;
-    const m = SIZES.reduce((a, b) => (Math.abs(b - want) < Math.abs(a - want) ? b : a));
-    if (m === n) return;
-    item.classList.replace('w' + n, 'w' + m); n = m;
-    if (tag) tag.textContent = SIZE_WORD[n];
-  };
-  const up = () => {
-    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
-    L.resizing = false; item.classList.remove('resizing');
-    L.size[id] = n; L.preset = 'custom'; saveLayout(); redraw();
-  };
-  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
-}
-
-function grid(W) {
-  return h('div.dgrid' + (L.edit ? '.editing' : ''), { 'data-key': 'grid' },
-    L.order.filter(id => W[id]).map(id => h('div.dw.w' + sizeOf(id), { 'data-key': 'w-' + id, 'data-id': id },
-      L.edit ? h('div.dw-tools', { title: 'drag to move it' },
-        h('span.dw-grip', icon('grip-vertical', 16)), h('span.dw-name', WIDGETS[id][0]),
-        h('span.dw-size', SIZE_WORD[sizeOf(id)]),
-        h('button.dw-hide', { title: 'take it off the page', onclick: () => toggleWidget(id) }, icon('eye-off', 15))) : null,
-      W[id],
-      L.edit ? h('div.dw-resize', { title: 'pull to resize', onpointerdown: e => startResize(e, id) }) : null)));
-}
+const grid = () => h('div.dgrid.grid-stack', { 'data-key': 'grid', 'data-own': '' });
 
 // The gallery: every widget, what it shows, on the page or not.
 function gallery() {
-  const on = new Set(L.order);
+  const on = new Set(Object.keys(L.pos));
   return h('div.wgal',
     h('div.wgal-top', h('span.dtray-k', 'Start from'),
       h('div.seg', ['basic', 'full'].map(p => h('button.btn.sm' + (L.preset === p ? '.primary' : ''),
@@ -240,7 +257,7 @@ const openGallery = () => drawer('Widgets', gallery(), () => gallery());
 function editTray() {
   return h('div.dtray', { 'data-key': 'tray' },
     h('span.dtray-k', 'Customizing'),
-    h('span.faint', 'drag a widget by its bar · pull its right edge to resize it'),
+    h('span.faint', 'drag a widget by its bar: the others make room and the gaps close · pull a side to make it wider or narrower'),
     h('span.grow'),
     h('button.btn.sm', { onclick: openGallery }, icon('layout-grid', 14), 'widgets'),
     h('button.btn.sm', { title: 'back to Basic', onclick: () => usePreset('basic') }, 'reset'),
@@ -285,7 +302,7 @@ VIEWS.dash = {
     h('button.btn.sm' + (L.edit ? '.primary' : ''), { title: 'move, resize, add and remove widgets',
       onclick: () => { L.edit = !L.edit; redraw(); } }, icon('adjustments-horizontal', 14), 'customize')],
   async render(root) {
-    if (L.dragging || L.resizing) throw new Error('the layout is being changed');
+    if (L.dragging) throw new Error('the layout is being changed');
     const count = q => get('/targets?limit=1&q=' + fiql(q)).then(r => r.total);
     const cutoffP = overdueCutoff();
     const [tg, totals, installedInSync, cutoff, over, deps, fails, fleets, centres, sdeps, stypes, ros, dss, sms, audit, types] =
@@ -372,7 +389,7 @@ VIEWS.dash = {
           'building-store', cl.length ? 'info' : 'mute'), () => go('centres')) : null),
       L.edit ? editTray() : null,
       grid(W)));
-    setTimeout(arrange, 60);
+    setTimeout(() => sync(W), 0);
   },
 };
 
