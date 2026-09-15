@@ -39,9 +39,10 @@ let Editor = null;
 function makeEditor() {
   const R = window.React, RF = window.ReactFlow, e = R.createElement;
   const { useState, useMemo, useCallback, useEffect, useRef } = R;
-  const { ReactFlow, Background, Controls, MiniMap, Handle, Position, MarkerType, Panel, useReactFlow, useNodesState, useEdgesState } = RF;
+  const { ReactFlow, Background, Controls, MiniMap, Handle, Position, MarkerType, Panel, useReactFlow, useNodesState, useEdgesState,
+    BaseEdge, EdgeLabelRenderer, getSmoothStepPath } = RF;
   const accent = () => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#3ba9a1';
-  const edge = (a, b) => ({ id: `${a}->${b}`, source: a, target: b, type: 'smoothstep', pathOptions: { borderRadius: 18 },
+  const edge = (a, b) => ({ id: `${a}->${b}`, source: a, target: b, type: 'first',
     markerEnd: { type: MarkerType.ArrowClosed, width: 20, height: 20, color: accent() } });
   const levels = (ids, es) => {
     const lv = new Map(ids.map(i => [i, 0]));
@@ -65,7 +66,8 @@ function makeEditor() {
   };
 
   function CompNode({ data, selected }) {
-    return e('div', { className: 'rfc' + (data.lit ? ' lit' : '') + (data.done ? ' done' : '') + (selected ? ' sel' : ''), style: { '--hue': data.hue } },
+    return e('div', { className: 'rfc' + (data.lit ? ' lit' : '') + (data.done ? ' done' : '') + (selected ? ' sel' : '') + (data.ds ? '' : ' need'),
+      style: { '--hue': data.hue } },
       e(Handle, { type: 'source', position: Position.Top, className: 'rfh' }),
       e('div', { className: 'rfc-top' },
         e('span', { className: 'rfc-ico', dangerouslySetInnerHTML: { __html: data.icon } }),
@@ -74,12 +76,24 @@ function makeEditor() {
         e('button', { className: 'rfc-x nodrag', title: 'take it out: not updated by this manifest', onClick: () => data.onDel(data.comp) }, '×')),
       e('div', { className: 'rfc-match', title: data.match }, data.match),
       e('select', { className: 'rfc-ds nodrag', value: data.ds || '', onChange: ev => data.onDs(data.comp, Number(ev.target.value) || '') },
-        e('option', { value: '' }, '— which set —'),
+        e('option', { value: '' }, '— which set? —'),
         data.sets.map(s => e('option', { key: s.id, value: s.id }, `${s.name} ${s.version}`))),
       e('div', { className: 'rfc-bar' }, e('i')),
       e(Handle, { type: 'target', position: Position.Bottom, className: 'rfh' }));
   }
   const nodeTypes = { comp: CompNode };
+  // an arrow: "first", with a cross in its middle to take it away -- shown
+  // while the pointer is on it, or when it is selected
+  function FirstEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, style, selected, data }) {
+    const [path, lx, ly] = getSmoothStepPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, borderRadius: 18 });
+    return e(R.Fragment, null,
+      e(BaseEdge, { id, path, markerEnd, style, interactionWidth: 24 }),
+      e(EdgeLabelRenderer, null, e('button', {
+        className: 'rfe-x nodrag nopan' + (selected || (data && data.hover) ? ' on' : ''),
+        style: { transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` },
+        title: 'take this arrow away', onClick: () => data && data.onDel && data.onDel(id) }, '×')));
+  }
+  const edgeTypes = { first: FirstEdge };
 
   return function Ed({ m, types, sets, close }) {
     const rf = useReactFlow();
@@ -92,6 +106,19 @@ function makeEditor() {
     const [play, setPlay] = useState(null);
     const [yin, setYin] = useState(null);
     const [sliding, setSliding] = useState(false);
+    // undo and redo: what the canvas was before each change
+    const cur = useRef({ nodes: [], edges: [] }), past = useRef([]), future = useRef([]);
+    const [, bump] = useState(0);
+    const shot = () => ({ nodes: cur.current.nodes.map(n => ({ id: n.id, type: n.type, position: { ...n.position }, data: {} })), edges: cur.current.edges });
+    const snap = () => { past.current.push(shot()); if (past.current.length > 60) past.current.shift(); future.current = []; bump(x => x + 1); };
+    const travel = (from, to) => {
+      const s = from.current.pop();
+      if (!s) return;
+      to.current.push(shot());
+      setNodes(s.nodes); setEdges(s.edges); bump(x => x + 1);
+    };
+    const undo = () => travel(past, future), redo = () => travel(future, past);
+    const [hoverEdge, setHoverEdge] = useState(null);
     // what to draw once the type is set: the manifest opened, or a YAML applied
     // that names another type; a new manifest starts empty
     const box = useRef(null), pending = useRef(m && m.components && m.components.length ? m.components : null);
@@ -114,6 +141,16 @@ function makeEditor() {
     }, []);
     useEffect(() => { build(pending.current || [], true); pending.current = null; }, [type.id]);
 
+    cur.current = { nodes, edges };
+    useEffect(() => {
+      const key = ev => {
+        if (!(ev.ctrlKey || ev.metaKey) || /INPUT|TEXTAREA|SELECT/.test((ev.target || {}).nodeName || '')) return;
+        const k = ev.key.toLowerCase();
+        if (k === 'z' && !ev.shiftKey) { ev.preventDefault(); undo(); } else if ((k === 'z' && ev.shiftKey) || k === 'y') { ev.preventDefault(); redo(); }
+      };
+      window.addEventListener('keydown', key);
+      return () => window.removeEventListener('keydown', key);
+    }, []);
     const lv = useMemo(() => levels(nodes.map(n => n.id), edges), [nodes, edges]);
     const steps = useMemo(() => {
       const out = [];
@@ -122,6 +159,7 @@ function makeEditor() {
     }, [nodes, lv]);
     const onDs = useCallback((comp, v) => setDs(d => ({ ...d, [comp]: v })), []);
     const onDel = useCallback(comp => {
+      snap();
       setNodes(ns => ns.filter(n => n.id !== comp));
       setEdges(es => es.filter(x => x.source !== comp && x.target !== comp));
     }, []);
@@ -132,22 +170,30 @@ function makeEditor() {
         step: `${nth(l + 1)}`, ds: ds[n.id], sets, onDs, onDel,
         lit: play !== null && play === l, done: play !== null && (play === 'end' || l < play) } };
     });
+    const delEdge = id => { snap(); setEdges(es => es.filter(x => x.id !== id)); };
     const edgesView = edges.map(x => {
       const hot = play !== null && play !== 'end' && lv.get(x.target) === play;
-      return { ...x, animated: hot, className: hot ? 'hot' : '' };
+      return { ...x, type: 'first', animated: hot, className: hot ? 'hot' : '', data: { onDel: delEdge, hover: hoverEdge === x.id } };
     });
 
-    const onConnect = useCallback(c => setEdges(es => {
-      if (c.source === c.target || es.some(x => x.source === c.source && x.target === c.target)) return es;
-      if (reaches(es, c.target, c.source)) { setTimeout(() => toast('That would make a loop', `${c.target} already comes before ${c.source}`, 'err')); return es; }
-      return [...es, edge(c.source, c.target)];
-    }), []);
+    const onConnect = c => {
+      const es = cur.current.edges;
+      if (c.source === c.target || es.some(x => x.source === c.source && x.target === c.target)) return;
+      if (reaches(es, c.target, c.source)) { toast('That would make a loop', `${c.target} already comes before ${c.source}`, 'err'); return; }
+      snap(); setEdges([...es, edge(c.source, c.target)]);
+    };
+    // a deletion by keyboard (Backspace, Delete) can be undone like any other
+    const nodesChange = ch => { if (ch.some(c => c.type === 'remove')) snap(); onNodesChange(ch); };
+    const edgesChange = ch => { if (ch.some(c => c.type === 'remove')) snap(); onEdgesChange(ch); };
     const tidy = () => {
+      snap();
       setSliding(true); setNodes(ns => layout(ns, edges));
       setTimeout(() => { rf.fitView({ padding: 0.38, duration: 600 }); setTimeout(() => setSliding(false), 650); }, 30);
     };
     // dropped: where it was let go; clicked: beside the others
     const add = (comp, where) => {
+      if (cur.current.nodes.some(n => n.id === comp)) return;
+      snap();
       const p = where && rf.screenToFlowPosition(where);
       setNodes(ns => {
         if (ns.some(n => n.id === comp)) return ns;
@@ -185,6 +231,7 @@ function makeEditor() {
           return { componentType: k, distributionSetId: s ? s.id : '', order: Number(((v || {}).update_strategy || {}).order) || 10 };
         });
         if (!comps.length) throw new Error('no component_types in it');
+        snap();
         const t = types.find(x => (y.system_types_compatible || []).includes(x.name));
         if (y.name) setName(y.name);
         setDs(d => ({ ...d, ...Object.fromEntries(comps.map(c => [c.componentType, c.distributionSetId])) }));
@@ -212,14 +259,16 @@ function makeEditor() {
     return e('div', { className: 'rfx-shell' },
       e('div', { className: 'rfx-head' },
         e('span', { className: 'rfx-title', dangerouslySetInnerHTML: { __html: icon('sitemap', 18).outerHTML + esc(m && m.id ? `Orchestrator · ${m.name}` : 'Orchestrator · a new manifest') } }),
-        e('span', { className: 'rfx-legend' }, 'an arrow means "first": pull one from a component\'s top dot to the one that comes after'),
+        e('span', { className: 'rfx-legend' }, 'an arrow means "first": pull one from a component\'s top dot to the one that comes after · × on an arrow takes it away · Ctrl+Z undoes'),
         e('span', { className: 'grow' }),
         e('button', { className: 'btn sm', onClick: close }, '×')),
       e('div', { className: 'rfx-main' },
         e('div', { className: 'rfx-stage' + (sliding ? ' sliding' : ''), ref: box,
           onDragOver: ev => { ev.preventDefault(); ev.dataTransfer.dropEffect = 'move'; },
           onDrop: ev => { ev.preventDefault(); const c = ev.dataTransfer.getData('application/x-comp'); if (c) add(c, { x: ev.clientX, y: ev.clientY }); } },
-        e(ReactFlow, { nodes: view, edges: edgesView, nodeTypes, onNodesChange, onEdgesChange, onConnect,
+        e(ReactFlow, { nodes: view, edges: edgesView, nodeTypes, edgeTypes, onNodesChange: nodesChange, onEdgesChange: edgesChange, onConnect,
+          onNodeDragStart: snap, onEdgeMouseEnter: (_, x) => setHoverEdge(x.id), onEdgeMouseLeave: () => setHoverEdge(null),
+          snapToGrid: true, snapGrid: [10, 10],
           deleteKeyCode: ['Backspace', 'Delete'], minZoom: 0.3, maxZoom: 1.8, proOptions: { hideAttribution: true },
           connectionLineStyle: { stroke: accent(), strokeWidth: 2.5, strokeDasharray: '7 6' }, fitView: true },
           e(Background, { variant: 'dots', gap: 22, size: 1.4, color: 'rgba(160,190,200,.22)' }),
@@ -227,7 +276,11 @@ function makeEditor() {
           e(Controls, { showInteractive: false }),
           e(Panel, { position: 'top-left' }, e('div', { className: 'rfx-tools' },
             e('button', { className: 'rfx-play', onClick: run, disabled: play !== null || !steps.length }, play !== null ? 'playing…' : '▶  Play the order'),
-            e('button', { className: 'rfx-tool', onClick: tidy }, 'Auto layout'))),
+            e('button', { className: 'rfx-tool', onClick: tidy }, 'Auto layout'),
+            e('button', { className: 'rfx-tool ico', onClick: undo, disabled: !past.current.length, title: 'undo (Ctrl+Z)',
+              dangerouslySetInnerHTML: { __html: icon('arrow-back-up', 17).outerHTML } }),
+            e('button', { className: 'rfx-tool ico', onClick: redo, disabled: !future.current.length, title: 'redo (Ctrl+Shift+Z)',
+              dangerouslySetInnerHTML: { __html: icon('arrow-forward-up', 17).outerHTML } }))),
           nodes.length && unused.length ? e(Panel, { position: 'top-right' }, e('div', { className: 'rfx-pal' },
             e('span', null, 'Add'),
             unused.map(c => e('button', { key: c, className: 'rfx-chip', draggable: true, style: { '--hue': hue(c) }, title: 'click, or drag onto the canvas',

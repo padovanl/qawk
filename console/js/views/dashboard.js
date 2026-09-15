@@ -2,7 +2,7 @@ import { S, fiql, get, qawk } from '../api.js';
 import { PHASE_WORDS, phasesOf } from '../badges.js';
 import { bars } from '../bars.js';
 import { hasBatch, hasFeature, statesOf } from '../batch.js';
-import { drawer, refreshDrawer } from '../chrome.js';
+import { ask, toast } from '../chrome.js';
 import { fleetBadge, typeBadge } from '../chips.js';
 import { h, icon, patch } from '../dom.js';
 import { VIEWS, drawNav, go, render } from '../router.js';
@@ -170,17 +170,55 @@ function loadLayout() {
 }
 const L = Object.assign({ edit: false, dragging: false }, loadLayout());
 function saveLayout() {
+  if (L.edit) return;                         // a draft until Save
   try { localStorage.setItem(LAYOUT_KEY, JSON.stringify({ pos: L.pos, preset: L.preset })); } catch (_) { /* per viewer only */ }
 }
-function redraw() {
+// A change of layout -- customize, done, reset, Basic, Full, a widget added
+// or taken off -- is drawn again AT ONCE, from the answers the page was last
+// drawn with (LAST): asking the server again made every click wait for the
+// slowest count of ten thousand devices, and looked like a page reloading.
+// The live beat brings the numbers up to date a few seconds later, as always.
+let LAST = null;
+function relayout() {
   const be = document.getElementById('bar-extra');
   if (be && VIEWS.dash.bar) be.replaceChildren(...VIEWS.dash.bar());
-  render();
+  const view = document.getElementById('view');
+  if (!LAST || !view || !view.querySelector('.dash')) { render(); return; }
+  const tmp = h('div');
+  const W = LAST(tmp);
+  patch(view, tmp);
+  sync(W);
 }
-function usePreset(p) { Object.assign(L, fromPreset(p)); G.reset = true; saveLayout(); redraw(); refreshDrawer(); }
-function toggleWidget(id) {
-  if (L.pos[id]) delete L.pos[id]; else L.pos[id] = { x: 0, y: 10000, w: defaultW(id) };
-  L.preset = 'custom'; saveLayout(); redraw(); refreshDrawer();
+function usePreset(p) { Object.assign(L, fromPreset(p)); G.reset = true; dirty(); saveLayout(); relayout(); }
+function toggleWidget(id, at) {
+  if (L.pos[id]) delete L.pos[id]; else L.pos[id] = at || { x: 0, y: 10000, w: defaultW(id) };
+  L.preset = 'custom'; dirty(); saveLayout(); relayout();
+}
+
+// Customizing is a DRAFT. What was there is kept until Save; Cancel puts it
+// back (the widgets slide home). Leaving the page is leaving customize: with
+// nothing changed, silently; with changes, the page asks first -- Save,
+// Discard, or Stay -- and closing the tab gets the browser's own warning.
+const E = { from: null, dirty: false };
+const dirty = () => { if (L.edit) E.dirty = true; };
+// "add widget": customize, and the tray in view, lit for a moment
+function openAdd() {
+  if (!L.edit) startEdit();
+  requestAnimationFrame(() => {
+    const t = document.querySelector('.wtray');
+    if (!t) return;
+    t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    t.classList.remove('lit'); void t.offsetWidth; t.classList.add('lit');
+  });
+}
+function startEdit() { E.from = JSON.stringify({ pos: L.pos, preset: L.preset }); E.dirty = false; L.edit = true; relayout(); }
+function endEdit(save) {
+  if (!save && E.from) { const f = JSON.parse(E.from); L.pos = f.pos; L.preset = f.preset; G.reset = true; }
+  L.edit = false; E.dirty = false; E.from = null;
+  saveLayout();
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', ev => { if (L.edit && E.dirty) { ev.preventDefault(); ev.returnValue = ''; } });
 }
 
 // The grid: made once per visit of the page. Every live beat merges each
@@ -194,12 +232,12 @@ function keep() {
 const tools = id => (L.edit ? h('div.dw-tools', { title: 'drag to move it' },
   h('span.dw-grip', icon('grip-vertical', 16)), h('span.dw-name', WIDGETS[id][0]),
   h('span.dw-size', sizeWord((L.pos[id] || {}).w)),
-  h('button.dw-hide', { title: 'take it off the page', onclick: () => toggleWidget(id) }, icon('eye-off', 15))) : null);
+  h('button.dw-hide', { title: 'take it off the page (it goes back to the tray)', onclick: () => toggleWidget(id) }, icon('x', 14), 'remove')) : null);
 
 function sync(W) {
   const el = document.querySelector('#view .dgrid');
   if (!el || !window.GridStack || L.dragging) return;
-  if (G.el !== el || G.reset) {
+  if (G.el !== el) {
     if (G.grid) G.grid.destroy(false);
     el.replaceChildren(); G.items.clear();
     G.el = el; G.reset = false;
@@ -207,10 +245,21 @@ function sync(W) {
       column: COLS, cellHeight: 8, margin: 8, float: false, animate: true, sizeToContent: true,
       staticGrid: !L.edit, draggable: { handle: '.dw-tools' }, resizable: { handles: 'e, w', autoHide: false },
       columnOpts: { breakpoints: [{ w: 720, c: 1 }, { w: 1150, c: 6 }] },
+      acceptWidgets: w => w.classList.contains('wadd'),
     }, el);
     G.grid.on('dragstart resizestart', () => { L.dragging = true; });
-    G.grid.on('dragstop resizestop', () => { L.dragging = false; L.preset = 'custom'; keep(); redraw(); });
+    G.grid.on('dragstop resizestop', () => { L.dragging = false; L.preset = 'custom'; dirty(); keep(); relayout(); });
     G.grid.on('change', () => keep());
+    // a card of the tray let go on the grid: the widget, where it was let go
+    G.grid.on('dropped', (_, __, node) => {
+      const id = node && node.el && node.el.dataset.id;
+      const at = node ? { x: node.x, y: node.y, w: node.w } : null;
+      setTimeout(() => {
+        if (node && node.el) G.grid.removeWidget(node.el, true, false);
+        L.adding = false;
+        if (id && WIDGETS[id] && !L.pos[id]) toggleWidget(id, at); else relayout();
+      }, 0);
+    });
     G.grid.on('resize', (_, item) => {
       const t = item.querySelector('.dw-size');
       if (t && item.gridstackNode) t.textContent = sizeWord(item.gridstackNode.w);
@@ -218,13 +267,17 @@ function sync(W) {
   }
   if (G.grid.opts.staticGrid !== !L.edit) G.grid.setStatic(!L.edit);
   const ids = Object.keys(L.pos).filter(id => W[id]);
+  const moving = G.reset;             // Basic, Full, reset: every widget slides to its new place
+  G.reset = false;
   G.grid.batchUpdate();
   for (const [id, item] of G.items) if (!ids.includes(id)) { G.grid.removeWidget(item); G.items.delete(id); }
   for (const id of ids) {
     const content = h('div', h('div.dw', { 'data-id': id }, tools(id), W[id]));
     let item = G.items.get(id);
-    if (item) patch(item.querySelector('.grid-stack-item-content'), content);
-    else {
+    if (item) {
+      patch(item.querySelector('.grid-stack-item-content'), content);
+      if (moving) G.grid.update(item, { x: L.pos[id].x, y: L.pos[id].y, w: Math.min(L.pos[id].w, COLS) });
+    } else {
       // filled before it is made a widget: Gridstack measures it at once
       const q = L.pos[id];
       item = h('div.grid-stack-item', { 'data-id': id }, h('div.grid-stack-item-content', ...content.childNodes));
@@ -235,34 +288,44 @@ function sync(W) {
   }
   G.grid.batchUpdate(false);
   for (const item of G.items.values()) G.grid.resizeToContent(item);
+  if (L.edit) window.GridStack.setupDragIn('.wtray .wadd', { appendTo: 'body', helper: 'clone' });
 }
 const grid = () => h('div.dgrid.grid-stack', { 'data-key': 'grid', 'data-own': '' });
 
-// The gallery: every widget, what it shows, on the page or not.
-function gallery() {
-  const on = new Set(Object.keys(L.pos));
-  return h('div.wgal',
-    h('div.wgal-top', h('span.dtray-k', 'Start from'),
-      h('div.seg', ['basic', 'full'].map(p => h('button.btn.sm' + (L.preset === p ? '.primary' : ''),
-        { onclick: () => usePreset(p) }, p === 'basic' ? 'Basic' : 'Full'))),
-      h('span.faint', `${on.size} of ${Object.keys(WIDGETS).length} on the page`)),
-    h('div.wgal-grid', Object.entries(WIDGETS).map(([id, [name, ico, desc]]) => h('div.wcard' + (on.has(id) ? '.on' : ''),
-      { 'data-key': id, title: on.has(id) ? 'take it off the page' : 'put it on the page', onclick: () => toggleWidget(id) },
-      h('div.wcard-ico', icon(ico, 22)),
-      h('div.wcard-body', h('b', name), h('div.faint', desc)),
-      h('span.wcard-state', on.has(id) ? [icon('check', 14), 'on the page'] : [icon('eye', 14), 'add'])))));
+// Customizing: what can be done, and the widgets not on the page -- each with
+// a live preview, drawn from the same answers as the page. One is dragged onto
+// the grid, where it should go, or put at the bottom with its +.
+function editTray(W) {
+  const off = Object.keys(WIDGETS).filter(id => !L.pos[id]);
+  return h('div.dtray-wrap', { 'data-key': 'tray' },
+    h('div.dtray',
+      h('span.dtray-k', 'Customizing'),
+      h('span.faint', 'drag a widget by its bar: the others make room and the gaps close · pull a side to make it wider or narrower'),
+      h('span.grow'),
+      h('button.btn.sm', { title: 'start again from Basic', onclick: () => usePreset('basic') }, icon('rotate', 14), 'Reset to Basic'),
+      h('button.btn.sm', { title: 'put the layout back as it was', onclick: () => { endEdit(false); relayout(); } }, 'Cancel'),
+      h('button.btn.sm.primary', { title: 'keep this layout',
+        onclick: () => { endEdit(true); relayout(); toast('Layout saved', 'the dashboard stays like this, in this browser', 'ok'); } },
+      icon('device-floppy', 14), 'Save')),
+    h('div.wtray',
+      h('div.wtray-head', h('b', 'Add a widget'),
+        h('span.faint', off.length ? 'drag one onto the page, where you want it — or + puts it at the bottom'
+          : 'every widget is on the page: remove one and it comes back here'),
+        h('span.grow'), h('span.faint', `${Object.keys(WIDGETS).length - off.length} of ${Object.keys(WIDGETS).length} on the page`)),
+      off.length ? h('div.wtray-list', off.map(id => addCard(id, W[id]))) : null));
 }
-const openGallery = () => drawer('Widgets', gallery(), () => gallery());
-
-function editTray() {
-  return h('div.dtray', { 'data-key': 'tray' },
-    h('span.dtray-k', 'Customizing'),
-    h('span.faint', 'drag a widget by its bar: the others make room and the gaps close · pull a side to make it wider or narrower'),
-    h('span.grow'),
-    h('button.btn.sm', { onclick: openGallery }, icon('layout-grid', 14), 'widgets'),
-    h('button.btn.sm', { title: 'back to Basic', onclick: () => usePreset('basic') }, 'reset'),
-    h('button.btn.sm.primary', { onclick: () => { L.edit = false; redraw(); } }, icon('check', 14), 'done'));
+function addCard(id, node) {
+  const [name, ico, desc] = WIDGETS[id];
+  return h('div.wadd', { 'data-key': 'add-' + id, 'data-id': id, 'gs-w': String(defaultW(id)), 'gs-h': '34',
+    title: node ? 'drag it onto the page' : 'this server has nothing for it', onpointerdown: () => { L.adding = true; } },
+  h('div.wadd-prev', node ? h('div.wadd-in', node) : h('div.wadd-none', icon(ico, 26), h('span', 'nothing for it on this server'))),
+  h('div.wadd-foot',
+    h('span.wadd-ico', icon(ico, 16)),
+    h('div.wadd-t', h('b', name), h('span', desc)),
+    h('button.wadd-plus', { title: 'put it at the bottom of the page', onclick: e => { e.stopPropagation(); L.adding = false; toggleWidget(id); } },
+      icon('plus', 16))));
 }
+if (typeof window !== 'undefined') window.addEventListener('pointerup', () => { setTimeout(() => { L.adding = false; }, 400); });
 
 /* ------- the widgets' parts: a card with a header, and list rows --------- */
 const widget = (title, ico, extra, body, page) => h('div.panel.w',
@@ -298,11 +361,24 @@ VIEWS.dash = {
   bar: () => [
     h('div.seg', ['basic', 'full'].map(p => h('button.btn.sm' + (L.preset === p ? '.primary' : ''),
       { title: p === 'basic' ? 'the essentials' : 'every widget', onclick: () => usePreset(p) }, p === 'basic' ? 'Basic' : 'Full'))),
-    L.edit ? h('button.btn.sm', { onclick: openGallery }, icon('layout-grid', 14), 'widgets') : null,
-    h('button.btn.sm' + (L.edit ? '.primary' : ''), { title: 'move, resize, add and remove widgets',
-      onclick: () => { L.edit = !L.edit; redraw(); } }, icon('adjustments-horizontal', 14), 'customize')],
+    // adding a widget is where people look for it: here, always
+    h('button.btn.sm', { title: 'put another widget on the dashboard', onclick: openAdd }, icon('plus', 14), 'add widget'),
+    L.edit ? null : h('button.btn.sm', { title: 'move, resize, add and remove widgets', onclick: startEdit },
+      icon('adjustments-horizontal', 14), 'customize')],
+  // leaving the page leaves customize; unsaved changes are asked about first
+  async leave() {
+    if (!L.edit) return true;
+    if (E.dirty) {
+      const a = await ask('Save the layout?',
+        'You changed the dashboard and have not saved it.\nSaved, it stays as it is now; discarded, it goes back to how it was.',
+        { okLabel: 'Save', altLabel: 'Discard changes', cancelLabel: 'Stay' });
+      if (a === false) return false;
+      endEdit(a === true);
+    } else endEdit(false);
+    return true;
+  },
   async render(root) {
-    if (L.dragging) throw new Error('the layout is being changed');
+    if (L.dragging || L.adding) throw new Error('the layout is being changed');
     const count = q => get('/targets?limit=1&q=' + fiql(q)).then(r => r.total);
     const cutoffP = overdueCutoff();
     const [tg, totals, installedInSync, cutoff, over, deps, fails, fleets, centres, sdeps, stypes, ros, dss, sms, audit, types] =
@@ -357,38 +433,45 @@ VIEWS.dash = {
     const cl = centres ? centres.content || [] : [];
     const placed = cl.filter(c => c.fleetId).length;
 
-    const W = {
-      channels: fleets ? pipelineWidget(fleets) : null,
-      inprog: deps ? progressWidget(deps) : null,
-      update: updateWidget(byStatus, virgin, phases, tg.content.length),
-      types: typesWidget(types, tg.total),
-      orchestrator: sdeps ? orchestratorWidget(sdeps.content || [], stypes ? stypes.content || [] : []) : null,
-      rollouts: ros ? rolloutsWidget(ros) : null,
-      activity: audit ? activityWidget(audit.content || [], fleets || []) : null,
-      attention: attentionWidget({ errors, failed, fstates, trouble, over, cutoff }),
-      centres: centres ? centresWidget(cl, fleets || [], centres.field) : null,
-      catalogue: dss ? catalogueWidget(dss, sms) : null,
-      server: serverWidget(),
+    // drawn from these answers -- and kept, so that a change of layout is
+    // drawn again from them at once (relayout)
+    const paint = target => {
+      const W = {
+        channels: fleets ? pipelineWidget(fleets) : null,
+        inprog: deps ? progressWidget(deps) : null,
+        update: updateWidget(byStatus, virgin, phases, tg.content.length),
+        types: typesWidget(types, tg.total),
+        orchestrator: sdeps ? orchestratorWidget(sdeps.content || [], stypes ? stypes.content || [] : []) : null,
+        rollouts: ros ? rolloutsWidget(ros) : null,
+        activity: audit ? activityWidget(audit.content || [], fleets || []) : null,
+        attention: attentionWidget({ errors, failed, fstates, trouble, over, cutoff }),
+        centres: centres ? centresWidget(cl, fleets || [], centres.field) : null,
+        catalogue: dss ? catalogueWidget(dss, sms) : null,
+        server: serverWidget(),
+      };
+      target.replaceChildren(h('div.stack.dash' + (L.edit ? '.editing' : ''),
+        h('div.cards',
+          clickable(stat('Devices', tg.total, over ? `${fmt(over)} not polling` : 'all polling on time', 'device-desktop',
+            over ? 'warn' : 'info', tg.total ? 100 * (tg.total - (over || 0)) / tg.total : 0),
+            () => { S.q = over && cutoff ? `lastcontrollerrequestat=lt=${cutoff}` : ''; S.status = ''; go('targets'); }),
+          clickable(stat('Up to date', upToDate, tg.total ? `${Math.round(100 * upToDate / tg.total)}% of the devices` : 'no device',
+            'rosette-discount-check', upToDate ? 'ok' : 'mute', tg.total ? 100 * upToDate / tg.total : 0),
+            () => { S.q = ''; S.status = 'in_sync'; go('targets'); }),
+          clickable(stat('In progress', deps ? deps.length : null,
+            deps ? `${plural(updating, 'device')} updating` : 'needs Qawk', 'rocket',
+            deps && deps.length ? 'info.live' : 'mute'), () => go('inprog')),
+          clickable(stat('Failed', errors, errors ? 'their last update failed' : 'no device in error', 'alert-triangle',
+            errors ? 'err' : 'ok'), () => { S.q = ''; S.status = 'error'; go('targets'); }),
+          clickable(stat('To approve', approvals.length, approvals.length ? 'waiting for a second person' : 'nothing waiting',
+            'clock', approvals.length ? 'warn.live' : 'mute'), () => go('fleets')),
+          centres ? clickable(stat('Centres', cl.length, cl.length ? `${fmt(placed)} in a channel` : 'none reported yet',
+            'building-store', cl.length ? 'info' : 'mute'), () => go('centres')) : null),
+        L.edit ? editTray(W) : null,
+        grid()));
+      return W;
     };
-    root.replaceChildren(h('div.stack.dash' + (L.edit ? '.editing' : ''),
-      h('div.cards',
-        clickable(stat('Devices', tg.total, over ? `${fmt(over)} not polling` : 'all polling on time', 'device-desktop',
-          over ? 'warn' : 'info', tg.total ? 100 * (tg.total - (over || 0)) / tg.total : 0),
-          () => { S.q = over && cutoff ? `lastcontrollerrequestat=lt=${cutoff}` : ''; S.status = ''; go('targets'); }),
-        clickable(stat('Up to date', upToDate, tg.total ? `${Math.round(100 * upToDate / tg.total)}% of the devices` : 'no device',
-          'rosette-discount-check', upToDate ? 'ok' : 'mute', tg.total ? 100 * upToDate / tg.total : 0),
-          () => { S.q = ''; S.status = 'in_sync'; go('targets'); }),
-        clickable(stat('In progress', deps ? deps.length : null,
-          deps ? `${plural(updating, 'device')} updating` : 'needs Qawk', 'rocket',
-          deps && deps.length ? 'info.live' : 'mute'), () => go('inprog')),
-        clickable(stat('Failed', errors, errors ? 'their last update failed' : 'no device in error', 'alert-triangle',
-          errors ? 'err' : 'ok'), () => { S.q = ''; S.status = 'error'; go('targets'); }),
-        clickable(stat('To approve', approvals.length, approvals.length ? 'waiting for a second person' : 'nothing waiting',
-          'clock', approvals.length ? 'warn.live' : 'mute'), () => go('fleets')),
-        centres ? clickable(stat('Centres', cl.length, cl.length ? `${fmt(placed)} in a channel` : 'none reported yet',
-          'building-store', cl.length ? 'info' : 'mute'), () => go('centres')) : null),
-      L.edit ? editTray() : null,
-      grid(W)));
+    LAST = paint;
+    const W = paint(root);
     setTimeout(() => sync(W), 0);
   },
 };

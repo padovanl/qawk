@@ -44,9 +44,13 @@ setCollapsed(localStorage.getItem('hb-nav') === '1');
 $('#logout').onclick = signOut;
 $('#drawer-close').onclick = closeDrawer;
 $('#scrim').onclick = closeDrawer;
-window.addEventListener('hashchange', () => {
+window.addEventListener('hashchange', async () => {
   const id = location.hash.slice(1);
-  if (VIEWS[id] && id !== S.view) { S.view = id; drawNav(); render(); }
+  if (!VIEWS[id] || id === S.view) return;
+  const v = VIEWS[S.view];
+  // the back button asks too, and stays when told to
+  if (v && v.leave && !(await v.leave())) { history.replaceState(null, '', '#' + S.view); return; }
+  S.view = id; drawNav(); render();
 });
 let gPending = false;
 document.addEventListener('keydown', e => {

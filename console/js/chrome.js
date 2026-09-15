@@ -141,13 +141,39 @@ function closeBell() {
 if (typeof document !== 'undefined' && document.getElementById && document.getElementById('bell')) drawBell();
 const fail = e => toast('Failed', e.message || String(e), 'err', 12000);
 
+/* What a dialog refuses is said IN the dialog, above its buttons, where the
+ * eyes are -- not in a toast in the far corner, counted "x4" at every click --
+ * and the field it is about is marked and given the focus: the one left empty
+ * whose label the message names ("needs a name": Name), or, for a message
+ * about something missing, the first one left empty. Typing clears it. */
+const MISSING = /needs|pick|write|choose|at least|missing|required|empty|which/i;
+function modalError(d, box, e) {
+  const msg = String((e && e.message) || e);
+  box.replaceChildren(icon('alert-triangle', 16), h('span', msg.charAt(0).toUpperCase() + msg.slice(1)));
+  box.hidden = false;
+  box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake');
+  const empties = [...d.querySelectorAll('#modal-body input:not([type=checkbox]):not([type=radio]), #modal-body select, #modal-body textarea')]
+    .filter(x => x.offsetParent && !x.disabled && !String(x.value).trim());
+  const words = msg.toLowerCase().match(/[a-z]{4,}/g) || [];
+  const label = x => ((x.closest('label') || {}).textContent || x.getAttribute('aria-label') || '').toLowerCase();
+  const field = empties.find(x => words.some(w => label(x).includes(w))) || (MISSING.test(msg) ? empties[0] : null);
+  if (field) {
+    field.classList.add('invalid'); field.focus();
+    field.addEventListener('input', () => field.classList.remove('invalid'), { once: true });
+  }
+}
 function modal(title, bodyNodes, onOk, okLabel = 'OK') {
   const d = $('#modal');
   $('#modal-title').textContent = title;
   $('#modal-body').replaceChildren(...bodyNodes);
+  let box = d.querySelector('.merr');
+  if (!box) { box = h('div.merr', { role: 'alert' }); d.querySelector('.da').before(box); }
+  box.hidden = true;
+  d.oninput = () => { box.hidden = true; };
   $('#modal-ok').textContent = okLabel;
   $('#modal-ok').onclick = async () => {
-    try { if (await onOk() !== false) d.close(); } catch (e) { fail(e); }
+    box.hidden = true;
+    try { if (await onOk() !== false) d.close(); } catch (e) { modalError(d, box, e); }
   };
   $('#modal-cancel').onclick = () => d.close();
   d.showModal();
@@ -167,6 +193,8 @@ function ask(title, message, opts = {}) {
     const done = v => { answer = v; d.close(); };
     const lines = String(message).split('\n').map(l =>
       l.trim() ? h('p', l) : h('div', { style: 'height:6px' }));
+    // opts.altLabel: a third answer between the two, resolved as 'alt' --
+    // "Save / Discard changes / Stay"; Escape is always the cancel
     d.append(
       h('div.ask-head',
         h('span.ask-ico' + (opts.danger ? '.danger' : ''), icon(opts.danger ? 'trash' : 'info', 17)),
@@ -174,6 +202,7 @@ function ask(title, message, opts = {}) {
       h('div.dc', lines),
       h('div.da',
         h('button.btn', { onclick: () => done(false) }, opts.cancelLabel || 'Cancel'),
+        opts.altLabel ? h('button.btn', { onclick: () => done('alt') }, opts.altLabel) : null,
         h('button.btn.' + (opts.danger ? 'danger' : 'primary'),
           { onclick: () => done(true) }, opts.okLabel || (opts.danger ? 'Delete' : 'Confirm'))));
     d.addEventListener('close', () => { d.remove(); resolve(answer); });

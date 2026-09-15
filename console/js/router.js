@@ -73,7 +73,14 @@ function drawNav() {
           : null))));
 }
 
-function go(id) {
+// A page may hold something unsaved (the dashboard being customized): its
+// leave() is asked first, and can keep you there.
+async function mayLeave(id) {
+  const v = VIEWS[S.view];
+  return id === S.view || !v || !v.leave || v.leave();
+}
+async function go(id) {
+  if (!(await mayLeave(id))) return;
   S.view = id;
   if (id !== 'targets') { S.q = ''; S.status = ''; S.fleet = ''; S.picked.clear(); }
   location.hash = id;
