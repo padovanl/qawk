@@ -1,10 +1,11 @@
-import { S, distributionSets, qawk } from '../api.js';
+import { S, qawk } from '../api.js';
 import { bars } from '../bars.js';
 import { fleetBadge } from '../chips.js';
 import { ask, drawer, fail, modal, refreshDrawer, toast } from '../chrome.js';
 import { h, icon } from '../dom.js';
 import { check as fiqlCheck } from '../fiql.js';
 import { VIEWS, render } from '../router.js';
+import { manifestEditor } from './flow.js';
 import { tableOf } from '../table.js';
 import { ago, download } from '../util.js';
 
@@ -50,7 +51,7 @@ VIEWS.systems = {
   bar: () => [
     h('button.btn.sm.primary', { onclick: () => deploymentDialog() }, icon('deploy', 14), 'deploy a manifest'),
     h('button.btn.sm', { onclick: () => typeDialog() }, icon('plus', 14), 'system type'),
-    h('button.btn.sm', { onclick: () => manifestDialog() }, icon('plus', 14), 'manifest'),
+    h('button.btn.sm', { onclick: () => manifestEditor() }, icon('plus', 14), 'manifest'),
     h('button.btn.sm', { onclick: importDialog }, icon('upload', 14), 'import YAML')],
   async render(root) {
     const [types, mans, deps] = await Promise.all([
@@ -84,7 +85,7 @@ VIEWS.systems = {
           cells: [h('b', m.name), m.systemType, orderLine(m.components),
             h('div.wrap',
               h('button.btn.sm', { onclick: () => deploymentDialog(m) }, 'deploy'),
-              h('button.btn.sm', { onclick: () => manifestDialog(m) }, 'edit'),
+              h('button.btn.sm', { onclick: () => manifestEditor(m) }, 'edit'),
               h('button.btn.sm', { onclick: async () => download(`${m.name}.yaml`, await rawGet(`/manifests/${m.id}/manifest.yaml`)) }, 'YAML'),
               h('button.btn.sm.danger', { onclick: async () => {
                 if (!await ask('Delete manifest', m.name, { danger: true })) return;
@@ -234,43 +235,6 @@ function typeDialog(t) {
   }, 'Save');
 }
 
-async function manifestDialog(m) {
-  const [types, sets] = await Promise.all([qawk.get('/systemtypes'), distributionSets(true)]);
-  if (!types.content.length) { toast('No system type', 'describe a system type first', 'info'); return; }
-  m = m || { name: '', systemTypeId: types.content[0].id, components: [] };
-  const name = h('input', { type: 'text', value: m.name, placeholder: '6hd-system-2026.09' });
-  const type = h('select', types.content.map(t => h('option', { value: t.id, selected: t.id === m.systemTypeId }, t.name)));
-  const rows = h('div.stack', { style: 'gap:6px' });
-  const draw = () => {
-    const t = types.content.find(x => x.id === Number(type.value));
-    rows.replaceChildren(...t.components.map(c => {
-      const cur = m.components.find(x => x.componentType === c.componentType) || {};
-      const ds = h('select', h('option', { value: '' }, '— not in this manifest —'),
-        sets.content.filter(d => d.complete).map(d => h('option', { value: d.id, selected: cur.distributionSetId === d.id }, `${d.name} ${d.version}`)));
-      const order = h('input', { type: 'number', min: 1, max: 1000, value: cur.order || 10, style: 'width:80px' });
-      const row = h('div.flex', { style: 'gap:6px' }, h('b', { style: 'width:90px' }, c.componentType), ds,
-        h('span.faint', 'order'), order);
-      row._v = () => (ds.value ? { componentType: c.componentType, distributionSetId: Number(ds.value), order: Number(order.value) } : null);
-      return row;
-    }));
-  };
-  type.addEventListener('change', draw);
-  draw();
-  modal(m.id ? 'Edit ' + m.name : 'New manifest', [
-    h('label.f', 'Name', name), h('label.f', 'For systems of type', type),
-    h('div.f', h('span', 'What each component should run — lower orders first, equal orders together'), rows),
-  ], async () => {
-    const b = { name: name.value.trim(), systemTypeId: Number(type.value), components: [...rows.children].map(r => r._v()).filter(Boolean) };
-    if (m.id) await qawk.put('/manifests/' + m.id, b); else await qawk.post('/manifests', b);
-    toast('Saved', b.name, 'ok'); render();
-  }, 'Save');
-}
-
-/* Deploy a manifest to the systems of a channel -- and of some centres only,
- * or all of them. A system is in a channel when all its devices are; one
- * whose devices are in different channels is left out, and the deployment
- * says so. Inside each system the manifest's order holds, and a system that
- * fails goes back alone: the rest of the channel goes on. */
 async function deploymentDialog(preset) {
   const [mans, fleets] = await Promise.all([qawk.get('/manifests').then(r => r.content),
     qawk.get('/fleets').then(r => r.content).catch(() => [])]);
