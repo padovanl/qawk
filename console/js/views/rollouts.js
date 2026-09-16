@@ -2,7 +2,7 @@ import { del, distributionSets, fiql, get, post, waiting } from '../api.js';
 import { start } from '../auth.js';
 import { ACT_ICON, TARGET_PILL, pill } from '../badges.js';
 import { bars } from '../bars.js';
-import { ask, drawer, fail, modal, toast } from '../chrome.js';
+import { ask, drawer, fail, modal, refreshDrawer, toast } from '../chrome.js';
 import { $, h, icon, skeleton } from '../dom.js';
 import { fiqlEditor } from '../fiql.js';
 import { dtInput, dtMs, dtQuick, numInput } from '../inputs.js';
@@ -30,6 +30,7 @@ VIEWS.ro = {
       d.content.map(r => {
         const t = r.totalTargets || 0, c = r.totalTargetsPerStatus || {};
         const st = String(r.status || '').toLowerCase();
+        startIfWanted(r, st);
         return {
           onclick: () => openRollout(r),
           cells: [h('span.mono', r.id), r.name,
@@ -43,7 +44,7 @@ VIEWS.ro = {
             h('div.wrap',
               st === 'waiting_for_approval' ? actBtn('approve', () => post(`/rollouts/${r.id}/approve`)) : null,
               st === 'waiting_for_approval' ? actBtn('deny', () => post(`/rollouts/${r.id}/deny`)) : null,
-              st === 'ready' ? actBtn('start', () => post(`/rollouts/${r.id}/start`)) : null,
+              startControl(r, st),
               st === 'running' ? actBtn('pause', () => post(`/rollouts/${r.id}/pause`)) : null,
               st === 'paused' ? actBtn('resume', () => post(`/rollouts/${r.id}/resume`)) : null,
               actBtn('delete', async () => {
@@ -60,29 +61,52 @@ VIEWS.ro = {
 const actBtn = (label, fn) => h('button.btn.sm', {
   onclick: async e => {
     e.stopPropagation();
-    try { await fn(); toast(label + ' ok', '', 'ok'); render(); }
+    try { await fn(); toast(label + ' ok', '', 'ok'); render(); refreshDrawer(); }
     catch (er) { if (er.message !== 'cancelled by you') fail(er); }
   },
 }, ACT_ICON[label] ? icon(ACT_ICON[label], 13) : null, label);
 
-async function openRollout(r) {
-  const body = h('div', h('div.empty', h('span.spin')));
-  drawer(r.name, body);
-  const g = await get(`/rollouts/${r.id}/deploygroups?limit=50&representation=full`).catch(() => ({ content: [] }));
+/* START WHEN READY. A rollout over many devices is "creating" for a while --
+ * its groups are being computed -- and hawkBit refuses to start it until it is
+ * "ready". Someone who has just created one wants to press start now, not to
+ * come back. So start can be pressed while it is being created: it is
+ * remembered, and the rollout starts the moment the console sees it ready. */
+const startWhenReady = new Set();
+function startIfWanted(r, st) {
+  if (st !== 'ready' || !startWhenReady.has(r.id)) return;
+  startWhenReady.delete(r.id);
+  post(`/rollouts/${r.id}/start`).then(() => { toast('Started', `${r.name}: its groups were ready`, 'ok'); render(); refreshDrawer(); })
+    .catch(fail);
+}
+function startControl(r, st) {
+  if (st === 'ready') return actBtn('start', () => post(`/rollouts/${r.id}/start`));
+  if (st !== 'creating') return null;
+  return startWhenReady.has(r.id)
+    ? h('span.pill.info', { title: 'it starts by itself when its groups are ready' }, h('span.spin'), ' starts when ready')
+    : actBtn('start', async () => { startWhenReady.add(r.id); });
+}
+
+/* The drawer follows the rollout: built again from the server at every beat
+ * (router.js) and right after an action, so its buttons are the ones its
+ * status allows now -- approved, it offers start; started, pause. */
+async function rolloutView(id) {
+  const r = await get(`/rollouts/${id}?representation=full`);
+  const g = await get(`/rollouts/${id}/deploygroups?limit=50&representation=full`).catch(() => ({ content: [] }));
   const c = r.totalTargetsPerStatus || {};
   const st = String(r.status || '').toLowerCase();
+  startIfWanted(r, st);
 
   // One group at a time is the point of a rollout: this is the button for
   // pushing the next one out without waiting for the success threshold.
   const controls = h('div.wrap',
     st === 'waiting_for_approval' ? actBtn('approve', () => post(`/rollouts/${r.id}/approve`)) : null,
     st === 'waiting_for_approval' ? actBtn('deny', () => post(`/rollouts/${r.id}/deny`)) : null,
-    st === 'ready' ? actBtn('start', () => post(`/rollouts/${r.id}/start`)) : null,
+    startControl(r, st),
     st === 'running' ? actBtn('pause', () => post(`/rollouts/${r.id}/pause`)) : null,
     st === 'paused' ? actBtn('resume', () => post(`/rollouts/${r.id}/resume`)) : null,
     st === 'running' || st === 'paused'
       ? actBtn('trigger next group', () => post(`/rollouts/${r.id}/triggerNextGroup`)) : null);
-  body.replaceChildren(h('div.stack',
+  return h('div.stack',
     controls,
     h('div.panel', h('h3', 'Rollout'), h('div.body', h('dl.kv',
       [['id', r.id], ['status', r.status], ['description', r.description || '—'],
@@ -93,7 +117,7 @@ async function openRollout(r) {
     h('div.panel', h('h3', 'Stats'), h('div.body.wrap',
       Object.entries(c).map(([k, v]) => h('span.pill.' +
         (k === 'finished' ? 'ok' : k === 'error' ? 'err' : k === 'running' ? 'info' : 'mute'),
-        `${k} · ${v}`)))),
+        { 'data-key': k }, `${k} · ${v}`)))),
     h('div.panel', h('h3', 'Groups'), h('div.body',
       g.content.length
         ? tableOf(['#', 'Name', 'Status', 'Progress', 'Targets', 'Finished', 'Error'],
@@ -102,6 +126,7 @@ async function openRollout(r) {
               const gc = x.totalTargetsPerStatus || {};
               const tot = x.totalTargets || 0;
               return {
+                key: 'g' + x.id,
                 onclick: () => openRolloutGroup(r, x),
                 cells: [h('span.mono', x.id), x.name,
                   pill(gs, gs === 'finished' ? 'ok' : gs === 'error' ? 'err'
@@ -113,7 +138,12 @@ async function openRollout(r) {
                   h('span.mono', gc.finished ?? 0), h('span.mono', gc.error ?? 0)],
               };
             }))
-        : h('span.faint', 'no groups')))));
+        : h('span.faint', st === 'creating' ? 'its groups are being prepared…' : 'no groups'))));
+}
+async function openRollout(r) {
+  const build = () => rolloutView(r.id);
+  drawer(r.name, h('div.empty', h('span.spin')), build);
+  refreshDrawer();
 }
 
 async function openRolloutGroup(r, g) {
@@ -235,9 +265,10 @@ async function newRolloutDialog(presetQuery) {
       b.forcetime = ft;
     }
     const r = await post('/rollouts', b);
-    if (startType.value === 'auto') await post(`/rollouts/${r.id}/start`).catch(() => {});
-    toast('Created', startType.value === 'auto' ? 'started' : 'press start when ready', 'ok');
+    if (startType.value === 'auto') startWhenReady.add(r.id);
+    toast('Created', startType.value === 'auto' ? 'it starts as soon as its groups are ready' : 'press start — now, or when it is ready', 'ok');
     render();
+    openRollout(r);          // the rollout, live: its groups being prepared, its start button
   }, 'Create');
 }
 
