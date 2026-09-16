@@ -1,0 +1,129 @@
+# Qawk on Kubernetes: several instances, one database, shared artifacts.
+#
+#   kubectl create namespace qawk
+#   kubectl -n qawk create secret generic qawk \
+#     --from-literal=database-url='postgres://qawk:PASSWORD@qawk-db:5432/qawk?sslmode=disable' \
+#     --from-literal=admin-password='CHANGE-ME'
+#   # only with postgres-lab.yaml, the lab database; PASSWORD as above
+#   kubectl -n qawk create secret generic qawk-db --from-literal=password='PASSWORD'
+#   kubectl -n qawk apply -f server/deploy/kubernetes/
+#
+# What each piece is for is in server/README.md, "Scaling".
+---
+# The artifacts every instance serves. ReadWriteMany: a device can download
+# from any instance, so all of them must see every file. Use a storage class
+# that offers RWX (NFS, CephFS, EFS, Azure Files...).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qawk-artifacts
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 200Gi
+  # storageClassName: <an RWX class>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qawk
+  labels: {app: qawk}
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app: qawk}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 0, maxSurge: 1}
+  template:
+    metadata:
+      labels: {app: qawk}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: qawk
+          image: qawk:local   # push it to your registry and put its name here
+          ports:
+            - {name: http, containerPort: 8080}
+          env:
+            - name: QAWK_DATABASE_URL
+              valueFrom: {secretKeyRef: {name: qawk, key: database-url}}
+            - name: QAWK_ADMIN_PASSWORD
+              valueFrom: {secretKeyRef: {name: qawk, key: admin-password}}
+            # Per instance. Instances x this must stay under PostgreSQL's
+            # max_connections (100 by default): 3 x 25 leaves room for the
+            # autoscaler to add a few.
+            - {name: QAWK_DB_MAX_CONNS, value: "25"}
+            - {name: QAWK_ARTIFACT_DIR, value: /var/lib/qawk/artifacts}
+            # The address devices reach the service at, if a proxy in front
+            # rewrites Host; otherwise leave it unset.
+            # - {name: QAWK_PUBLIC_URL, value: "http://updates.example.com:8080"}
+            # OpenTelemetry: metrics and traces to the collector, over OTLP/HTTP.
+            # Sample the traces -- every device poll is a request.
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: "http://otel-collector.observability:4318"}
+            - {name: OTEL_SERVICE_NAME, value: qawk}
+            - {name: OTEL_TRACES_SAMPLER, value: parentbased_traceidratio}
+            - {name: OTEL_TRACES_SAMPLER_ARG, value: "0.01"}
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "k8s.pod.name=$(POD_NAME),k8s.namespace.name=$(POD_NAMESPACE)"
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: POD_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+          readinessProbe:
+            httpGet: {path: /health, port: http}
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet: {path: /live, port: http}
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests: {cpu: 250m, memory: 128Mi}
+            limits: {memory: 512Mi}
+          volumeMounts:
+            - {name: artifacts, mountPath: /var/lib/qawk/artifacts}
+      volumes:
+        - name: artifacts
+          persistentVolumeClaim: {claimName: qawk-artifacts}
+---
+# Devices and the console reach Qawk here. hawkBit's port, so devices built
+# for hawkBit need no change. For devices outside the cluster, expose it with
+# a LoadBalancer or an Ingress -- and give the Ingress generous body size and
+# timeouts: an artifact is hundreds of megabytes, and uploads go through it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: qawk
+spec:
+  selector: {app: qawk}
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+---
+# Keep at least two instances up through node drains and upgrades.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: qawk
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: {app: qawk}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: qawk
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: qawk}
+  minReplicas: 3
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}

@@ -1,0 +1,52 @@
+# A PostgreSQL for the LAB: one instance, one volume, no backups, no failover.
+#
+# In production use a managed database (RDS, Cloud SQL, Azure Database) or an
+# operator that does replication and backups for you (CloudNativePG, Zalando
+# postgres-operator), and point the "database-url" of the qawk secret at it.
+# Qawk needs nothing from PostgreSQL beyond a database and a user that owns it.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qawk-db
+spec:
+  selector: {app: qawk-db}
+  ports:
+    - {port: 5432}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qawk-db
+spec:
+  serviceName: qawk-db
+  replicas: 1
+  selector:
+    matchLabels: {app: qawk-db}
+  template:
+    metadata:
+      labels: {app: qawk-db}
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - {name: POSTGRES_USER, value: qawk}
+            - {name: POSTGRES_DB, value: qawk}
+            - name: POSTGRES_PASSWORD
+              valueFrom: {secretKeyRef: {name: qawk-db, key: password}}
+            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
+          args: ["-c", "max_connections=200"]
+          ports:
+            - {containerPort: 5432}
+          readinessProbe:
+            exec: {command: ["pg_isready", "-U", "qawk"]}
+            periodSeconds: 5
+          volumeMounts:
+            - {name: data, mountPath: /var/lib/postgresql/data}
+  volumeClaimTemplates:
+    - metadata: {name: data}
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests: {storage: 20Gi}
