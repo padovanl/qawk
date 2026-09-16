@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Scheduled deployments, end to end, with simulated devices.
 
-    python3 ota/qawk/test/scheduled.py [http://localhost:18080]
+    python3 server/test/scheduled.py [http://localhost:18080]
 
 Needs a Qawk it may fill with test data and Docker, to run qawk-sim from the
 Qawk image ($QAWK_IMAGE, qawk:next by default): ten simulated devices, which

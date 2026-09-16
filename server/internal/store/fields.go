@@ -7,7 +7,7 @@ import "qawk/internal/fiql"
 // maps to. The aliases (t, d, m, ...) are the ones the list queries use.
 //
 // The console's editor offers exactly these names for targets, sets, modules
-// and rollouts (hawkbit-ui/js/fiql.js), and test/fiql-live.mjs checks, name by
+// and rollouts (console/js/fiql.js), and test/fiql-live.mjs checks, name by
 // name and value by value, that the server agrees with it.
 
 func audit(f map[string]fiql.Field, alias string) map[string]fiql.Field {

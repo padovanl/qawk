@@ -1,14 +1,14 @@
 /* Does the console SHOW what the server holds?
  *
- *     node ota/hawkbit-ui/test/gui-live.mjs
+ *     node console/test/gui-live.mjs
  *
  * Everything else in this suite checks the API, the parser or the module
  * seams. This one renders the actual views against the running server and
  * reads what is on them, because "the update worked" and "the screen says so"
  * are two different claims and only the second is what anyone sees.
  *
- * It expects the demo catalogue to be loaded:
- *     ./ota/hawkbit/load-demo-catalogue.sh
+ * It expects the demo's sample data to be loaded:
+ *     demo/start.sh
  */
 import { renderView, settle, mod, BASE } from './live-harness.mjs';
 

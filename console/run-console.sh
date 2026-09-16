@@ -2,26 +2,26 @@
 #
 # QubicaAMF - run the hawkBit console in a container.
 #
-#   ./ota/hawkbit-ui/run-console.sh up      build if needed, then start
-#   ./ota/hawkbit-ui/run-console.sh down    stop and remove
-#   ./ota/hawkbit-ui/run-console.sh logs    follow the proxy log
-#   ./ota/hawkbit-ui/run-console.sh rebuild rebuild the image and restart
+#   console/run-console.sh up      build if needed, then start
+#   console/run-console.sh down    stop and remove
+#   console/run-console.sh logs    follow the proxy log
+#   console/run-console.sh rebuild rebuild the image and restart
 #
-# start-hawkbit.sh starts this by itself, so you rarely need this script. It is
-# here for restarting the console alone -- after editing app.js, say -- without
-# touching the server, whose database is in memory and would be wiped.
+# demo/start.sh starts the console by itself, so you rarely need this script.
+# It is here for restarting the console alone -- after editing app.js, say --
+# without touching the demo's server, whose database would be wiped.
 #
 set -euo pipefail
 
 HERE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
-IMG=qamf-hawkbit-console:local
-NAME=qamf-hawkbit-console
-NET=qamf-hb-net
+IMG=qawk-console:local
+NAME=qawk-demo-console
+NET=qawk-demo
 PORT="${HAWKBIT_CONSOLE_PORT:-8090}"
-# Inside the network the server answers to its alias; from outside, pass
+# Inside the demo's network the server answers to its container name; from outside, pass
 # --hawkbit or set HB_URL.
-HB="${HB_URL:-http://hawkbit:8080}"
+HB="${HB_URL:-http://qawk-demo-server:8080}"
 
 cmd="${1:-up}"
 

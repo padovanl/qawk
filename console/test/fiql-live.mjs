@@ -1,6 +1,6 @@
 /* Cross-checks the FIQL editor's opinion against a running hawkBit.
  *
- *     node ota/hawkbit-ui/test/fiql-live.mjs [url] [user] [password]
+ *     node console/test/fiql-live.mjs [url] [user] [password]
  *
  * The editor's field lists were read off a live server rather than out of the
  * documentation, and this is what keeps them honest: for every field it claims

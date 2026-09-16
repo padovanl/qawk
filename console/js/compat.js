@@ -24,7 +24,7 @@ import { $, h, icon } from './dom.js';
  * is caught by name.
  */
 
-const EXPECTED_VERSION = '1.1.0';       // what start-hawkbit.sh pins and pulls
+const EXPECTED_VERSION = '1.1.0';       // the hawkBit release the console is checked against
 const EXPECTED_API = 'v1';
 const DOC = '/v3/api-docs/Management%20API';
 

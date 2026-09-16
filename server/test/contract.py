@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Does Qawk answer the way hawkBit 1.1.0 answers?
 
-    python3 ota/qawk/test/contract.py [http://localhost:18080]
+    python3 server/test/contract.py [http://localhost:18080]
 
 Runs, against the server under test, the same flow that was recorded against
 a real hawkBit 1.1.0 (reference/samples, see capture.py in the history of this

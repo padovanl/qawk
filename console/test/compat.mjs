@@ -1,7 +1,7 @@
 /* Keeps the compatibility check honest.
  *
- *     node ota/hawkbit-ui/test/compat.mjs           # list only, no server
- *     node ota/hawkbit-ui/test/compat.mjs --live    # also ask hawkBit
+ *     node console/test/compat.mjs           # list only, no server
+ *     node console/test/compat.mjs --live    # also ask hawkBit
  *
  * js/compat.js carries the list of endpoints the console needs, and warns on
  * screen when the server it is pointed at does not have them. A list like that

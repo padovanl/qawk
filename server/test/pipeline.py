@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The release pipeline, end to end, with simulated devices.
 
-    python3 ota/qawk/test/pipeline.py [http://localhost:18080]
+    python3 server/test/pipeline.py [http://localhost:18080]
 
 Needs a Qawk it may fill with test data (a scratch instance: it creates
 users, sets and fleets with a random suffix) and Docker, to run qawk-sim from

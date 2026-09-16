@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Promotion by hand (the default) and by itself -- end to end.
 
-    python3 ota/qawk/test/autopromote.py [http://localhost:18080]
+    python3 server/test/autopromote.py [http://localhost:18080]
 
 Needs a Qawk it may fill with test data, and Docker, to run qawk-sim from the
 Qawk image ($QAWK_IMAGE, qawk:next by default). Four fleets of three

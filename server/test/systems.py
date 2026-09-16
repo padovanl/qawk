@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Systems -- updated as a whole, after Mender Orchestrator -- end to end.
 
-    python3 ota/qawk/test/systems.py [http://localhost:18080]
+    python3 server/test/systems.py [http://localhost:18080]
 
 Needs a Qawk it may fill with test data, and Docker, to run qawk-sim from the
 Qawk image ($QAWK_IMAGE, qawk:next by default). Four systems, each a 6hd

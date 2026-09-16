@@ -1,6 +1,6 @@
 # QubicaAMF - hawkBit console.
 #
-#   docker build -t qamf-hawkbit-console:local ota/hawkbit-ui/
+#   docker build -t qawk-console:local console/
 #
 # Runs exactly like hawkbit-simple-ui: its own container on the same network as
 # the server, reaching it by the 'hawkbit' network alias.
@@ -11,7 +11,7 @@
 FROM python:3-alpine
 
 WORKDIR /app
-COPY serve.py index.html style.css fonts.css logo.png favicon.png favicon.ico qawk-logo.svg qawk-logo.png /app/
+COPY serve.py index.html style.css fonts.css favicon.png favicon.ico qawk-logo.svg qawk-logo.png /app/
 COPY fonts/ /app/fonts/
 COPY js/ /app/js/
 # which build this is: an open console reads it and reloads itself when a new

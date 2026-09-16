@@ -1,7 +1,7 @@
 /* What does the console show for one device, right now?
  *
- *     node ota/hawkbit-ui/test/gui-target.mjs <controllerId>
- *     node ota/hawkbit-ui/test/gui-target.mjs <controllerId> --expect-status in_sync \
+ *     node console/test/gui-target.mjs <controllerId>
+ *     node console/test/gui-target.mjs <controllerId> --expect-status in_sync \
  *                                             --expect-installed "app-full 1.1.0"
  *
  * Used between the steps of a deployment pass. After each install there are two

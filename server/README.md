@@ -9,7 +9,7 @@ keep: small, readable, and ours to extend.
   hawkBit client (suricatta) will keep sending what it sends today. Every
   answer of the device API is checked, field by field, against answers
   recorded from a real hawkBit 1.1.0.
-- **The console works unchanged**, and so do the scripts in `ota/hawkbit/` and
+- **The console works unchanged**, and so do scripts written for hawkBit and
   hawkBit's own `hawkbit-simple-ui`: the Management API has all 153 of
   hawkBit's operations, with its JSON and its error codes.
 - **What hawkBit lacks** is added under `/qawk/v1`, never by changing what
@@ -36,20 +36,20 @@ Written in Go, on PostgreSQL. One static binary, one container image.
 
 ## Running it
 
-### With the rest of the OTA stack
+### The demo
 
 ```bash
-./ota/hawkbit/start-hawkbit.sh                  # Qawk (the default on this branch)
-./ota/hawkbit/start-hawkbit.sh --server hawkbit # the stock hawkBit 1.1.0, as before
-./ota/hawkbit/start-hawkbit.sh --rebuild        # rebuild the Qawk image first
-./ota/hawkbit/start-hawkbit.sh --stop           # stop everything
+demo/start.sh          # build the images, start it all, load sample data
+demo/start.sh seed     # load the sample data again
+demo/start.sh down     # stop and remove it all
 ```
 
-The script starts PostgreSQL and Qawk on port 8080, with the same gateway
-token and the same target types hawkBit got, and the console on 8090. The Qawk
-container carries the network alias `hawkbit`, so the console and
-`hawkbit-simple-ui` reach it without being told anything changed. A device
-already pointed at hawkBit on that host polls Qawk from its next poll.
+The script starts PostgreSQL, Qawk on port 8080 and the console on 8090, loads
+a catalogue, the channels dev → beta → prod and a system type, and starts
+simulated devices (`qawk-sim`) that poll with a gateway token and take the
+updates they are given. `demo/compose.yml` is the same for docker compose. A
+device already pointed at hawkBit polls Qawk from its next poll, once it is
+pointed at this host.
 
 That setup is for the lab: PostgreSQL has no volume and the artifacts live in
 the container, so — like hawkBit's in-memory database — a restart is an empty
@@ -59,7 +59,7 @@ server. For anything that must survive a restart, see
 ### On its own
 
 ```bash
-docker build -t qawk:local ota/qawk
+docker build -t qawk:local server
 docker run -d --name qawk-db -e POSTGRES_USER=qawk -e POSTGRES_PASSWORD=qawk postgres:16-alpine
 docker run -d --name qawk -p 8080:8080 --link qawk-db \
   -e QAWK_DATABASE_URL='postgres://qawk:qawk@qawk-db:5432/qawk?sslmode=disable' \
@@ -411,8 +411,7 @@ docker run --rm --network host --entrypoint qawk-sim qawk:local \
 ```
 
 `test/pipeline.py` runs the whole pipeline against a scratch server with it;
-rows 15–19 of the device demonstration (`ota/demo/run-demo.sh`) run it with
-the real device among 188 simulated ones.
+`demo/start.sh` runs it for the demo.
 
 ### Systems: updated as a whole, after Mender Orchestrator
 
@@ -675,6 +674,7 @@ In the console: **Users and roles** and **Audit log** appear for those with
 `SYSTEM_ADMIN`; **My account** (password, tokens) for everyone. The header
 shows who you are signed in as, with your roles.
 
+
 ---
 
 ## Scaling: ten thousand devices, many instances
@@ -737,10 +737,10 @@ docker run --rm --network host --ulimit nofile=65536:65536 --entrypoint qawk-loa
 
 ```bash
 # unit tests (the query language)
-docker run --rm -v "$PWD/ota/qawk":/src -w /src golang:1.25-bookworm go test ./...
+docker run --rm -v "$PWD/server":/src -w /src golang:1.25-bookworm go test ./...
 
 # the contract: replays the recorded hawkBit flow against a server
-python3 ota/qawk/test/contract.py http://localhost:8080
+python3 server/test/contract.py http://localhost:8080
 ```
 
 `test/contract.py` is the one that matters. It creates modules, sets and a
@@ -757,7 +757,7 @@ contract and not Qawk's own idea of it.
 use, pass the existing one, or they are locked out:
 
 ```bash
-QAWK_CONTRACT_TOKEN=$(cat ota/keys/hawkbit-gateway-token) python3 ota/qawk/test/contract.py
+QAWK_CONTRACT_TOKEN=<gateway token> python3 server/test/contract.py
 ```
 
 What Qawk adds has its own end-to-end tests, with simulated devices from
@@ -767,38 +767,34 @@ and fleets with a random suffix):
 ```bash
 # fleets and the release pipeline: rules, direct releases, gates, waves,
 # four-eyes approval, freezes, expo and home, halts, forcing, history, audit
-python3 ota/qawk/test/pipeline.py http://localhost:18080
+python3 server/test/pipeline.py http://localhost:18080
 
 # hawkBit's rollouts: groups in sequence, error threshold and pause, retry,
 # triggerNextGroup, pause/resume, approval and denial, stop, fleet== queries
-python3 ota/qawk/test/rollouts.py http://localhost:18080
+python3 server/test/rollouts.py http://localhost:18080
 
 # scheduled deployments: maintenance windows, timeforced, download-only, startAt
-python3 ota/qawk/test/scheduled.py http://localhost:18080
+python3 server/test/scheduled.py http://localhost:18080
 
 # systems: Mender YAML in and out, systems found, orders, maxParallel,
 # a whole system rolled back, maxFailed, rollback by hand
-python3 ota/qawk/test/systems.py http://localhost:18080
+python3 server/test/systems.py http://localhost:18080
 
 # centres in channels, devices following their centre, a device lent to a
 # temporary channel, releases leaving systems alone, deployments by channel
-python3 ota/qawk/test/centres.py http://localhost:18080
+python3 server/test/centres.py http://localhost:18080
 
 # a channel's release through the orchestrator: the set for the devices that
 # stand alone, the manifest for the systems, centre by centre; promoted with or
 # without it; the gate waiting for the systems; halted when they fail
-python3 ota/qawk/test/orchestrated.py http://localhost:18080
+python3 server/test/orchestrated.py http://localhost:18080
 
 # promotion by hand (the default), by itself, by itself with approval
-python3 ota/qawk/test/autopromote.py http://localhost:18080
+python3 server/test/autopromote.py http://localhost:18080
 ```
 
-The console's own live tests (`ota/hawkbit-ui/test/*-live.mjs`) run against
-Qawk as they run against hawkBit, and the full OTA matrix in
-`ota/TESTBOOK.md` is the end-to-end proof: real devices, real images, real
-updates, through Qawk. Rows 15–23 of it put the real device among simulated
-ones for fleets, the pipeline, rollouts, schedules, ten thousand devices and
-systems.
+The console's own live tests (`console/test/*-live.mjs`) run against
+Qawk as they run against hawkBit.
 
 ---
 

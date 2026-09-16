@@ -1,6 +1,6 @@
 /* Smoke test for the console's JavaScript.  No browser, no dependencies:
  *
- *     node ota/hawkbit-ui/test/smoke.mjs
+ *     node console/test/smoke.mjs
  *
  * It answers the questions a split into modules actually raises -- does every
  * import name a real export, does every module evaluate, does every menu entry

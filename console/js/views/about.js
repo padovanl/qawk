@@ -90,13 +90,12 @@ async function serverTab(root) {
         h('a.link', { onclick: () => go('cfg') }, 'Configuration'), '.')),
 
     panel('This console',
-      p('Served by ', h('code', 'ota/hawkbit-ui/serve.py'), ', which also proxies ',
+      p('Served by ', h('code', 'console/serve.py'), ', which also proxies ',
         h('code', '/rest'), ' and ', h('code', '/v3/api-docs'),
         ' to hawkBit so the page and the API share one origin. Credentials stay ',
         'in this tab and are sent straight to hawkBit; nothing is stored server-side.'),
-      p('The stock interface is still on its own port and talks to the same ',
-        'server, so anything done in one appears in the other. Which one starts ',
-        'is ', h('code', 'start-hawkbit.sh --ui console|stock|both|none'), '.'))));
+      p('It works with Qawk and with a stock hawkBit alike: point ',
+        h('code', 'HB_URL'), ' at either.'))));
 }
 
 const card2 = (k, v, view) => {

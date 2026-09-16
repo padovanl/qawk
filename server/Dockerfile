@@ -1,6 +1,6 @@
 # Qawk - QubicaAMF's update server.
 #
-#   docker build -t qawk:local ota/qawk
+#   docker build -t qawk:local server
 #
 # Two stages: the Go toolchain builds static binaries, and the image that
 # runs them has nothing else in it but a user and a directory for artifacts.

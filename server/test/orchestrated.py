@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A channel's release through the orchestrator -- end to end.
 
-    python3 ota/qawk/test/orchestrated.py [http://localhost:18080]
+    python3 server/test/orchestrated.py [http://localhost:18080]
 
 Needs a Qawk it may fill with test data, and Docker, to run qawk-sim from the
 Qawk image ($QAWK_IMAGE, qawk:next by default). Eight systems -- a 6hd with

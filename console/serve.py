@@ -2,7 +2,7 @@
 """
 QubicaAMF - server for the hawkBit console.
 
-    ./ota/hawkbit-ui/serve.py [--port 8090] [--hawkbit http://localhost:8080]
+    console/serve.py [--port 8090] [--hawkbit http://localhost:8080]
 
 It does two things, and the second one is the reason it exists at all:
 

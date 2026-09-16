@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Centres and their channels, and systems deployed by channel -- end to end.
 
-    python3 ota/qawk/test/centres.py [http://localhost:18080]
+    python3 server/test/centres.py [http://localhost:18080]
 
 Needs a Qawk it may fill with test data, and Docker, to run qawk-sim from the
 Qawk image ($QAWK_IMAGE, qawk:next by default). Eight systems -- a 6hd with

@@ -1,6 +1,6 @@
 // Qawk - QubicaAMF's update server, speaking hawkBit's protocols.
 //
-// See ota/qawk/README.md.
+// See server/README.md.
 package main
 
 import (
