@@ -40,6 +40,10 @@ type Config struct {
 	AdminUser     string
 	AdminPassword string
 
+	// UsersFile, when set, is a YAML file of users the server creates or
+	// brings up to date at every start (users/provision.go).
+	UsersFile string
+
 	// PublicURL, when set, is the base of every link Qawk hands out (the
 	// download URLs a device follows, the _links of the Management API).
 	// When empty, links are built from the request's own scheme and Host,
@@ -75,6 +79,7 @@ func Load() (Config, error) {
 		Tenant:             env("QAWK_TENANT", "DEFAULT"),
 		AdminUser:          env("QAWK_ADMIN_USER", "admin"),
 		AdminPassword:      env("QAWK_ADMIN_PASSWORD", "admin"),
+		UsersFile:          env("QAWK_USERS_FILE", ""),
 		PublicURL:          strings.TrimRight(env("QAWK_PUBLIC_URL", ""), "/"),
 		DefaultPollingTime: env("QAWK_POLLING_TIME", "00:05:00"),
 		LogLevel:           env("QAWK_LOG_LEVEL", "info"),

@@ -65,6 +65,12 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 	if err := dir.Seed(ctx); err != nil {
 		return nil, err
 	}
+	// after the roles, which the file's users are given
+	if cfg.UsersFile != "" {
+		if err := dir.Provision(ctx, cfg.UsersFile); err != nil {
+			return nil, err
+		}
+	}
 	svc.SetDirectory(dir)
 
 	m := metrics.New()

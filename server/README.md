@@ -88,6 +88,7 @@ Everything is an environment variable; nothing is read after startup.
 | `QAWK_TENANT` | `DEFAULT` | the tenant this instance serves (the `{tenant}` of the device URL) |
 | `QAWK_ADMIN_USER` | `admin` | the administrator: every permission, never stored, always works (other users live in the database) |
 | `QAWK_ADMIN_PASSWORD` | `admin` | its password; must not be empty |
+| `QAWK_USERS_FILE` | *(empty)* | a YAML file of users created or brought up to date at every start (see [Users from a file](#users-from-a-file)) |
 | `QAWK_AUDIT_DAYS` | `180` | how long the audit log is kept; `0` keeps it for ever |
 | `QAWK_METRICS_TOKEN` | *(empty)* | when set, `/metrics` answers only `Authorization: Bearer <token>`; empty leaves it open, for a scraper on an internal network |
 | `QAWK_PUBLIC_URL` | *(empty)* | base of every link Qawk hands out; empty means "the address the client used", which is right unless a proxy rewrites it |
@@ -641,9 +642,10 @@ database, managed from the console and shared by every instance.
    iterations) and any number of roles. A disabled user cannot sign in.
 
 **Roles** are named sets of hawkBit's own permissions, so every route keeps
-the permission hawkBit gives it. Three are built in and rewritten at every
+the permission hawkBit gives it. Four are built in and rewritten at every
 start: `admin` (everything), `operator` (targets, fleets, software, rollouts;
-deletes nothing, configures nothing, approves nothing), `viewer` (reads
+deletes nothing, configures nothing, approves nothing), `release-manager` (an
+operator who also approves releases and forces a gate), `viewer` (reads
 everything). Others are made from the console with any set of permissions.
 Deleting a role takes it away from whoever had it. `SYSTEM_ADMIN` is what
 manages users and roles and reads the audit log.
@@ -674,6 +676,38 @@ In the console: **Users and roles** and **Audit log** appear for those with
 `SYSTEM_ADMIN`; **My account** (password, tokens) for everyone. The header
 shows who you are signed in as, with your roles.
 
+#### Users from a file
+
+A new server has one user, the administrator. A deployment that must come up
+with its people already there lists them in a file and sets
+`QAWK_USERS_FILE` to its path:
+
+```yaml
+users:
+  - username: release-manager-1
+    password: at-least-eight-characters
+    roles: [release-manager]
+  - username: operator-1
+    password: another-password
+    display_name: The night operator
+    roles: [operator]
+    enabled: true            # the default
+```
+
+```bash
+docker run ... -v "$PWD/users.yaml:/etc/qawk/users.yaml:ro" \
+  -e QAWK_USERS_FILE=/etc/qawk/users.yaml qawk:local
+```
+
+At every start each user in the file is created if missing, and otherwise
+brought to what the file says: roles, whether it may sign in, the display name
+when one is given, the password. Nothing is written when nothing differs, so a
+restart leaves no trace in the audit log; changes are recorded as made by
+`users-file`. Users not in the file are left alone. The rules are the API's (a
+valid name, a password of at least 8 characters, roles that exist, never the
+administrator's name), and a file that breaks them stops the server with the
+user it could not take, rather than leaving it up without the people it
+expects.
 
 ---
 
