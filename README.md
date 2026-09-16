@@ -15,6 +15,7 @@ console is plain JavaScript with no build step, served by a small Python
 proxy, and works with a stock hawkBit 1.1.0 as well.
 
 - [What is in it](#what-is-in-it)
+- [**The guide: every feature, step by step**](docs/GUIDE.md)
 - [Try it in five minutes](#try-it-in-five-minutes)
 - [Run it for real](#run-it-for-real)
 - [Connect devices](#connect-devices)
@@ -49,8 +50,10 @@ reasons, in [server/README.md](server/README.md#where-qawk-differs-from-hawkbit-
 | **Operations** | Prometheus metrics at `/metrics`, OpenTelemetry over OTLP, `/live` and `/health`, download progress per device, background jobs elected through PostgreSQL so any number of instances can run |
 | **Scale** | measured with 10,000 devices polling every 30 s: 333 requests/s, p99 2 ms |
 
-The full description of every feature, route and rule is in
-[server/README.md](server/README.md).
+**How to use every feature, step by step** — in the console and with the API,
+from channels and approvals to the orchestrator and rollbacks — is in
+[docs/GUIDE.md](docs/GUIDE.md). The full reference of every route and rule is
+in [server/README.md](server/README.md).
 
 **The console** ([console/](console/)): dashboard, targets with the columns
 you choose, distribution sets and modules with upload checks, deployments by
