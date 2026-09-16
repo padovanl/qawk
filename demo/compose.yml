@@ -1,0 +1,57 @@
+# The Qawk demo with docker compose -- the same as demo/start.sh, for those who
+# prefer compose:
+#
+#   docker compose -f demo/compose.yml up -d --build
+#   python3 demo/seed.py --password changeme --token demo-gateway-token
+#
+# The simulated devices start with the rest and register once the seed has
+# set the gateway token. Change QAWK_ADMIN_PASSWORD and GATEWAY_TOKEN together
+# with the seed's --password and --token.
+name: qawk-demo
+
+x-sim: &sim
+  image: qawk:local
+  entrypoint: ["qawk-sim"]
+  restart: unless-stopped
+  depends_on: [server]
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: qawk
+      POSTGRES_PASSWORD: qawk
+      POSTGRES_DB: qawk
+
+  server:
+    build: ../server
+    image: qawk:local
+    ports: ["${QAWK_PORT:-8080}:8080"]
+    environment:
+      QAWK_DATABASE_URL: postgres://qawk:qawk@db:5432/qawk?sslmode=disable
+      QAWK_ADMIN_PASSWORD: ${QAWK_ADMIN_PASSWORD:-changeme}
+      # more users than the administrator: a users file (server/README.md)
+      # QAWK_USERS_FILE: /etc/qawk/users.yaml
+    # volumes: ["./users.yaml:/etc/qawk/users.yaml:ro"]
+    depends_on: [db]
+
+  console:
+    build: ../console
+    image: qawk-console:local
+    ports: ["${CONSOLE_PORT:-8090}:8090"]
+    environment:
+      HB_URL: http://server:8080
+    depends_on: [server]
+
+  devices:
+    <<: *sim
+    command: ["-url", "http://server:8080", "-token", "${GATEWAY_TOKEN:-demo-gateway-token}", "-prefix", "demo",
+              "-interval", "30s", "-install-min", "10s", "-install-max", "60s",
+              "-fleet", "dev:20", "-fleet", "beta:40", "-fleet", "prod:${PROD_DEVICES:-200}", "-fleet", "expo:8"]
+
+  systems:
+    <<: *sim
+    command: ["-url", "http://server:8080", "-token", "${GATEWAY_TOKEN:-demo-gateway-token}", "-prefix", "ctr",
+              "-interval", "30s", "-install-min", "5s", "-install-max", "20s",
+              "-system", "device:${SYSTEMS:-16}:device1=1,device2=2,device3=1:centers=4",
+              "-fail-where", "device=device-07,device_type=device3,set=2.0"]
