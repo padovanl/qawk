@@ -115,9 +115,30 @@ waves; give `dev` the broken release and watch it halt; approve a release into
 
 ### Images
 
+Published on Docker Hub:
+
+```bash
+docker pull padovanl/qawk:0.1.0            # the server, with qawk-sim and qawk-load
+docker pull padovanl/qawk-console:0.1.0    # the console
+```
+
+Or built from this repository:
+
 ```bash
 docker build -t qawk:local server/
 docker build -t qawk-console:local console/
+```
+
+Use either name in the commands below. To publish a release under your own
+namespace, give the server its version (it reports it at `/qawk/v1/info` and
+in the console's About page) and push both with the same tag:
+
+```bash
+V=0.1.0
+docker build --build-arg VERSION=$V -t <you>/qawk:$V server/
+docker build -t <you>/qawk-console:$V console/
+docker push <you>/qawk:$V
+docker push <you>/qawk-console:$V
 ```
 
 ### Server, database and console

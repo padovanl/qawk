@@ -7,6 +7,33 @@
  * and impossible to see by reading.
  */
 
+// Detach a node from wherever it is: the DOM moves a node that is inserted
+// again, it never has it in two places. dom.js's patch() relies on that.
+function detach(n) {
+  const p = n && n.parentNode;
+  if (!p) return;
+  const i = p.children.indexOf(n);
+  if (i >= 0) p.children.splice(i, 1);
+  n.parentNode = null;
+}
+
+function parentLink(n) {
+  if (!Object.getOwnPropertyDescriptor(n, 'parentNode')) {
+    Object.defineProperty(n, 'parentNode', { value: null, writable: true, enumerable: false });
+  }
+}
+
+export class Text {
+  constructor(t) {
+    this.nodeType = 3; this.nodeName = '#text'; this.textContent = String(t);
+    parentLink(this);
+  }
+  get nodeValue() { return this.textContent; }
+  set nodeValue(v) { this.textContent = String(v); }
+  replaceWith(n) { if (this.parentNode) this.parentNode._replace(this, n); }
+  remove() { detach(this); }
+}
+
 export class El {
   constructor(name = 'div') {
     this.nodeName = name; this.nodeType = 1;
@@ -20,6 +47,8 @@ export class El {
     };
     this.hidden = false; this.value = ''; this.disabled = false; this.title = '';
     this.id = '';
+    // attributes, for dom.js's in-place update (keyed children, data-own)
+    Object.defineProperty(this, '_attrs', { value: new Map(), enumerable: false });
     // Non-enumerable, or the parent link makes the tree circular and
     // JSON.stringify -- which a test uses -- throws.
     Object.defineProperty(this, 'parentNode', { value: null, writable: true, enumerable: false });
@@ -44,41 +73,50 @@ export class El {
   get textContent() {
     return this.children.map(c => c.nodeType === 3 ? c.textContent : (c.textContent || '')).join('');
   }
-  set textContent(v) { this.children = [{ nodeType: 3, textContent: String(v) }]; }
-  setAttribute(k, v) { this.dataset['_' + k] = String(v); }
-  getAttribute() { return null; }
-  removeAttribute() {}
+  set textContent(v) { this.children = [this._adopt(new Text(v))]; }
+  setAttribute(k, v) { this.dataset['_' + k] = String(v); this._attrs.set(String(k), String(v)); }
+  getAttribute(k) { return this._attrs.has(String(k)) ? this._attrs.get(String(k)) : null; }
+  hasAttribute(k) { return this._attrs.has(String(k)); }
+  removeAttribute(k) { delete this.dataset['_' + k]; this._attrs.delete(String(k)); }
+  get attributes() { return [...this._attrs].map(([name, value]) => ({ name, value })); }
   addEventListener(k, f) { this.handlers[k] = f; }
   removeEventListener() {}
   // The real DOM turns a bare string into a text node; the stub has to do the
   // same or a legitimate replaceChildren('finished') reads as empty.
   static _node(k) {
-    return (k && typeof k === 'object') ? k : { nodeType: 3, textContent: String(k) };
+    return (k && typeof k === 'object') ? k : new Text(k);
   }
   // Parents are tracked, so remove() actually detaches: a no-op made every
   // "it takes itself away" test pass without the code doing anything.
   _adopt(k) {
     const n = El._node(k);
     if (n && typeof n === 'object') {
-      if (!Object.getOwnPropertyDescriptor(n, 'parentNode')) {
-        Object.defineProperty(n, 'parentNode', { value: null, writable: true, enumerable: false });
-      }
+      parentLink(n);
+      detach(n);
       n.parentNode = this;
     }
     return n;
   }
+  _replace(old, k) {
+    const i = this.children.indexOf(old);
+    if (i < 0) return;
+    const n = this._adopt(k);
+    const j = this.children.indexOf(old);
+    this.children.splice(j, 1, n);
+    old.parentNode = null;
+  }
+  replaceWith(k) { if (this.parentNode) this.parentNode._replace(this, k); }
   append(...k) { this.children.push(...k.map(x => this._adopt(x))); }
   appendChild(k) { this.children.push(this._adopt(k)); return k; }
-  insertBefore(k) { this.children.push(this._adopt(k)); return k; }
+  insertBefore(k, ref) {
+    const n = this._adopt(k);
+    const i = ref ? this.children.indexOf(ref) : -1;
+    if (i >= 0) this.children.splice(i, 0, n); else this.children.push(n);
+    return k;
+  }
   prepend(...k) { this.children.unshift(...k.map(x => this._adopt(x))); }
   replaceChildren(...k) { this.children = k.map(x => this._adopt(x)); }
-  remove() {
-    const p = this.parentNode;
-    if (!p) return;
-    const i = p.children.indexOf(this);
-    if (i >= 0) p.children.splice(i, 1);
-    this.parentNode = null;
-  }
+  remove() { detach(this); }
   /* Good enough for '#id' and '.class': the console looks elements up that
      way, and a stub that answers "here is a fresh element" to everything makes
      any assertion about presence meaningless. */
@@ -119,7 +157,7 @@ export function install() {
   doc.body = new El('body');
   doc.createElement = n => new El(n);
   doc.createElementNS = (_, n) => new El(n);
-  doc.createTextNode = t => ({ nodeType: 3, textContent: String(t) });
+  doc.createTextNode = t => new Text(t);
   /* The page's own furniture, so a lookup finds the SAME element every time
      and something genuinely absent is genuinely absent. Without this every
      querySelector answered with a fresh element, which made "is the bar gone?"
