@@ -60,10 +60,13 @@ func (s *Service) Poll(ctx context.Context, controllerID string, address *string
 				ControllerID: controllerID, Name: controllerID,
 				Description:   "Plug and Play target: " + controllerID,
 				SecurityToken: hex.EncodeToString(token), Address: address, LastRequestAt: &now,
-				// hawkBit does not ask a target that registered itself for its
-				// attributes: its first poll carries no configData link.
-				// SWUpdate sends them at startup anyway.
-				UpdateStatus: model.UpdateRegistered, RequestAttributes: false,
+				// A device that registers itself IS asked for its attributes, at
+				// its next poll. hawkBit does not, counting on the device having
+				// sent them when it started -- but one already running when it
+				// meets this server (a server restored from nothing, this demo's
+				// own reset) has sent them to nobody, and here they say which
+				// fleet it belongs in.
+				UpdateStatus: model.UpdateRegistered, RequestAttributes: true,
 			})
 			if err != nil {
 				return err
