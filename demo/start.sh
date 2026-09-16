@@ -95,11 +95,11 @@ say "sample data: catalogue, channels, the system type"
 seed --stage base
 
 say "simulated devices: dev, beta, prod (${PROD_DEVICES}), expo, and ${SYSTEMS} systems in four centres"
-docker run -d --name "$SIMS" --network "$NET" --entrypoint qawk-sim qawk:local \
+docker run -d --name "$SIMS" --network "$NET" --no-healthcheck --entrypoint qawk-sim qawk:local \
   -url "http://${SERVER}:8080" -token "$(cat "$TOKEN_FILE")" -prefix demo \
   -interval 30s -install-min 10s -install-max 60s \
   -fleet dev:20 -fleet beta:40 -fleet "prod:${PROD_DEVICES}" -fleet expo:8 > /dev/null
-docker run -d --name "$SYSSIMS" --network "$NET" --entrypoint qawk-sim qawk:local \
+docker run -d --name "$SYSSIMS" --network "$NET" --no-healthcheck --entrypoint qawk-sim qawk:local \
   -url "http://${SERVER}:8080" -token "$(cat "$TOKEN_FILE")" -prefix ctr \
   -interval 30s -install-min 5s -install-max 20s \
   -system "device:${SYSTEMS}:device1=1,device2=2,device3=1:centers=4" \

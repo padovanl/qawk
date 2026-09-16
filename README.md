@@ -284,30 +284,61 @@ supports; a bar warns when an endpoint it calls is missing.
 
 ## Simulated devices and load
 
-Both tools are in the server image.
+No hardware needed to try anything in this repository: `demo/simulate.sh`
+starts devices that register, poll, take the updates they are given and
+report how they went, against any Qawk server -- the demo's or your own.
 
 ```bash
-# devices that take updates: 20 in dev, 40 in beta, reporting ring=<fleet>;
-# anything whose name contains "broken" fails
-docker run --rm --network host --entrypoint qawk-sim qawk:local \
-  -url http://localhost:8080 -token a-random-token \
-  -fleet dev:20 -fleet beta:40
+# 50 devices reporting ring=lab, polling every 30 s
+demo/simulate.sh --url http://localhost:8080 --token <gateway token> --fleet lab:50
 
-# 16 systems of one device1, two device2 and a device3, in four centres;
-# one component made to fail a given set
-docker run --rm --network host --entrypoint qawk-sim qawk:local \
-  -url http://localhost:8080 -token a-random-token -prefix ctr \
-  -system device:16:device1=1,device2=2,device3=1:centers=4 \
-  -fail-where device=device-07,device_type=device3,set=2.0
+# several groups at once, and a name to tell runs apart
+demo/simulate.sh --name shop --url http://localhost:8080 --token <token> \
+  --fleet dev:20 --fleet beta:40 --fleet prod:500
 
-# how many polls the server holds
+# 16 systems -- a device1 with two device2 and a device3 -- in four centres
+demo/simulate.sh --name centres --url http://localhost:8080 --token <token> --systems 16
+
+demo/simulate.sh --list            # what is running
+demo/simulate.sh --stop shop       # stop one run; --stop alone stops them all
+docker logs -f qawk-sim-shop       # what they are doing, every 10 s
+```
+
+Against the demo, `--token` can be left out: the script reads
+`demo/.gateway-token`.
+
+**What a simulated device is.** Its controller id is
+`<name>-<group>-<n>` (`shop-prod-017`). It reports the attributes a real one
+would -- `ring` (the group), `device_type`, `os_version`, and for systems
+`device`, `device_type` and `centerid` -- so fleet rules
+(`attribute.ring==beta`), centres and system types pick it up exactly as they
+would a real device. It downloads nothing: it waits a random time and reports
+the action `finished`. It answers a deployment it is told to skip outside its
+maintenance window as SWUpdate does, and a download-only one as `downloaded`.
+
+**Making things fail**, to see halts, thresholds and rollbacks:
+
+| | |
+|---|---|
+| a module whose name or version contains `broken` | fails on every device (the demo's `app-broken 1.3.0`) |
+| `-- -fail-rate 0.1` | one deployment in ten fails, at random |
+| `-- -fail-where device=device-07,device_type=device3,set=2.0` | the devices with those attributes fail, only for that set: one component of one system |
+| `-- -install-min 5s -install-max 60s` | how long an installation takes |
+| `--interval 10s` | how often each device polls |
+
+Everything after `--` goes to `qawk-sim` unchanged; `docker run --rm
+--entrypoint qawk-sim qawk:local -help` lists it all.
+
+**Load.** `qawk-load` measures how many polls a server holds: thousands of
+devices that poll, and with `-act` install what they are given.
+
+```bash
 docker run --rm --network host --ulimit nofile=65536:65536 --entrypoint qawk-load qawk:local \
-  -url http://localhost:8080 -token a-random-token \
+  -url http://localhost:8080 -token <token> \
   -devices 10000 -interval 30s -ramp 30s -duration 180s -act
 ```
 
-`-help` lists every flag: polling interval, install time, failure rate, and
-more.
+It prints requests per second, latency percentiles and errors.
 
 ---
 

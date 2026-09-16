@@ -13,6 +13,7 @@ x-sim: &sim
   image: qawk:local
   entrypoint: ["qawk-sim"]
   restart: unless-stopped
+  healthcheck: {disable: true}   # the image's check is the server's
   depends_on: [server]
 
 services:
