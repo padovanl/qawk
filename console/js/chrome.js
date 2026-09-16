@@ -165,7 +165,8 @@ function modalError(d, box, e) {
 function modal(title, bodyNodes, onOk, okLabel = 'OK') {
   const d = $('#modal');
   $('#modal-title').textContent = title;
-  $('#modal-body').replaceChildren(...bodyNodes);
+  // a part a dialog does not show is null: replaceChildren would write "null"
+  $('#modal-body').replaceChildren(...bodyNodes.flat(9).filter(n => n !== null && n !== undefined && n !== false));
   let box = d.querySelector('.merr');
   if (!box) { box = h('div.merr', { role: 'alert' }); d.querySelector('.da').before(box); }
   box.hidden = true;
