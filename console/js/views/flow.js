@@ -35,6 +35,8 @@ const nth = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 
 const ICON = { '6hd': 'device-desktop', 'neo-intel': 'device-desktop', st05: 'cpu', hyper: 'server-2',
   device1: 'device-desktop', device2: 'cpu', device3: 'server-2' };
 const NW = 280, NH = 176;
+// what goes back together: the components in the picture, not some system's
+const wholeOf = ids => (ids.length > 1 ? `its ${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]}` : ids.length ? `its ${ids[0]}` : 'all of it');
 
 let Editor = null;
 function makeEditor() {
@@ -311,7 +313,7 @@ function makeEditor() {
                 e('div', null, e('b', null, list.map(c => (dev.per[c] > 1 ? `${c} ×${dev.per[c]}` : c)).join(' + ')),
                   e('div', { className: 'faint' }, i ? `once step ${i} has succeeded${list.length > 1 ? ' — together' : ''}` : list.length > 1 ? 'first — together' : 'first')))) : null,
               steps.length ? e('li', { className: 'fail' }, e('span', { className: 'n' }, '!'),
-                e('div', null, e('b', null, 'a system that fails at any step'), e('div', { className: 'faint' }, 'goes back as a whole — its 6hd, st05 and hyper — and the others go on'))) : null)),
+                e('div', null, e('b', null, 'a system that fails at any step'), e('div', { className: 'faint' }, `goes back as a whole — ${wholeOf(nodes.map(n => n.id))} — and the others go on`))) : null)),
           e('div', { className: 'f' }, e('span', { className: 'rfx-yhead' }, 'Mender YAML', e('span', { className: 'grow' }),
             e('button', { className: 'btn sm', onClick: apply }, yin === null ? 'edit' : 'apply')),
           yin === null ? e('pre', { className: 'rfx-yaml', dangerouslySetInnerHTML: { __html: paint(yamlText) } })
