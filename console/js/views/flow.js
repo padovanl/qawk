@@ -32,7 +32,8 @@ const paint = y => esc(y).split('\n').map(l => l
 const hue = s => { let x = 0; for (const ch of String(s)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x % 360; };
 const fmt = n => Number(n || 0).toLocaleString('en-US');
 const nth = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : (n % 10 < 4 ? n % 10 : 0)] || 'th');
-const ICON = { '6hd': 'device-desktop', 'neo-intel': 'device-desktop', st05: 'cpu', hyper: 'server-2' };
+const ICON = { '6hd': 'device-desktop', 'neo-intel': 'device-desktop', st05: 'cpu', hyper: 'server-2',
+  device1: 'device-desktop', device2: 'cpu', device3: 'server-2' };
 const NW = 280, NH = 176;
 
 let Editor = null;
