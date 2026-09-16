@@ -15,7 +15,7 @@ import { openTarget } from './target-detail.js';
 /* ------- rollouts ---------------------------------------------------- */
 VIEWS.ro = {
   title: 'Rollouts',
-  bar: () => [h('button.btn.sm.primary', { onclick: newRolloutDialog }, icon('plus', 14), 'new rollout')],
+  bar: () => [h('button.btn.sm.primary', { onclick: () => newRolloutDialog() }, icon('plus', 14), 'new rollout')],
   async render(root) {
     const st = pg('ro');
     const fields = [{}, { key: 'name', ph: 'filter' }, {}, {}, {}, {}, {}];
@@ -136,6 +136,8 @@ async function openRolloutGroup(r, g) {
 }
 
 async function newRolloutDialog(presetQuery) {
+  // given straight as a click handler it receives the click: a query is text
+  if (typeof presetQuery !== 'string') presetQuery = '';
   const sets = await distributionSets(true);
   const name = h('input', { type: 'text', placeholder: 'neo-intel 25.7.3' });
   const desc = h('input', { type: 'text' });
