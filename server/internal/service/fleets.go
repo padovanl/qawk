@@ -801,6 +801,13 @@ func (s *Service) deliver(ctx context.Context, f model.Fleet, now int64) error {
 			// a device of a system: system deployments update it, not the channel
 			"NOT EXISTS (SELECT 1 FROM system_members sm WHERE sm.target_id = t.id)",
 			"t.assigned_ds_id IS DISTINCT FROM "+d,
+			// A device with an action under way -- a set given by hand, a
+			// rollout's -- is waited for, never overtaken: a forced assignment
+			// cancels the running action, and a system half already armed or an
+			// application half already live would lose the deployment they
+			// belong to (measured: matrix row 25, its combo cancelled in the
+			// second it started). The fleet reaches it when that action is over.
+			"NOT EXISTS (SELECT 1 FROM actions a WHERE a.target_id = t.id AND a.active)",
 			"NOT EXISTS (SELECT 1 FROM actions x WHERE x.target_id = t.id AND x.ds_id = "+d+
 				" AND x.created_at >= greatest("+a.Bind(from)+"::bigint, coalesce(t.fleet_joined_at, 0)))")
 	})
