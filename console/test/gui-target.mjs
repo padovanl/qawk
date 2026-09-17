@@ -57,9 +57,13 @@ const check = (what, cond, extra) => {
   if (!cond) bad++;
 };
 
-/* The table must agree with the server: that is the whole point. */
+/* The table must agree with the server: that is the whole point. While an
+   action is open the server says "pending" and the console says which phase of
+   it -- downloading, installing, waiting for reboot: that agrees too. */
+const { PHASE_WORDS } = await mod('badges.js');
 check('la GUI mostra lo stato del server',
-      pills.some(p => p.replace(/\s/g, '_').includes(t.updateStatus)),
+      pills.some(p => p.replace(/\s/g, '_').includes(t.updateStatus)
+        || (t.updateStatus === 'pending' && PHASE_WORDS.some(([w]) => p.startsWith(w)))),
       `server=${t.updateStatus} gui=[${pills.join(',')}]`);
 
 if (inst && inst.name) {
@@ -83,6 +87,27 @@ const wantAction = opt('expect-action');
 if (wantAction) {
   const a = acts.content[0];
   check(`l'ultima azione è ${wantAction}`, a && a.status === wantAction, a ? a.status : 'nessuna');
+}
+
+/* One action, as its device's drawer shows it: --expect-action-of <id> <status>.
+   The last action is often not the one a step is about -- a channel sends its
+   release the moment another action closes -- so the drawer's Actions tab is
+   rendered through the real module and that action's header is read. */
+const ao = args.indexOf('--expect-action-of');
+if (ao !== -1) {
+  const [aid, want] = [args[ao + 1], args[ao + 2]];
+  const walk = (n, fn, out = []) => { if (fn(n)) out.push(n); for (const c of (n && n.children) || []) walk(c, fn, out); return out; };
+  const one = await get(`/targets/${enc(id)}/actions/${aid}`).catch(() => null);
+  check(`il server dice che l'azione #${aid} è ${want}`, one && one.status === want, one ? one.status : 'non trovata');
+  const { openTarget } = await mod('views/target-detail.js');
+  await openTarget(id); await settle(4000);
+  const body = document.getElementById('drawer-body');
+  const tab = walk(body, n => n.nodeName === 'button' && /^Actions/.test((n.textContent || '').trim()))[0];
+  if (tab && tab.onclick) { await tab.onclick(); await settle(6000); }
+  const panel = walk(body, n => n.getAttribute && n.getAttribute('data-key') === 'a' + aid)[0];
+  const head = panel ? panel.textContent.replace(/\s+/g, ' ').trim() : '';
+  console.log(`  gui action : ${head.slice(0, 160) || '(not in the drawer)'}`);
+  check(`la GUI mostra l'azione #${aid} come ${want}`, !!panel && head.includes('#' + aid) && head.toLowerCase().includes(want), head.slice(0, 80));
 }
 
 process.exit(bad ? 1 : 0);
