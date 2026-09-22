@@ -623,6 +623,53 @@ func ifNote(n string) string {
 	return ": " + n
 }
 
+// RetrySystem takes one system of a deployment again: the one that rolled
+// back, or the one that was never started.
+//
+// A system that rolled back is left alone afterwards on purpose -- the
+// orchestrator must not loop for ever on a device that fails every time --
+// so it stays on what it ran before while the rest of the channel moves on.
+// Somebody has to decide it is worth another go, and this is that decision.
+// The deployment's own manifest is used again, not the channel's current one:
+// a manifest that was itself wrong is fixed by releasing a new one, which is
+// a different act with a different audit trail.
+//
+// The run starts from nothing: its devices and what each was running are
+// recorded again, now, so a rollback after this retry goes back to where the
+// system really is rather than to where it was before the first attempt.
+func (s *Service) RetrySystem(ctx context.Context, user string, deployment, run int64, reason string) error {
+	d, err := s.st.SystemDeployment(ctx, s.st.DB(), deployment)
+	if err != nil {
+		return err
+	}
+	r, err := s.st.Run(ctx, s.st.DB(), deployment, run)
+	if err != nil {
+		return err
+	}
+	if r.Status != model.RunRolledBack && r.Status != model.RunSkipped {
+		return errSys(fmt.Sprintf("system %s is %s: only one that rolled back or was skipped is taken again",
+			r.SystemKey, r.Status))
+	}
+	if d.Status == model.SDAborted {
+		return errSys(fmt.Sprintf("%s was aborted: start a new deployment for %s", d.Name, r.SystemKey))
+	}
+	why := "taken again by " + user + ifNote(strings.TrimSpace(reason))
+	if err := s.st.ResetRun(ctx, r.ID, why); err != nil {
+		return err
+	}
+	s.log.Info("system taken again", "deployment", d.Name, "system", r.SystemKey, "by", user)
+	// A deployment that had given up -- finished with it rolled back, or
+	// failed because too many did -- is under way again for this one system.
+	// Its failures no longer count against maxFailed: this run is pending now.
+	if d.Status == model.SDFinished || d.Status == model.SDFailed {
+		// StartedAt is left as it was: this deployment started when it started
+		d.Status, d.FinishedAt = model.SDRunning, nil
+		d.Reason = fmt.Sprintf("%s is being taken again", r.SystemKey)
+		return s.st.SetSystemDeploymentState(ctx, s.st.DB(), d)
+	}
+	return nil
+}
+
 // RollbackSystem puts one system of a deployment back, by hand.
 func (s *Service) RollbackSystem(ctx context.Context, user string, deployment, run int64, reason string) error {
 	d, err := s.st.SystemDeployment(ctx, s.st.DB(), deployment)

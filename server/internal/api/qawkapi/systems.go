@@ -46,6 +46,7 @@ func (a *API) systemRoutes(r chi.Router) {
 		r.With(auth.Require("HANDLE_ROLLOUT")).Post("/systemdeployments/{did}/"+c, a.systemDeploymentCommand(c))
 	}
 	r.With(auth.Require("HANDLE_ROLLOUT")).Post("/systemdeployments/{did}/runs/{rid}/rollback", a.rollbackSystem)
+	r.With(auth.Require("HANDLE_ROLLOUT")).Post("/systemdeployments/{did}/runs/{rid}/retry", a.retrySystem)
 }
 
 // ------------------------------------------------------------ system types
@@ -608,6 +609,27 @@ func (a *API) systemDeploymentCommand(cmd string) http.HandlerFunc {
 		}
 		a.sendSystemDeployment(w, r, id, http.StatusOK)
 	}
+}
+
+// retrySystem takes one system again, after it rolled back or was skipped.
+func (a *API) retrySystem(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathInt(w, r, "did", "SystemDeployment")
+	if !ok {
+		return
+	}
+	run, ok := pathInt(w, r, "rid", "SystemRun")
+	if !ok {
+		return
+	}
+	reason, ok := reasonOf(w, r)
+	if !ok {
+		return
+	}
+	if err := a.svc.RetrySystem(r.Context(), auth.User(r.Context()), id, run, reason); err != nil {
+		httpx.WriteError(w, err)
+		return
+	}
+	a.sendSystemDeployment(w, r, id, http.StatusOK)
 }
 
 func (a *API) rollbackSystem(w http.ResponseWriter, r *http.Request) {

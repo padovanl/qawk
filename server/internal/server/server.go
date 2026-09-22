@@ -82,6 +82,11 @@ func New(ctx context.Context, cfg config.Config, pool *pgxpool.Pool, log *slog.L
 
 	r := chi.NewRouter()
 	r.Use(keepSemicolons)
+	if len(cfg.CORSOrigins) > 0 {
+		r.Use(cors(cfg))
+		log.Info("CORS is on: a browser page from these origins may call the API",
+			"origins", strings.Join(cfg.CORSOrigins, ", "))
+	}
 	r.Use(middleware.Recoverer)
 	r.Use(requestLog(log, m))
 	r.Use(ddiGate(cfg.DBMaxConns))
@@ -158,6 +163,51 @@ func ddiGate(conns int32) func(http.Handler) http.Handler {
 // parameter, so the filter vanished and the request returned EVERYTHING. The
 // upload script then took the first module it got, which was the wrong one.
 // Escaping every ";" before anything parses the query keeps "q" whole.
+// cors answers a browser that asks whether a page from another origin may
+// call this server, when QAWK_CORS_ORIGINS says it may.
+//
+// Off by default, and that is the right default: a server only devices and
+// scripts talk to gains nothing from it, and a browser refusing to hand a
+// page an answer meant for someone else is a protection, not an obstacle.
+// Turn it on for a front end of your own, and name the origins rather than
+// using "*" -- with credentials, "*" is refused by browsers anyway.
+func cors(cfg config.Config) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin == "" || !cfg.CORSAllowed(origin) {
+				// no header at all: the browser refuses, which is the answer
+				if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+					w.WriteHeader(http.StatusForbidden)
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+			h := w.Header()
+			h.Set("Access-Control-Allow-Origin", origin)
+			h.Set("Access-Control-Allow-Credentials", "true")
+			h.Set("Access-Control-Expose-Headers", "Content-Range, Content-Disposition, ETag, Location, Link")
+			// the answer depends on who asked: a cache must not hand one
+			// origin's response to another
+			h.Add("Vary", "Origin")
+			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+				h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS")
+				if ask := r.Header.Get("Access-Control-Request-Headers"); ask != "" {
+					h.Set("Access-Control-Allow-Headers", ask)
+				} else {
+					h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Range")
+				}
+				h.Set("Access-Control-Max-Age", "600")
+				h.Add("Vary", "Access-Control-Request-Headers")
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 func keepSemicolons(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.RawQuery, ";") {

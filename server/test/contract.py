@@ -382,5 +382,32 @@ for _ in range(30):
 c, h, b = call("GET", f"/rest/v1/rollouts/{ro['id']}")
 check("mgmt-rollout-running", c, b)
 
+# ---- the document says what the server does ---------------------------------
+# /v3/api-docs is built by walking the router, and a generated client is built
+# from it. An operation the server performs but does not declare is one no
+# generated client can call; one it declares but does not perform is worse.
+# Both counts are compared with hawkBit 1.1.0's own descriptions.
+import json as _json
+import os as _os
+import urllib.parse as _up
+
+_here = _os.path.dirname(_os.path.abspath(__file__))
+for _group, _ref, _want in [
+    ("Direct Device Integration API", "hawkbit-1.1.0-Direct-Device-Integration-API.json", 16),
+    ("Management API", "hawkbit-1.1.0-Management-API.json", 153),
+]:
+    _c, _h, _doc = call("GET", "/v3/api-docs/" + _up.quote(_group))
+    _methods = {"get", "post", "put", "delete", "patch", "head"}
+    _have = sum(len(_methods & set(o)) for o in (_doc.get("paths") or {}).values()) if _c == 200 else 0
+    with open(_os.path.join(_here, "..", "reference", _ref)) as _f:
+        _all = sum(len(_methods & set(o)) for o in _json.load(_f)["paths"].values())
+    if _c == 200 and _have == _all == _want:
+        passed += 1
+        print(f"  ok   openapi-{_group.split()[0].lower()}: {_have} of {_all} operations declared")
+    else:
+        failed += 1
+        print(f"  FAIL openapi-{_group.split()[0].lower()}: declares {_have} of {_all} "
+              f"(expected {_want}); HTTP {_c}")
+
 print(f"\n  {passed} ok, {failed} failed, {warned} notes")
 sys.exit(1 if failed else 0)

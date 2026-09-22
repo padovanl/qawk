@@ -60,6 +60,19 @@ func (a *API) Routes(r chi.Router) {
 		r.Get("/softwaremodules/{smId}/artifacts", a.artifacts)
 		r.Get("/softwaremodules/{smId}/artifacts/{fileName}", a.download)
 		r.Head("/softwaremodules/{smId}/artifacts/{fileName}", a.download)
+		// hawkBit publishes an artifact's checksum at a path of its own, and
+		// this declares it -- but the requests never arrive here: chi prefers
+		// the plain {fileName} above, which swallows the ".MD5SUM" whole, and
+		// the handler tells the two apart by the suffix (see routes_test.go,
+		// which pins that down).
+		//
+		// So why declare it? The OpenAPI document is built by walking the
+		// router. Without this line the checksum operation was missing from
+		// the document although the server served it perfectly, and the
+		// document is what a generated client is built from. Do not "clean up"
+		// this route: it is what makes the server's description true.
+		r.Get("/softwaremodules/{smId}/artifacts/{fileName}.MD5SUM", a.download)
+		r.Head("/softwaremodules/{smId}/artifacts/{fileName}.MD5SUM", a.download)
 	})
 }
 
@@ -585,6 +598,8 @@ func (a *API) download(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// One handler for both paths: chi sends the checksum's requests here too,
+	// with the suffix still on the name.
 	name := chi.URLParam(r, "fileName")
 	md5sum := strings.HasSuffix(name, ".MD5SUM")
 	lookup := strings.TrimSuffix(name, ".MD5SUM")

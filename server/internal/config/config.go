@@ -61,7 +61,43 @@ type Config struct {
 	// MetricsToken, when set, is the bearer token /metrics wants.
 	MetricsToken string
 
+	// CORSOrigins are the web origins allowed to call the API from a browser,
+	// comma separated, or "*" for any. Empty (the default) sends no CORS
+	// header at all, which is what a server only devices and scripts talk to
+	// wants: a browser then refuses to read an answer meant for someone else.
+	// Set it for a front end of your own, or for the documentation's "send
+	// this request" button.
+	CORSOrigins []string
+
+	// TLSCert and TLSKey, both set, make the server speak HTTPS itself
+	// instead of plain HTTP. Empty (the default) is plain HTTP, which is
+	// right behind a proxy that terminates TLS for you.
+	TLSCert, TLSKey string
+
+	// TLSClientCA, with TLS on, is a PEM bundle of the authorities whose
+	// client certificates are accepted. Set it and a device must present one:
+	// mutual TLS, in front of every other check.
+	TLSClientCA string
+
+	// RedirectHTTP, with TLS on, is an extra plain-HTTP address that answers
+	// every request with a redirect to the HTTPS one -- ":8080", so a device
+	// still pointed at the old URL is told where to go.
+	RedirectHTTP string
+
 	LogLevel string
+}
+
+// TLS says whether this server terminates TLS itself.
+func (c Config) TLS() bool { return c.TLSCert != "" && c.TLSKey != "" }
+
+// CORSAllowed says whether an Origin may read this server's answers.
+func (c Config) CORSAllowed(origin string) bool {
+	for _, o := range c.CORSOrigins {
+		if o == "*" || strings.EqualFold(o, origin) {
+			return true
+		}
+	}
+	return false
 }
 
 func env(key, def string) string {
@@ -84,6 +120,40 @@ func Load() (Config, error) {
 		DefaultPollingTime: env("QAWK_POLLING_TIME", "00:05:00"),
 		LogLevel:           env("QAWK_LOG_LEVEL", "info"),
 		MetricsToken:       env("QAWK_METRICS_TOKEN", ""),
+	}
+	for _, o := range strings.Split(env("QAWK_CORS_ORIGINS", ""), ",") {
+		if o = strings.TrimRight(strings.TrimSpace(o), "/"); o != "" {
+			c.CORSOrigins = append(c.CORSOrigins, o)
+		}
+	}
+	c.TLSCert, c.TLSKey = env("QAWK_TLS_CERT", ""), env("QAWK_TLS_KEY", "")
+	c.TLSClientCA, c.RedirectHTTP = env("QAWK_TLS_CLIENT_CA", ""), env("QAWK_REDIRECT_HTTP", "")
+	// half a pair is a typo, and a server that quietly fell back to plain
+	// HTTP because of one would be the worst possible answer to it
+	if (c.TLSCert == "") != (c.TLSKey == "") {
+		return c, fmt.Errorf("QAWK_TLS_CERT and QAWK_TLS_KEY go together: set both, or neither")
+	}
+	if !c.TLS() {
+		if c.TLSClientCA != "" {
+			return c, fmt.Errorf("QAWK_TLS_CLIENT_CA needs QAWK_TLS_CERT and QAWK_TLS_KEY")
+		}
+		if c.RedirectHTTP != "" {
+			return c, fmt.Errorf("QAWK_REDIRECT_HTTP needs QAWK_TLS_CERT and QAWK_TLS_KEY: " +
+				"without TLS there would be nowhere to redirect to")
+		}
+	}
+	for _, f := range []struct{ what, path string }{
+		{"QAWK_TLS_CERT", c.TLSCert}, {"QAWK_TLS_KEY", c.TLSKey}, {"QAWK_TLS_CLIENT_CA", c.TLSClientCA},
+	} {
+		if f.path == "" {
+			continue
+		}
+		if _, err := os.Stat(f.path); err != nil {
+			return c, fmt.Errorf("%s: %w", f.what, err)
+		}
+	}
+	if c.TLS() && c.RedirectHTTP == c.Listen {
+		return c, fmt.Errorf("QAWK_REDIRECT_HTTP must differ from QAWK_LISTEN (%s)", c.Listen)
 	}
 	if c.AdminPassword == "" {
 		return c, fmt.Errorf("QAWK_ADMIN_PASSWORD must not be empty")

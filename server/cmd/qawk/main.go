@@ -68,16 +68,44 @@ func main() {
 		// server.keepSemicolons), so the warning is only noise.
 		ErrorLog: stdlog.New(dropping{"URL query contains semicolon", os.Stderr}, "", 0),
 	}
+	var redirect *http.Server
 	go func() {
 		<-ctx.Done()
 		shut, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		_ = httpSrv.Shutdown(shut)
+		if redirect != nil {
+			_ = redirect.Shutdown(shut)
+		}
 	}()
 	go srv.RunBackground(ctx)
 
-	log.Info("qawk listening", "addr", cfg.Listen, "tenant", cfg.Tenant)
-	if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	// HTTPS, when a certificate and key are given. Without them Qawk speaks
+	// plain HTTP and a proxy in front of it terminates TLS -- which is still
+	// the right shape when something else already owns the certificates.
+	serve := httpSrv.ListenAndServe
+	if cfg.TLS() {
+		tlsCfg, err := server.TLSConfig(cfg)
+		if err != nil {
+			log.Error("tls", "err", err)
+			os.Exit(1)
+		}
+		httpSrv.TLSConfig = tlsCfg
+		serve = func() error { return httpSrv.ListenAndServeTLS("", "") }
+		if cfg.RedirectHTTP != "" {
+			redirect = server.RedirectServer(cfg, log)
+			go func() {
+				log.Info("redirecting plain HTTP to HTTPS", "addr", cfg.RedirectHTTP)
+				if err := redirect.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					log.Error("http redirect", "err", err)
+				}
+			}()
+		}
+	}
+
+	log.Info("qawk listening", "addr", cfg.Listen, "tenant", cfg.Tenant,
+		"tls", cfg.TLS(), "mutual-tls", cfg.TLSClientCA != "")
+	if err := serve(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Error("http", "err", err)
 		os.Exit(1)
 	}

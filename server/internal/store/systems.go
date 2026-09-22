@@ -497,6 +497,21 @@ func (s *Store) SetRunState(ctx context.Context, q Q, r model.SystemRun) error {
 	return err
 }
 
+// ResetRun puts one run back to pending, with nothing remembered of the
+// attempt before it: its devices and what each was running are recorded
+// again when it starts, so a rollback after this one goes back to where the
+// system is now, not to where it was before the first try.
+func (s *Store) ResetRun(ctx context.Context, run int64, why string) error {
+	return pgx.BeginFunc(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `DELETE FROM system_run_targets WHERE run_id = $1`, run); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `UPDATE system_runs SET status = 'pending', reason = $2, current_order = NULL,
+			started_at = NULL, stage_at = NULL, rollback_at = NULL, finished_at = NULL WHERE id = $1`, run, why)
+		return err
+	})
+}
+
 // SkipPendingRuns marks the runs not yet started as skipped.
 func (s *Store) SkipPendingRuns(ctx context.Context, q Q, deployment int64, why string) error {
 	_, err := q.Exec(ctx, `UPDATE system_runs SET status = 'skipped', reason = $2 WHERE deployment_id = $1 AND status = 'pending'`,
