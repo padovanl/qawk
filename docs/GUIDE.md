@@ -1,5 +1,16 @@
 # Using Qawk
 
+> **The documentation site supersedes this file.**
+> <https://padovanl.github.io/qawk/> — or `docs/serve.sh` to read it locally.
+> It covers everything here and more, split by who is reading: a
+> [console handbook](https://padovanl.github.io/qawk/console/) for whoever
+> ships the update, a page per idea, and an
+> [API reference](https://padovanl.github.io/qawk/api/) with every endpoint in
+> five languages.
+>
+> This file is kept as one long page for reading end to end, and for `grep`.
+> Where the two disagree, the site is newer.
+
 Every feature, step by step: in the console and with the API. Everything here
 can be tried on the demo (`demo/start.sh`) with simulated devices
 (`demo/simulate.sh`); the commands below were run against it.
