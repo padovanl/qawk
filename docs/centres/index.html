@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Centres · Qawk documentation</title>
+<meta name="description" content="A centre is where a device is. Put a centre in a channel and every device of it follows — the machines that stand alone and the ones inside systems alike.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>Centres</h1>
+
+<p class="lead">A centre is where a device physically is: a shop, a site, a bowling
+centre. You put the <i>centre</i> in a channel, and every device in it follows —
+the lane computers, the terminals bolted to them, and the machines that stand
+alone. You move a place, not a list of machines.</p>
+
+<h2 id="why">Why this exists</h2>
+
+<p>Without centres, moving a site from beta to prod means finding its forty
+machines and moving each one. That fails in three ways, all of them quiet:</p>
+
+<ul>
+<li>You miss one. It stays on beta's release for months and nobody notices until
+it behaves differently from the lane next to it.</li>
+<li>A machine is replaced. The new one registers, matches no list, and lands
+wherever the channel rules put it — which is not necessarily where its
+neighbours are.</li>
+<li>Someone moves a single device "temporarily" and it never goes back.</li>
+</ul>
+
+<p>A centre fixes all three at once, because the truth about where a machine lives
+comes from the machine itself, not from a list someone maintains.</p>
+
+<h2 id="how">How a device says where it is</h2>
+
+<p>It reports an attribute. By default <code>attribute.centerid</code>:</p>
+
+<pre><code>PUT /DEFAULT/controller/v1/lane-17/configData
+{ "mode": "merge", "data": { "centerid": "c03", "device_type": "device2" } }</code></pre>
+
+<p>Every distinct value of that field is a centre. There is no table of centres to
+create and keep in step — a centre exists because devices say they are in it, and
+stops existing when none do.</p>
+
+<p>The field is a setting. If your devices report the site somewhere else, or you
+set it from the console as metadata rather than having the device report it:</p>
+
+<pre><code>curl -u admin:$PW -X PUT -H 'Content-Type: application/json' \
+  -d '{"field": "metadata.site"}' $Q/qawk/v1/centres/settings</code></pre>
+
+<h2 id="moving">Moving a centre</h2>
+
+<p>Console: <b>Centres</b> — every centre, its channel, how many devices it has and
+how many of them are already there. Tick the centres and press <b>move</b>.</p>
+
+<pre><code>curl -u admin:$PW $Q/qawk/v1/centres
+
+curl -u admin:$PW -X PUT -H 'Content-Type: application/json' \
+  -d '{"centres": ["c03", "c04"], "fleetId": '$PROD'}' $Q/qawk/v1/centres</code></pre>
+
+<p><code>"fleetId": null</code> takes them out of any channel.</p>
+
+<h3>What happens next</h3>
+
+<p>The devices follow <b>a hundred at a time</b>, in separate transactions. A centre
+of four hundred machines is four short writes rather than one long one — a single
+transaction over that many rows held their records for minutes on a busy disk, and
+the devices' own reports queued behind it until they timed out. Small writes cost a
+few more seconds and cost nobody an outage.</p>
+
+<p>Then, on the next pass of the engine:</p>
+
+<ul>
+<li>the devices that <b>stand alone</b> are given the new channel's distribution
+set, in that channel's waves;</li>
+<li>the devices that are part of a <b>system</b> are taken by that channel's
+<b>orchestrator</b>, with the channel's manifest, in the manifest's order.</li>
+</ul>
+
+<div class="tip">
+<p><b>A centre that arrives late is still taken.</b> If the channel's release had
+already finished before you moved the centre in, the orchestrator picks up the new
+systems and the release reopens while it works through them. You do not have to
+re-release for a centre that joined afterwards, and you do not have to remember
+that you moved it.</p>
+</div>
+
+<h2 id="pinning">A device of a centre cannot be moved by hand</h2>
+
+<p>If you try to move one device of a centre into a different channel, Qawk refuses:</p>
+
+<pre><code>the devices of centre c03 go with their centre: move the centre (Centres),
+or lend the device to a temporary channel</code></pre>
+
+<p>This looks like an obstruction and is the opposite. Without it, the move would
+be <i>accepted</i> and then silently undone seconds later when the centre pulled
+the device back — and you would have every reason to believe it had worked. A
+refusal you can read beats a success you cannot trust.</p>
+
+<p>The two legitimate ways round it are in the message: move the centre, or lend the
+device to a <a href="../channels/#temporary">temporary channel</a>, which it can be
+sent home from afterwards.</p>
+
+<h2 id="orchestrator">Centres and the orchestrator</h2>
+
+<p>A centre is also how the orchestrator paces itself. A channel's orchestrator can
+work <b>one centre at a time</b>: every system in the first centre, then the next,
+so a bad manifest is discovered in one site rather than in forty.</p>
+
+<p>And the order the centres are taken in can be chosen rather than alphabetical —
+put your least critical sites first:</p>
+
+<pre><code>curl -u admin:$PW -X PUT -H 'Content-Type: application/json' \
+  -d '{"orchestrator": {"byCentre": true, "centres": ["c09", "c03", "c04"], "maxParallel": 4, "maxFailed": 1}}' \
+  $Q/qawk/v1/fleets/$PROD</code></pre>
+
+<p>Naming centres there also <b>limits</b> the orchestrator to them. Leave the list
+empty and it takes every centre of the channel, by name.</p>
+
+<h2 id="watch">What to watch</h2>
+
+<table>
+<thead><tr><th>Column</th><th>Means</th><th>If it looks wrong</th></tr></thead>
+<tbody>
+<tr><td><b>devices</b></td><td>How many report this centre.</td><td>Lower than you expect: machines are off, or reporting a different value. Check <b>Targets</b> for that attribute.</td></tr>
+<tr><td><b>on channel</b></td><td>How many are already in the centre's channel.</td><td>Below <b>devices</b> right after a move: normal, they are following in batches. Still below an hour later: some devices have not called in.</td></tr>
+<tr><td><b>channel</b></td><td>Which channel the centre is in.</td><td>Empty: the centre is in none, and its devices follow the channel rules instead.</td></tr>
+</tbody>
+</table>
+
+<h2 id="api">API</h2>
+
+<p><a href="../api/#/qawk/centres-list">List centres</a>,
+<a href="../api/#/qawk/centres-set">put centres in a channel</a>,
+<a href="../api/#/qawk/centres-settings">change where devices say their centre</a>.</p>
+
+</div>
+</body>
+</html>

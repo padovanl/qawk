@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The orchestrator · Qawk documentation</title>
+<meta name="description" content="Systems updated as a whole: topologies, manifests, component order, rollback of the whole system, and releases that carry a manifest down the pipeline.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>The orchestrator: systems updated as a whole</h1>
+
+<p class="lead">Some machines only make sense together. A lane computer and the two
+terminals bolted to it are one machine to the person using them and three targets
+to hawkBit. Update them separately and you get a version pair that was never
+tested; update one and fail, and you get a lane that does not score. The
+orchestrator treats them as one thing.</p>
+
+<h2 id="problem">The problem it solves</h2>
+
+<p>A channel's release is <b>one distribution set for every member</b>. That works
+until the members are not alike. A lane computer runs the application; the
+terminals under it run their own firmware; the score display runs a third thing.
+They must move to matching versions, in an order that does not leave the lane
+broken in between, and if any one of them fails they must <i>all</i> go back —
+because a lane on half of version 2 is worse than a lane on all of version 1.</p>
+
+<p>hawkBit has no answer for this. <a href="https://docs.mender.io/orchestrate-updates/overview">Mender
+Orchestrator</a> does, by running an orchestrator process on one device of each
+system. Qawk does the same thing <b>on the server</b>, over devices that stay
+ordinary hawkBit targets.</p>
+
+<div class="tip">
+<p><b>Nothing changes on the devices.</b> They keep speaking plain hawkBit DDI,
+they keep being ordinary targets, and they do not know they are part of a system.
+All the ordering, the waiting and the rolling back happens server-side. That means
+you can put existing devices into a system without touching their software.</p>
+</div>
+
+<h2 id="pieces">Three pieces</h2>
+
+<table>
+<thead><tr><th>Piece</th><th>Mender calls it</th><th>Says</th></tr></thead>
+<tbody>
+<tr><td><b>System type</b></td><td>topology</td><td>What components a system has, and how a device declares which system it is in.</td></tr>
+<tr><td><b>Manifest</b></td><td>manifest</td><td>What each component should run, and in what order.</td></tr>
+<tr><td><b>System deployment</b></td><td>—</td><td>Applying a manifest to some systems, a few at a time.</td></tr>
+</tbody>
+</table>
+
+<h2 id="topology">The system type (topology)</h2>
+
+<p>A system type names its components, each with a query recognising the devices
+that fill it, and names <b>the field a device carries to say which system it is
+in</b>. Every distinct value of that field is one system.</p>
+
+<pre><code>curl -u admin:$PW -X POST -H 'Content-Type: application/json' -d '{
+  "name": "device-system",
+  "systemKey": "attribute.device",
+  "groupKey":  "attribute.centerid",
+  "components": [
+    {"componentType": "device1", "match": "attribute.device_type==device1"},
+    {"componentType": "device2", "match": "attribute.device_type==device2"},
+    {"componentType": "device3", "match": "attribute.device_type==device3"}
+  ]}' $Q/qawk/v1/systemtypes</code></pre>
+
+<p>So a device reporting <code>device=device-07</code> and
+<code>device_type=device2</code> is the <code>device2</code> component of system
+<code>device-07</code>. Four such devices with the same <code>device</code> value
+are one system of four.</p>
+
+<p><code>systemKey</code> can be an <code>attribute.</code> the device reports or a
+<code>metadata.</code> you set from the console — useful when the devices cannot
+be made to report it. <code>groupKey</code> says which centre the system is in;
+left out, the centre setting is used.</p>
+
+<h3>What systems actually exist</h3>
+
+<p>You never create a system. You ask what the devices say:</p>
+
+<pre><code>curl -u admin:$PW "$Q/qawk/v1/systemtypes/1/systems"</code></pre>
+
+<pre><code>{"total": 2, "content": [
+  {"system": "device-07", "devices": 4, "components": {"device1": 1, "device2": 2, "device3": 1},
+   "group": "c01", "fleet": "beta", "mixed": false},
+  {"system": "device-08", "devices": 3, "components": {"device1": 1, "device2": 2},
+   "group": "c01", "fleet": null, "mixed": true}
+]}</code></pre>
+
+<div class="warn-box">
+<p><b><code>mixed</code> matters.</b> It means the system's devices are not all in
+the same channel. The orchestrator <b>leaves such a system alone</b> — it will not
+push prod's manifest into a system half of which is still in beta. This is usually
+momentary, while a centre is being moved, and it resolves itself; if a system stays
+mixed, one of its devices is somewhere it should not be.</p>
+</div>
+
+<h2 id="manifest">The manifest</h2>
+
+<p>A manifest is the state a system type should reach: for each component a
+distribution set and an <b>order</b>. <b>Lower goes first; equal orders go
+together.</b></p>
+
+<pre><code>curl -u admin:$PW -X POST -H 'Content-Type: application/json' -d '{
+  "name": "device-system-2.0",
+  "systemTypeId": 1,
+  "components": [
+    {"componentType": "device2", "distributionSetId": 11, "order": 1},
+    {"componentType": "device3", "distributionSetId": 12, "order": 1},
+    {"componentType": "device1", "distributionSetId": 10, "order": 2}
+  ]}' $Q/qawk/v1/manifests</code></pre>
+
+<p>Here the terminals and the display go first, together, and the lane computer
+goes second — because the new application expects firmware that is already
+there. Getting that order backwards is exactly the failure the orchestrator
+exists to prevent, so it is worth thinking about once and then writing down.</p>
+
+<p>Orders run 1 to 1000. A component already on its set is <b>left alone</b>: a
+manifest is a destination, not a script, so applying it twice does nothing the
+second time.</p>
+
+<h2 id="deployment">Running a deployment</h2>
+
+<p>A system deployment applies a manifest to systems. Created as a <b>draft</b> —
+nothing moves until you start it.</p>
+
+<pre><code>curl -u admin:$PW -X POST -H 'Content-Type: application/json' -d '{
+  "name": "prod 2.0",
+  "manifestId": 3,
+  "fleetId": '$PROD',
+  "groups": ["c03", "c04"],
+  "maxParallel": 4,
+  "maxFailed": 1,
+  "byCentre": true
+  }' $Q/qawk/v1/systemdeployments
+
+curl -u admin:$PW -X POST $Q/qawk/v1/systemdeployments/51/start</code></pre>
+
+<table>
+<thead><tr><th>Setting</th><th>Does</th></tr></thead>
+<tbody>
+<tr><td><code>fleetId</code></td><td>Only systems whose devices are <b>all</b> in this channel.</td></tr>
+<tr><td><code>groups</code></td><td>Only these centres, <b>in this order</b>. Empty: every centre, by name.</td></tr>
+<tr><td><code>systems</code></td><td>Only the systems you name. Empty: all in scope.</td></tr>
+<tr><td><code>maxParallel</code></td><td>Systems under way at a time.</td></tr>
+<tr><td><code>maxFailed</code></td><td>Systems that may fail before no new one is started.</td></tr>
+<tr><td><code>byCentre</code></td><td>One centre at a time: the next starts when every system of the last is done.</td></tr>
+</tbody>
+</table>
+
+<h3>What happens inside one system</h3>
+
+<ol class="steps">
+<li><b>It is photographed.</b> Its devices are recorded, with <b>what each is
+running right now</b>. That snapshot is what a rollback goes back to, so it must
+be taken before anything moves.</li>
+<li><b>The first order goes out.</b> Every device at that order is given its set.
+Devices already on it are skipped.</li>
+<li><b>It waits.</b> Nothing at the next order is sent until every device at this
+one has reported <code>finished</code>.</li>
+<li><b>The next order.</b> And so on, until there are none left.</li>
+<li><b>Done.</b> Every component is on its set.</li>
+</ol>
+
+<p>Other systems run in parallel up to <code>maxParallel</code>, independently. One
+system's trouble is its own.</p>
+
+<h3>Pause, resume, abort</h3>
+
+<p><b>Pause</b> stops the engine following it; devices already sent a set finish
+what they were given. <b>Abort</b> skips the systems not yet started and
+<b>leaves the ones under way to finish</b> — aborting does not tear a half-updated
+system apart. If that is what you want, roll it back explicitly.</p>
+
+<h2 id="rollback">Rollback</h2>
+
+<p>When a device of a system fails, <b>the whole system goes back</b>: every device
+of it that this deployment updated is given again the set it was running when the
+system was photographed.</p>
+
+<pre><code>3 device(s) failed at order 1 -- rolled back: 3 of 3 devices on their previous set again</code></pre>
+
+<p>Meanwhile the other systems carry on. Only when <b>more systems fail than
+<code>maxFailed</code> allows</b> does the deployment stop starting new ones, and
+end as <code>failed</code>.</p>
+
+<h3>Rolling one back by hand</h3>
+
+<p>For a system that is running or has already finished — the update worked but the
+lane is misbehaving:</p>
+
+<pre><code>curl -u admin:$PW -X POST -H 'Content-Type: application/json' \
+  -d '{"reason": "lane 7 is not scoring"}' \
+  $Q/qawk/v1/systemdeployments/51/runs/700/rollback</code></pre>
+
+<div class="note">
+<p><b>A device that ran nothing before is left as it is.</b> There is nothing to go
+back to, and inventing something would be worse than leaving it. The deployment
+says so in its reason: <i>"n ran nothing before and were left as they are"</i>.</p>
+</div>
+
+<h2 id="releases">Releases through the orchestrator</h2>
+
+<p>This is how the orchestrator is used in practice. Rather than starting
+deployments by hand, a channel's <b>release carries a manifest</b>: the set goes to
+the devices that stand alone, and the orchestrator takes the channel's systems with
+the manifest — automatically, and again down the pipeline on every promotion.</p>
+
+<pre><code># how this channel's orchestrator works
+curl -u admin:$PW -X PUT -H 'Content-Type: application/json' \
+  -d '{"orchestrator": {"maxParallel": 4, "maxFailed": 1, "byCentre": true, "centres": ["c01","c02"]}}' \
+  $Q/qawk/v1/fleets/$BETA
+
+# a release with both halves
+curl -u admin:$PW -X PUT -H 'Content-Type: application/json' \
+  -d '{"distributionSetId": '$SET', "manifestId": '$MANIFEST'}' $Q/qawk/v1/fleets/$DEV</code></pre>
+
+<p>From there:</p>
+
+<ul>
+<li><b>Promotion brings the manifest along.</b> <code>"orchestrator": false</code>
+in the promotion leaves it behind.</li>
+<li><b>The release completes only when both halves do</b> — the standalone devices
+on the set, and the orchestrator finished with the systems.</li>
+<li><b>The next gate checks both.</b> A release cannot leave a channel whose
+systems it never reached.</li>
+<li><b>Too many systems failing halts the release</b>, the same way too many
+devices failing does.</li>
+</ul>
+
+<h3>The orchestrator follows the channel</h3>
+
+<p>A channel's orchestrator does not decide once which systems it takes. It asks
+again on every pass, the same way the channel's set keeps reaching new members:</p>
+
+<ul>
+<li>a <b>centre moved into the channel</b> after the release started has its
+systems taken;</li>
+<li>a system that was <code>mixed</code> while its centre was still moving is
+picked up once its devices are all in;</li>
+<li>a system whose centre <b>left</b> the channel before the orchestrator reached
+it is given up rather than updated;</li>
+<li>a deployment that had <b>finished</b> reopens when systems arrive, and the
+release reopens with it.</li>
+</ul>
+
+<p>A deployment stopped on purpose (paused, aborted) or stopped by its own failures
+stays stopped. A centre moving does not restart something a person decided to
+stop.</p>
+
+<h2 id="yaml">Mender YAML, in and out</h2>
+
+<p>Topologies and manifests import and export as Mender's YAML, so tooling written
+for Mender Orchestrator is not wasted. Qawk adds two keys to the topology —
+<code>qawk_system_key</code> and, per component, <code>qawk_match</code> — because
+Mender identifies components on the device and Qawk has to find them among
+targets.</p>
+
+<pre><code>api_version: mender/v1
+kind: topology
+system_type: device-system
+qawk_system_key: attribute.device
+qawk_group_key: attribute.centerid
+components:
+  - component_type: device1
+    qawk_match: attribute.device_type==device1
+  - component_type: device2
+    qawk_match: attribute.device_type==device2</code></pre>
+
+<pre><code>api_version: mender/v1
+kind: manifest
+name: device-system-2.0
+system_types_compatible:
+  - device-system
+component_types:
+  device2:
+    artifact_name: device2-fw:2.0
+    update_strategy: { order: 1 }
+  device1:
+    artifact_name: app:2.0
+    update_strategy: { order: 2 }</code></pre>
+
+<pre><code>curl -u admin:$PW -X POST -H 'Content-Type: application/yaml' \
+  --data-binary @topology.yaml $Q/qawk/v1/systemtypes/import
+curl -u admin:$PW -X POST -H 'Content-Type: application/yaml' \
+  --data-binary @manifest.yaml $Q/qawk/v1/manifests/import
+
+curl -u admin:$PW $Q/qawk/v1/systemtypes/1/topology.yaml
+curl -u admin:$PW $Q/qawk/v1/manifests/3/manifest.yaml</code></pre>
+
+<p><code>artifact_name</code> is a distribution set, <code>name:version</code> — or
+a name alone for its newest version. A component with no
+<code>update_strategy</code> goes in the first order. Importing the same topology
+or manifest again <b>updates it</b> rather than failing on the duplicate name, so
+an import can run in CI on every change.</p>
+
+<h2 id="differences">Where this differs from Mender Orchestrator</h2>
+
+<table>
+<thead><tr><th></th><th>Mender</th><th>Qawk</th></tr></thead>
+<tbody>
+<tr><td>Runs on</td><td>a device of each system</td><td>the server</td></tr>
+<tr><td>Devices need</td><td>the orchestrator installed</td><td>nothing — plain hawkBit clients</td></tr>
+<tr><td>Components found by</td><td>an interface on the device</td><td>a target query (<code>qawk_match</code>)</td></tr>
+<tr><td>Rollback</td><td>on the device</td><td>re-assigning the previously installed set</td></tr>
+<tr><td>Scoped by</td><td>the system</td><td>the system, plus channel and centre</td></tr>
+</tbody>
+</table>
+
+<h2 id="api">API</h2>
+
+<p><a href="../api/#/qawk/st-create">Create a system type</a>,
+<a href="../api/#/qawk/st-systems">list the systems found</a>,
+<a href="../api/#/qawk/mf-create">create a manifest</a>,
+<a href="../api/#/qawk/sd-create">create a deployment</a>,
+<a href="../api/#/qawk/sd-start">start it</a>,
+<a href="../api/#/qawk/sd-rollback">roll one system back</a>.</p>
+
+</div>
+</body>
+</html>

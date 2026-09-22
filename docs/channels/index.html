@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Channels and releases · Qawk documentation</title>
+<meta name="description" content="The release pipeline: channels, gates, approvals, waves, error thresholds, freezes and temporary channels.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>Channels and the release pipeline</h1>
+
+<p class="lead">A channel is a set of devices that should run the same release.
+Channels chain, and a release moves down the chain only when the channel it is
+leaving can prove it is safe to leave. That proof is a gate, and it is the whole
+idea.</p>
+
+<h2 id="pipeline">The pipeline</h2>
+
+<p>A channel with <b>no upstream</b> — <code>dev</code> — is given releases
+directly: you pick a distribution set and it goes out. A channel <b>with</b> an
+upstream — <code>beta</code> naming <code>dev</code>, <code>prod</code> naming
+<code>beta</code> — cannot be given one. It can only receive a release by
+<b>promotion</b> from its upstream.</p>
+
+<pre><code>dev  ──promote──▶  beta  ──promote──▶  prod
+ │                  │                   │
+ no upstream        gate                gate + approval
+ given directly</code></pre>
+
+<p>That restriction is deliberate and it is what makes the pipeline mean anything.
+If you could hand prod a set directly, the gate would be decoration.</p>
+
+<h3>Getting devices into a channel</h3>
+
+<p>Three ways, and they are checked in this order:</p>
+
+<ol>
+<li><b>Its centre.</b> If a device's centre is in a channel, the device is in that
+channel. Nothing overrides this — see <a href="../centres/">Centres</a>.</li>
+<li><b>The channel's rule.</b> A query such as
+<code>attribute.ring==beta</code>. A device that matches it <i>and is in no
+channel yet</i> joins by itself. It never steals a device from another channel —
+adoption is for the unclaimed.</li>
+<li><b>By hand.</b> Pick devices and put them in.</li>
+</ol>
+
+<div class="note">
+<p><b>Why the rule only takes unclaimed devices.</b> If rules re-evaluated
+constantly, a device whose attributes drifted would be yanked between channels
+mid-update, and two overlapping rules would fight for ever. Adoption happens once,
+when the device has no home; after that a person or a centre decides.</p>
+</div>
+
+<h2 id="gates">Gates and approvals</h2>
+
+<p>A gate is four conditions on the <i>upstream</i>, plus one more when the release
+carries a manifest. All of them must hold before the release may be promoted:</p>
+
+<table>
+<thead><tr><th>Condition</th><th>Asks</th><th>Stops you from</th></tr></thead>
+<tbody>
+<tr><td><code>minDevices</code></td><td>At least this many devices of the upstream run it.</td><td>promoting on the evidence of three machines.</td></tr>
+<tr><td><code>minSuccess</code></td><td>At least this percentage of the upstream runs it.</td><td>promoting while a fifth of beta is still behind.</td></tr>
+<tr><td><code>soakMinutes</code></td><td>It has been in the upstream this long.</td><td>promoting a bug that takes an hour to show.</td></tr>
+<tr><td>not halted</td><td>The upstream's release has not halted on failures.</td><td>promoting something that is already going wrong.</td></tr>
+<tr><td>orchestrator done</td><td>The upstream's <b>systems</b> finished too.</td><td>promoting a release that never actually reached half the fleet.</td></tr>
+</tbody>
+</table>
+
+<p>You can ask the gate without promoting anything. It answers line by line, with
+the real numbers against the required ones — so "it is not ready" is never a
+mystery:</p>
+
+<pre><code>curl -u admin:$PW "$Q/qawk/v1/fleets/$PROD/gate?from=$BETA"</code></pre>
+
+<pre><code>✓ app:1.2.0 in beta is not halted
+✓ 131 devices of beta run app:1.2.0 (at least 20)
+✗ 94% of beta runs it (at least 95%)
+✓ it has been in beta for 180 minutes (at least 120)
+✓ the orchestrator took beta's systems with device-system-2.0: finished</code></pre>
+
+<h3>Forcing a closed gate</h3>
+
+<p>Sometimes you have to ship anyway. Forcing needs the <code>APPROVE_ROLLOUT</code>
+permission <b>and</b> a written reason, and the reason is kept in the release's
+history and the audit log permanently.</p>
+
+<pre><code>curl -u admin:$PW -X POST -H 'Content-Type: application/json' \
+  -d '{"from": '$BETA', "force": true, "reason": "hotfix for the scoring crash"}' \
+  $Q/qawk/v1/fleets/$PROD/promote</code></pre>
+
+<h3>Approvals: four eyes</h3>
+
+<p>A channel with <code>gate.approvalRequired</code> does not release on promotion.
+The release goes to <code>waiting_for_approval</code> and sits in the queue until
+someone with <code>APPROVE_ROLLOUT</code> decides. <b>Not the person who asked</b> —
+Qawk refuses that, and it refuses it for the administrator too.</p>
+
+<pre><code>curl -u admin:$PW $Q/qawk/v1/releases?status=waiting_for_approval
+curl -u someone-else:$PW2 -X POST -H 'Content-Type: application/json' \
+  -d '{"note": "checked with the centre manager"}' $Q/qawk/v1/releases/44/approve</code></pre>
+
+<h3>Promoting by itself</h3>
+
+<p>A channel with <code>autoPromote</code> promotes as soon as its gate opens,
+through the same gate, the same approval and the same audit trail a person would
+go through — it just does not wait for a person to notice. It asks <b>once per
+release of its upstream</b>, so a promotion already asked for, approved or denied
+is not asked for again.</p>
+
+<p>By default this is off. Most fleets want someone to look at the gate and
+decide.</p>
+
+<h2 id="waves">Waves and error thresholds</h2>
+
+<p>Two independent safety mechanisms. One limits how fast, the other stops
+entirely.</p>
+
+<h3>Waves — how fast</h3>
+
+<p><code>wavePercent</code> is the share of the channel's members given the release
+at a time. <code>0</code> means all at once. The next wave starts when the current
+one is done, or after <code>waveTimeoutMinutes</code> if some devices never
+answered — a switched-off machine must not hold up the fleet for ever.</p>
+
+<p>With <code>wavePercent: 25</code>, a channel of 400 goes out in four waves of
+100. If 100 devices are all offline, the fifth wave still starts an hour later.</p>
+
+<h3>Error threshold — when to stop</h3>
+
+<p><code>errorThreshold</code> is the percentage of <i>started</i> devices that may
+fail before the release <b>halts</b>. Halting means no further device is sent it.
+The devices that already have it keep it; the ones under way finish.</p>
+
+<pre><code>halted: 12 of 140 devices failed (8%), over the 5% threshold</code></pre>
+
+<p><b>Resuming</b> marks the failures already counted as seen, so only <i>new</i>
+failures can halt it again. Without that, resuming would halt again within ten
+seconds on the same devices, and you would press the button for ever.</p>
+
+<div class="warn-box">
+<p><b>A halt is information, not a fault.</b> It means the fleet told you something
+before the whole fleet found out. The right response is to read which devices
+failed and what they reported — not to resume and hope.</p>
+</div>
+
+<h2 id="freezes">Freezes and maintenance</h2>
+
+<p>A freeze stops every release reaching a channel, with a reason that is shown to
+anyone who tries. It can start and end at set times, so a change window can be
+arranged in advance:</p>
+
+<pre><code>curl -u admin:$PW -X PUT -H 'Content-Type: application/json' \
+  -d '{"reason": "league nights, no updates until Monday", "until": 1759000000000}' \
+  $Q/qawk/v1/fleets/$PROD/freeze
+
+curl -u admin:$PW -X DELETE $Q/qawk/v1/fleets/$PROD/freeze</code></pre>
+
+<div class="note">
+<p><b>A freeze is not a lock.</b> A person with the permission can still assign a
+set to a device directly through hawkBit's API — and the audit log records who
+did. The freeze stops the <i>pipeline</i>; it is not a safety interlock against
+deliberate action.</p>
+</div>
+
+<h3>Maintenance windows, which are different</h3>
+
+<p>A freeze is about a channel. A <b>maintenance window</b> is about a device: it
+downloads whenever, but installs only inside a window — a cron expression, a
+duration and a time-zone offset, sent with the deployment. A device outside its
+window answers that it is skipping, and installs when the window opens.</p>
+
+<h2 id="temporary">Temporary channels</h2>
+
+<p>A machine goes to a trade show. It needs the demo build, not prod's, and it has
+to go home afterwards with nobody remembering which channel it came from.</p>
+
+<p>Mark a channel <code>temporary</code>. Devices lent to it <b>remember where they
+came from</b>, and <b>return</b> sends them back — where they get that channel's
+release again automatically.</p>
+
+<pre><code>curl -u admin:$PW -X PUT -H 'Content-Type: application/json' \
+  -d '["expo-demo-01"]' $Q/qawk/v1/fleets/$EXPO/targets
+
+curl -u admin:$PW -X POST -H 'Content-Type: application/json' \
+  -d '{}' $Q/qawk/v1/fleets/$EXPO/return</code></pre>
+
+<p>A temporary channel is also the only way to move a device out of its centre's
+channel by hand. A centre is never put in one: a centre is a place, and places do
+not go to trade shows.</p>
+
+<h2 id="release">What a release actually is</h2>
+
+<p>A release carries two things:</p>
+
+<ul>
+<li>a <b>distribution set</b>, for the devices that stand alone;</li>
+<li>optionally a <b>manifest</b>, for the channel's systems — because a lane
+computer and the terminal under it cannot share one set.</li>
+</ul>
+
+<p>Both travel together when the release is promoted. <code>"orchestrator": false</code>
+in the promotion leaves the manifest behind, if you want the set to move on but the
+systems to stay where they are.</p>
+
+<p>And a release is <b>complete</b> only when both halves are done. Until then the
+channel says so, and the next gate will not open — which is how a release cannot be
+promoted out of a channel it never fully reached.</p>
+
+<div class="tip">
+<p><b>A completed release reopens by itself.</b> If devices join the channel
+afterwards — a crowd of new machines, or a centre moved in — the release goes to
+them exactly as it went to the others, and the orchestrator takes their systems
+too. It completes again when they are all on it. You do not re-release for
+latecomers.</p>
+</div>
+
+<h2 id="api">Doing all of this from a script</h2>
+
+<p>Every button above is an endpoint. See <a href="../api/#/qawk">the Qawk API</a>
+— <a href="../api/#/qawk/fleets-create">create a channel</a>,
+<a href="../api/#/qawk/fleets-gate">ask the gate</a>,
+<a href="../api/#/qawk/fleets-promote">promote</a>,
+<a href="../api/#/qawk/releases-approve">approve</a>,
+<a href="../api/#/qawk/fleets-freeze">freeze</a> — each with the call in curl,
+Python, JavaScript, Go and PowerShell.</p>
+
+</div>
+</body>
+</html>
