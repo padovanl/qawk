@@ -50,7 +50,7 @@ assigned, <code>pending</code> while an action is open, and <code>error</code>
 when the last one failed.</p>
 
 <div class="note">
-<p><b>Everything reports through the device.</b> Qawk never reaches into a machine.
+<p><span class="ico-slot" data-ico="info" data-size="16"></span><b>Everything reports through the device.</b> Qawk never reaches into a machine.
 A device polls, is told what to do, does it, and says how it went. Every gate,
 every threshold, every rollback is driven by those reports — which is also why a
 device that stops calling in is simply a device Qawk knows nothing new about,
@@ -114,7 +114,7 @@ terminal under it cannot share one set.</p>
 is worth learning:</p>
 
 <div class="tip">
-<p><b>A device that belongs to a system is updated by the orchestrator, never by
+<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>A device that belongs to a system is updated by the orchestrator, never by
 its channel's set.</b> Everything else in the channel gets the channel's set.</p>
 </div>
 
@@ -158,7 +158,7 @@ elect a leader through PostgreSQL, and another takes over within ten seconds if 
 stops. See <a href="../operations/#scaling">Scaling</a>.</p>
 
 <div class="warn-box">
-<p><b>A device with an action under way is waited for, never overtaken.</b> A
+<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b>A device with an action under way is waited for, never overtaken.</b> A
 forced assignment cancels a running action — and a system half armed, or an
 application half live, would lose the deployment it belongs to. So the channel
 reaches a busy device on the next pass instead. This is why a wave sometimes

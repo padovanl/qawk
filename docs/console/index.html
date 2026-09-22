@@ -20,7 +20,7 @@ command line, no API and no knowledge of how any of it works underneath. If you
 can read a table and press a button, you can do everything here.</p>
 
 <div class="tip">
-<p><b>Nothing you press is irreversible in one click.</b> Anything that reaches a
+<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>Nothing you press is irreversible in one click.</b> Anything that reaches a
 device asks you to confirm and tells you how many machines it will touch first.
 Anything that halts, freezes or rolls back can be undone. The only thing you
 cannot take back is an artifact you deleted.</p>
@@ -144,7 +144,7 @@ query, and the dialog shows you a live count of how many devices that is
 which of them cannot take the set and why.</p>
 
 <div class="note">
-<p><b>Mode: forced or soft.</b> <i>Forced</i> means install it now. <i>Soft</i>
+<p><span class="ico-slot" data-ico="info" data-size="16"></span><b>Mode: forced or soft.</b> <i>Forced</i> means install it now. <i>Soft</i>
 means the device may choose its moment. There is also <b>download only</b> (get
 the bytes now, install later) and a <b>maintenance window</b> (download any time,
 install only inside these hours).</p>
@@ -333,14 +333,14 @@ demo/simulate.sh --name centres --url http://localhost:8080 --token &lt;token&gt
 <code>docker logs -f qawk-sim-shop</code>.</p>
 
 <div class="note">
-<p><b>They download nothing.</b> A simulated device waits a random time and reports
+<p><span class="ico-slot" data-ico="info" data-size="16"></span><b>They download nothing.</b> A simulated device waits a random time and reports
 <code>finished</code> — so you can run five hundred of them on a laptop. It does
 answer a deployment outside its maintenance window the way SWUpdate does, and a
 download-only one as <code>downloaded</code>, so those behaviours are real.</p>
 </div>
 
 <div class="tip">
-<p><b>Do it on a scratch server.</b> Simulated devices register themselves and
+<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>Do it on a scratch server.</b> Simulated devices register themselves and
 create data. Point them at the demo, or at a server you are happy to throw away —
 never at the one updating real machines.</p>
 </div>

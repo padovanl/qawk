@@ -61,7 +61,7 @@ curl $A -X PUT -H 'Content-Type: application/json' -d '{"value": "a-random-token
   http://localhost:8080/rest/v1/system/configs/authentication.gatewaytoken.key</code></pre>
 
 <div class="warn-box">
-<p><b>A gateway token is a fleet-wide secret.</b> Anything holding it can register
+<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b>A gateway token is a fleet-wide secret.</b> Anything holding it can register
 a device and take updates. Keep it out of images that leave your control, put the
 server behind TLS, and rotate it if a device is lost.</p>
 </div>
@@ -99,7 +99,7 @@ update-ca-certificates</code></pre>
 <pre><code>curl --cacert /etc/ssl/certs/your-ca.pem https://updates.example.com/qawk/v1/info</code></pre>
 
 <div class="warn-box">
-<p><b>Never turn verification off to make it work.</b> A device that accepts any
+<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b>Never turn verification off to make it work.</b> A device that accepts any
 certificate accepts any server, and an update server that can be impersonated is
 a way to install anything on your fleet. If the handshake fails, the usual cause
 is a certificate whose <code>subjectAltName</code> does not list the name the
@@ -138,7 +138,7 @@ device needs its own key and certificate:</p>
 everywhere in Qawk, so use something you can find a machine by.</p>
 
 <div class="note">
-<p><b>Maintenance windows and SWUpdate.</b> SWUpdate answers a deployment it is
+<p><span class="ico-slot" data-ico="info" data-size="16"></span><b>Maintenance windows and SWUpdate.</b> SWUpdate answers a deployment it is
 told to skip with <code>closed</code>/<code>success</code> and <i>"Skipped
 Update."</i>. hawkBit takes that at face value and marks the device updated when
 it is not. Qawk, outside a maintenance window, reads it as the skip being
@@ -183,7 +183,7 @@ set to copy.</p>
 }</code></pre>
 
 <div class="tip">
-<p><b>Report them on every boot.</b> A device that reports its centre once and
+<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>Report them on every boot.</b> A device that reports its centre once and
 never again is fine until it is replaced or reflashed. A device that reports on
 every start is always in the right place, and a machine swapped into a lane picks
 up that lane's identity by itself.</p>

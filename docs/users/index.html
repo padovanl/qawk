@@ -49,7 +49,7 @@ user cannot sign in.</li>
 </ol>
 
 <div class="note">
-<p><b>Why signing in takes half a second.</b> The password hash is deliberately
+<p><span class="ico-slot" data-ico="info" data-size="16"></span><b>Why signing in takes half a second.</b> The password hash is deliberately
 expensive, and the console sends credentials with every request. So a successful
 check is remembered for thirty seconds. Any change to a user, role or token
 forgets them all at once on the instance that made the change; other instances
@@ -85,7 +85,7 @@ curl -u admin:$PW -X POST -H 'Content-Type: application/json' \
        "permissions": ["READ_TARGET", "UPDATE_TARGET"]}' $Q/qawk/v1/roles</code></pre>
 
 <div class="tip">
-<p><b>Separate who ships from who approves.</b> Four-eyes approval only means
+<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>Separate who ships from who approves.</b> Four-eyes approval only means
 something if the two people are different — and Qawk enforces that a release
 cannot be approved by whoever asked for it. Give operators <code>operator</code>
 and keep <code>release-manager</code> for the people who sign things off.</p>
@@ -132,7 +132,7 @@ addresses.</li>
 </ul>
 
 <div class="warn-box">
-<p><b>The audit log is not tamper-proof.</b> It is a table in the same database as
+<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b>The audit log is not tamper-proof.</b> It is a table in the same database as
 everything else, and anyone who can reach that database can change it. If you need
 evidence rather than a record, ship it out — <code>/metrics</code> and the
 OpenTelemetry export are the hooks for that.</p>

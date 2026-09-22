@@ -527,12 +527,12 @@
       '<p class="lead">Qawk serves three APIs. Two of them are hawkBit\'s, unchanged — that is the ' +
       'whole point of it — and the third is everything Qawk adds.</p>' +
       '<div class="cards">' +
-      '<a class="card" href="#/qawk"><span class="ic">🛠️</span><b>Qawk API</b>' +
+      '<a class="card" href="#/qawk">' + ic('route', 24) + '<b>Qawk API</b>' +
       '<span><code>/qawk/v1</code> — channels, releases, centres, the orchestrator, users and the ' +
       'audit log.</span></a>' +
-      '<a class="card" href="#/ddi"><span class="ic">📟</span><b>Device API (DDI)</b>' +
+      '<a class="card" href="#/ddi">' + ic('device', 24) + '<b>Device API (DDI)</b>' +
       '<span><code>/{tenant}/controller/v1</code> — what a device speaks. hawkBit\'s, exactly.</span></a>' +
-      '<a class="card" href="#/mgmt"><span class="ic">🗃️</span><b>Management API</b>' +
+      '<a class="card" href="#/mgmt">' + ic('server', 24) + '<b>Management API</b>' +
       '<span><code>/rest/v1</code> — hawkBit\'s 153 management operations, unchanged.</span></a>' +
       '</div>' +
 

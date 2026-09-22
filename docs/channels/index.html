@@ -51,7 +51,7 @@ adoption is for the unclaimed.</li>
 </ol>
 
 <div class="note">
-<p><b>Why the rule only takes unclaimed devices.</b> If rules re-evaluated
+<p><span class="ico-slot" data-ico="info" data-size="16"></span><b>Why the rule only takes unclaimed devices.</b> If rules re-evaluated
 constantly, a device whose attributes drifted would be yanked between channels
 mid-update, and two overlapping rules would fight for ever. Adoption happens once,
 when the device has no home; after that a person or a centre decides.</p>
@@ -145,7 +145,7 @@ failures can halt it again. Without that, resuming would halt again within ten
 seconds on the same devices, and you would press the button for ever.</p>
 
 <div class="warn-box">
-<p><b>A halt is information, not a fault.</b> It means the fleet told you something
+<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b>A halt is information, not a fault.</b> It means the fleet told you something
 before the whole fleet found out. The right response is to read which devices
 failed and what they reported — not to resume and hope.</p>
 </div>
@@ -163,7 +163,7 @@ arranged in advance:</p>
 curl -u admin:$PW -X DELETE $Q/qawk/v1/fleets/$PROD/freeze</code></pre>
 
 <div class="note">
-<p><b>A freeze is not a lock.</b> A person with the permission can still assign a
+<p><span class="ico-slot" data-ico="info" data-size="16"></span><b>A freeze is not a lock.</b> A person with the permission can still assign a
 set to a device directly through hawkBit's API — and the audit log records who
 did. The freeze stops the <i>pipeline</i>; it is not a safety interlock against
 deliberate action.</p>
@@ -214,7 +214,7 @@ channel says so, and the next gate will not open — which is how a release cann
 promoted out of a channel it never fully reached.</p>
 
 <div class="tip">
-<p><b>A completed release reopens by itself.</b> If devices join the channel
+<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>A completed release reopens by itself.</b> If devices join the channel
 afterwards — a crowd of new machines, or a centre moved in — the release goes to
 them exactly as it went to the others, and the orchestrator takes their systems
 too. It completes again when they are all on it. You do not re-release for

@@ -229,6 +229,7 @@ blockquote {
 }
 .card:hover { border-color: var(--accent); text-decoration: none; transform: translateY(-1px); }
 .card .ic { font-size: 19px; }
+.card .ico { width: 24px; height: 24px; }
 .card b { display: block; margin: 6px 0 4px; font-size: 15px; }
 .card span { color: var(--fg-dim); font-size: 13.5px; line-height: 1.5; display: block; }
 

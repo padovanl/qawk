@@ -37,7 +37,7 @@ distribution sets and their types; rollouts with groups, thresholds and the
 approval flow; target filters with auto-assignment; and tenant configuration.</p>
 
 <div class="tip">
-<p><b>The authoritative list is the server's own.</b> Qawk serves hawkBit's OpenAPI
+<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>The authoritative list is the server's own.</b> Qawk serves hawkBit's OpenAPI
 document where hawkBit serves it, filtered to the operations it really implements —
 so a generated client cannot be built against something that is not there:</p>
 <pre><code>curl -s 'https://qawk.example.com/v3/api-docs/swagger-config'
@@ -102,7 +102,7 @@ the installed set does not change. When the window opens, the device is told
 <code>forced</code> and installs.</p>
 
 <div class="note">
-<p>Inside a window — and for every action with no window at all — the behaviour is
+<p><span class="ico-slot" data-ico="info" data-size="16"></span>Inside a window — and for every action with no window at all — the behaviour is
 hawkBit's exactly. The difference applies only where hawkBit's behaviour would
 record something untrue.</p>
 </div>
@@ -140,7 +140,7 @@ machines that must move together.</li>
 </ol>
 
 <div class="warn-box">
-<p><b>History does not come across.</b> Actions, rollouts and their status entries
+<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b>History does not come across.</b> Actions, rollouts and their status entries
 stay in hawkBit. If you need them, keep the old server readable for as long as your
 retention requires. Qawk starts with the devices' <i>current</i> state, not their
 past.</p>

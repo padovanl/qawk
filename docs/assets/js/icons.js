@@ -78,3 +78,19 @@
 
   window.QawkIcons = { svg: svg, markup: markup, has: function (n) { return !!P[n]; } };
 })();
+
+/* Fill the <span class="ico-slot" data-ico="..."> the pages carry. They are
+ * written in the HTML rather than injected by a rule so the markup says what
+ * it means, and a page with no JavaScript simply has no icons rather than
+ * broken ones. */
+(function () {
+  function fill() {
+    document.querySelectorAll('.ico-slot[data-ico]').forEach(function (slot) {
+      var svg = window.QawkIcons.svg(slot.getAttribute('data-ico'),
+        +slot.getAttribute('data-size') || 17);
+      if (svg) slot.replaceWith(svg);
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fill);
+  else fill();
+})();
