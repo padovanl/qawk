@@ -1,0 +1,63 @@
+Qawk — an over-the-air update server for fleets of devices
+Copyright (C) 2026 Luca Padovan
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE.  See the GNU Affero General Public License for more
+details.
+
+You should have received a copy of the GNU Affero General Public License along
+with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+If you run a modified version of Qawk and let anyone interact with it over a
+network, section 13 of the AGPL requires you to offer those users the source
+of your modified version.  Keeping this notice, and the attribution in the
+console's About page, is how that offer stays findable.
+
+
+ADDITIONAL PERMISSION UNDER AGPL-3.0 SECTION 7
+
+As a special exception, the copyright holder of Qawk gives you permission to
+combine Qawk with the files in server/reference/ that are licensed under the
+Eclipse Public License 2.0, and to convey the resulting work.  You must still
+comply with the AGPL in all other respects, and with the EPL-2.0 in respect of
+those files.
+
+This exception exists because Qawk embeds Eclipse hawkBit's own API
+descriptions in order to serve, at /v3/api-docs, a document listing exactly
+the operations it implements — so that a generated client cannot be built
+against an operation that is not there.
+
+
+THIRD-PARTY COMPONENTS
+
+  server/reference/hawkbit-1.1.0-*.json
+      Eclipse hawkBit API descriptions and recorded defaults.
+      Copyright the Eclipse hawkBit contributors.
+      Eclipse Public License 2.0 — https://www.eclipse.org/legal/epl-2.0/
+      See server/reference/LICENSE.hawkbit.
+
+  console/js/vendor/
+      react, react-dom, reactflow, dagre, gridstack, Sortable, js-yaml.
+      MIT licence, each with its own copyright holders.
+
+  console/fonts/
+      Inter — SIL Open Font License 1.1, copyright The Inter Project Authors.
+      JetBrains Mono — SIL Open Font License 1.1, copyright JetBrains s.r.o.
+
+  Go dependencies (server/go.mod)
+      chi, pgx and their dependencies: MIT and BSD-3-Clause.
+      OpenTelemetry, gRPC, protobuf and google.golang.org/genproto: Apache-2.0.
+      go.yaml.in/yaml/v3: MIT and Apache-2.0.
+
+
+TRADEMARKS
+
+hawkBit is a trademark of the Eclipse Foundation.  Qawk is an independent
+implementation of the published hawkBit protocols and is not affiliated with,
+endorsed by, or a product of the Eclipse Foundation.

@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Installing the server · Qawk documentation</title>
+<meta name="description" content="Running Qawk for real: Docker, compose, Kubernetes, every environment variable, TLS behind a proxy, users from a file, backup and upgrade.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>Installing the server</h1>
+
+<p class="lead">Qawk is one static binary and one PostgreSQL. The console is a page
+and a small Python proxy. There is no application server, no message broker and no
+cache to run.</p>
+
+<h2 id="pieces">What you are running</h2>
+
+<table>
+<thead><tr><th>Piece</th><th>Is</th><th>Needs</th></tr></thead>
+<tbody>
+<tr><td><b>qawk</b></td><td>The server. Devices and the API talk to it.</td><td>PostgreSQL, a directory for artifacts, one port.</td></tr>
+<tr><td><b>PostgreSQL</b></td><td>All the state.</td><td>16 or later. A volume.</td></tr>
+<tr><td><b>qawk-console</b></td><td>The web console and its proxy.</td><td>To reach the server. Nothing else.</td></tr>
+</tbody>
+</table>
+
+<p>The server image also carries <code>qawk-sim</code> and <code>qawk-load</code>,
+so you can test a real install with simulated devices without pulling anything
+else.</p>
+
+<p>The quickest route — Docker Hub, a build from source, compose, or no Docker at
+all — is in <a href="../start/#run">Get started</a>. This page is the rest.</p>
+
+<h2 id="config">Configuration</h2>
+
+<p>Everything is an environment variable, read once at startup. Nothing is read
+from a file except the optional users list.</p>
+
+<table>
+<thead><tr><th>Variable</th><th>Default</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>QAWK_DATABASE_URL</code></td><td><code>postgres://qawk:qawk@localhost:5432/qawk?sslmode=disable</code></td><td>PostgreSQL.</td></tr>
+<tr><td><code>QAWK_ADMIN_USER</code><br><code>QAWK_ADMIN_PASSWORD</code></td><td><code>admin</code> / <code>admin</code></td><td>The administrator. Every permission, <b>never stored</b>, always works — which is how a new server is set up and how a lost password is fixed. <b>Set the password.</b></td></tr>
+<tr><td><code>QAWK_USERS_FILE</code></td><td><i>none</i></td><td>A YAML file of users, applied at every start. See below.</td></tr>
+<tr><td><code>QAWK_LISTEN</code></td><td><code>:8080</code></td><td>hawkBit's port, so devices need no change.</td></tr>
+<tr><td><code>QAWK_PUBLIC_URL</code></td><td><i>the request's address</i></td><td>Base of every link Qawk hands out. Set it when a proxy rewrites the address devices reach it at.</td></tr>
+<tr><td><code>QAWK_ARTIFACT_DIR</code></td><td><code>/var/lib/qawk/artifacts</code></td><td>Where artifact bytes live.</td></tr>
+<tr><td><code>QAWK_TENANT</code></td><td><code>DEFAULT</code></td><td>The tenant in the device URL.</td></tr>
+<tr><td><code>QAWK_POLLING_TIME</code></td><td><code>00:05:00</code></td><td>Device polling interval, until one is set through the API.</td></tr>
+<tr><td><code>QAWK_DB_MAX_CONNS</code></td><td><code>20</code></td><td>This instance's pool. Across all instances, keep under PostgreSQL's <code>max_connections</code>.</td></tr>
+<tr><td><code>QAWK_DB_WAIT</code></td><td><code>5m</code></td><td>How long to wait for the database at startup. PostgreSQL's first start initialises its data directory before it listens — over a minute on a busy disk — so the default is generous.</td></tr>
+<tr><td><code>QAWK_AUDIT_DAYS</code></td><td><code>180</code></td><td>Audit retention. <code>0</code> keeps it for ever.</td></tr>
+<tr><td><code>QAWK_METRICS_TOKEN</code></td><td><i>none</i></td><td>Bearer token for <code>/metrics</code>. Empty leaves it open, for a scraper on an internal network.</td></tr>
+<tr><td><code>QAWK_LOG_LEVEL</code></td><td><code>info</code></td><td><code>debug</code> logs every request.</td></tr>
+<tr><td><code>OTEL_*</code></td><td><i>none</i></td><td>The standard OpenTelemetry variables turn on OTLP export.</td></tr>
+</tbody>
+</table>
+
+<p>The console has exactly one: <code>HB_URL</code>, the server it talks to.</p>
+
+<p>Tenant settings — the gateway token, the polling interval, whether the
+confirmation flow is on — are hawkBit's <code>/rest/v1/system/configs</code>, with
+hawkBit's keys and defaults, stored in the database rather than in the
+environment.</p>
+
+<h3>Users from a file</h3>
+
+<p>A new server has one user: the administrator. Others are created in the console,
+through <code>/qawk/v1/users</code>, or listed in a file the server applies at every
+start — which is how you keep users in configuration management:</p>
+
+<pre><code>users:
+  - username: release-manager-1
+    password: at-least-eight-characters
+    roles: [release-manager]
+  - username: operator-1
+    password: another-password
+    display_name: The night operator
+    roles: [operator]</code></pre>
+
+<pre><code>docker run ... -v "$PWD/users.yaml:/etc/qawk/users.yaml:ro" \
+  -e QAWK_USERS_FILE=/etc/qawk/users.yaml padovanl/qawk:0.1.0</code></pre>
+
+<p>Missing users are created; existing ones are brought to the file's roles,
+display name, enabled flag and password. <b>Users not in the file are left
+alone</b> — the file adds and corrects, it does not delete. A file that breaks the
+rules stops the server, naming the user it could not take: a server that came up
+with half its users applied would be worse.</p>
+
+<h2 id="tls">TLS and reverse proxies</h2>
+
+<div class="warn-box">
+<p><b>TLS is not built in.</b> Put Qawk and the console behind a proxy that
+terminates it. Devices send a bearer token on every poll; over plain HTTP anyone on
+the path has your gateway token.</p>
+</div>
+
+<p>Three things the proxy must get right:</p>
+
+<ol>
+<li><b>A generous body size and timeout.</b> Artifacts are uploaded and downloaded
+through it. nginx's default <code>client_max_body_size</code> of 1&nbsp;MB will
+reject every artifact you have.</li>
+<li><b><code>QAWK_PUBLIC_URL</code></b>, if the proxy changes the address devices
+reach Qawk at — otherwise the download links Qawk hands out point somewhere the
+device cannot get to.</li>
+<li><b>Range requests passed through</b>, so a device on a bad line can resume a
+download instead of starting over.</li>
+</ol>
+
+<pre><code>server {
+  listen 443 ssl;
+  server_name updates.example.com;
+
+  client_max_body_size 0;
+  proxy_request_buffering off;
+
+  location / {
+    proxy_pass http://qawk:8080;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 300s;
+  }
+}</code></pre>
+
+<pre><code>-e QAWK_PUBLIC_URL=https://updates.example.com</code></pre>
+
+<p><code>X-Forwarded-For</code> matters beyond routing: it is the address the audit
+log records for every change and every refused sign-in. Without it, every entry
+says the proxy did it.</p>
+
+<h2 id="kubernetes">Kubernetes</h2>
+
+<p><a href="https://github.com/padovanl/qawk/tree/main/server/deploy/kubernetes">server/deploy/kubernetes/</a>
+has a Deployment of three instances with probes, a Service, a PodDisruptionBudget,
+an autoscaler, a shared artifact volume and — for a lab, not for production — a
+PostgreSQL. The commands are at the top of <code>qawk.yaml</code>.</p>
+
+<p>Two things to know before you run it:</p>
+
+<ul>
+<li><b>The artifact volume must be ReadWriteMany.</b> Every instance serves
+downloads, so every instance needs the bytes. Artifacts are on a filesystem, not
+in object storage — this is a real limitation, and it is the thing to check first
+on a cluster whose storage class is RWO only.</li>
+<li><b>Only one instance runs the background jobs.</b> They elect a leader through
+a PostgreSQL advisory lock; if it stops or loses its connection, another takes over
+within ten seconds. You do not need — and should not add — a singleton
+Deployment for the engine.</li>
+</ul>
+
+<p><code>/live</code> and <code>/health</code> are the probes. <code>/live</code>
+says the process is up; <code>/health</code> says it can reach the database.</p>
+
+<h2 id="backup">Backup and upgrade</h2>
+
+<h3>Back up two things</h3>
+
+<ol>
+<li>The <b>database</b> — every target, action, channel, release, user and audit
+entry.</li>
+<li>The <b>artifact directory</b> — the bytes devices download.</li>
+</ol>
+
+<p>They must be consistent with each other: a database that references an artifact
+the filesystem does not have will hand devices a download that 404s. Snapshot both
+together, or dump the database <i>after</i> copying the artifacts — artifacts are
+only ever added, so a newer filesystem than database is harmless, while the
+reverse is not.</p>
+
+<pre><code>docker exec qawk-db pg_dump -U qawk -Fc qawk &gt; qawk-$(date +%F).dump
+docker run --rm -v qawk-artifacts:/src -v "$PWD":/out alpine \
+  tar czf /out/qawk-artifacts-$(date +%F).tgz -C /src .</code></pre>
+
+<h3>Upgrading</h3>
+
+<p>Pull the new image and restart. Qawk applies its own schema migrations at
+startup, in order, each in a transaction, recording what it has applied.</p>
+
+<pre><code>docker pull padovanl/qawk:0.2.0
+docker stop qawk && docker rm qawk
+docker run -d --name qawk ... padovanl/qawk:0.2.0</code></pre>
+
+<div class="note">
+<p><b>Back up the database before an upgrade.</b> Migrations go forward only —
+there is no down-migration, deliberately, because a down-migration that drops a
+column drops the data in it. If you need to go back, restore.</p>
+<p>With several instances, take them through one at a time. Devices retry, so a
+poll that misses is a poll that happens thirty seconds later.</p>
+</div>
+
+<h3>Starting over</h3>
+
+<p>Drop the database and the artifact volume. There is no other state — no
+temporary directory, no embedded store, nothing in the image:</p>
+
+<pre><code>docker rm -f qawk qawk-console qawk-db
+docker volume rm qawk-db qawk-artifacts</code></pre>
+
+<h2 id="checklist">Before you call it production</h2>
+
+<ul>
+<li><code>QAWK_ADMIN_PASSWORD</code> is set, and is not <code>admin</code>.</li>
+<li>TLS terminates in front of it, and devices use <code>https://</code>.</li>
+<li><code>QAWK_PUBLIC_URL</code> matches the address devices actually use.</li>
+<li>The proxy's body size and read timeout are large enough for your artifacts.</li>
+<li>The database and the artifact directory are both backed up, and a restore has
+been tried at least once.</li>
+<li><code>QAWK_METRICS_TOKEN</code> is set, or <code>/metrics</code> is not
+reachable from outside.</li>
+<li>Real users exist with real roles — nobody is doing daily work as the
+administrator.</li>
+<li>The gateway token is not the one from the demo.</li>
+</ul>
+
+</div>
+</body>
+</html>

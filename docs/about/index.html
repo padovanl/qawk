@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Licence and credits · Qawk documentation</title>
+<meta name="description" content="Qawk is AGPL-3.0-or-later. What that means for running it, changing it and building on it — and the third-party components it uses.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>Licence and credits</h1>
+
+<p class="lead">Qawk is free software under the <b>GNU Affero General Public
+License, version 3 or later</b>. Copyright © 2026 Luca Padovan.</p>
+
+<h2 id="practice">What that means in practice</h2>
+
+<table>
+<thead><tr><th>You want to</th><th>You may</th></tr></thead>
+<tbody>
+<tr><td>Run Qawk to update your own devices</td><td><b>Yes.</b> No obligation of any kind.</td></tr>
+<tr><td>Change it and run your changed version internally</td><td><b>Yes.</b> Still no obligation.</td></tr>
+<tr><td>Give a copy to someone else</td><td>Yes — with the source, under the AGPL.</td></tr>
+<tr><td>Run a <b>modified</b> Qawk as a service others reach over a network</td><td>Yes — and you must offer those users the source of your modified version.</td></tr>
+<tr><td>Take Qawk, close the source and sell it as your own</td><td><b>No.</b> That is what this licence prevents.</td></tr>
+<tr><td>Do any of the above under different terms</td><td>Ask — see <a href="#commercial">commercial licensing</a>.</td></tr>
+</tbody>
+</table>
+
+<div class="tip">
+<p><b>If you are a company running Qawk on your own fleet, you have no
+obligations at all</b> — modified or not. The AGPL's requirements begin when you
+convey the software to someone else, or when you run a modified version as a
+service that other people use. Updating your own machines is neither.</p>
+</div>
+
+<h2 id="why">Why the AGPL</h2>
+
+<p>MIT lets anyone take the work, close it, rebrand it and sell it, and all they
+owe the author is a copyright line in a file nobody opens. For a library that is
+often the right trade. For a finished server it means the work can become someone
+else's product with no visible credit and nothing given back.</p>
+
+<p>The AGPL keeps three things: <b>the name stays attached</b>, <b>improvements
+come back</b> — including from whoever runs a modified copy as a service, which is
+exactly how an update server is used — and <b>it stays open</b>, so nobody can
+make a closed fork the better one.</p>
+
+<p>The reasoning in full, including why not Apache-2.0 and why not a
+source-available licence, is in
+<a href="https://github.com/padovanl/qawk/blob/main/LICENSING.md">LICENSING.md</a>.</p>
+
+<h2 id="commercial">Commercial licensing</h2>
+
+<p>The AGPL does not suit everyone. Some companies cannot accept section 13 for a
+service they operate; some want to build Qawk into a closed product. Because the
+copyright is held by one person, Qawk can be licensed on other terms to anyone who
+asks — open an issue, or contact the author.</p>
+
+<p>That is deliberate: the AGPL is the default so the work stays open and
+attributed, and a commercial licence exists so that being open does not have to
+mean being unpaid.</p>
+
+<h2 id="third-party">Third-party components</h2>
+
+<p>All AGPL-compatible. The full list with copyright holders is in
+<a href="https://github.com/padovanl/qawk/blob/main/NOTICE">NOTICE</a>.</p>
+
+<table>
+<thead><tr><th>Where</th><th>What</th><th>Licence</th></tr></thead>
+<tbody>
+<tr><td><code>server/reference/*.json</code></td><td>hawkBit's API descriptions and recorded defaults</td><td>EPL-2.0</td></tr>
+<tr><td><code>server/go.mod</code></td><td>chi, pgx</td><td>MIT, BSD-3-Clause</td></tr>
+<tr><td><code>server/go.mod</code></td><td>OpenTelemetry, gRPC, protobuf</td><td>Apache-2.0</td></tr>
+<tr><td><code>console/js/vendor/</code></td><td>react, reactflow, dagre, gridstack, Sortable, js-yaml</td><td>MIT</td></tr>
+<tr><td><code>console/fonts/</code></td><td>Inter, JetBrains Mono</td><td>SIL OFL 1.1</td></tr>
+</tbody>
+</table>
+
+<h3>The Eclipse Public License exception</h3>
+
+<p>The files in <code>server/reference/</code> are hawkBit's own, under the
+EPL-2.0, and Qawk embeds them so it can serve an OpenAPI document listing exactly
+the operations it implements. EPL-2.0 and the GPL family are generally held to be
+incompatible, so rather than hope, the copyright holder grants an <b>additional
+permission under AGPL section 7</b> allowing that specific combination. The
+wording is in <a href="https://github.com/padovanl/qawk/blob/main/NOTICE">NOTICE</a>.</p>
+
+<h2 id="trademarks">Trademarks</h2>
+
+<p><b>hawkBit</b> is a trademark of the Eclipse Foundation. Qawk is an independent
+implementation of the published hawkBit protocols and is not affiliated with,
+endorsed by, or a product of the Eclipse Foundation.</p>
+
+<p><b>Mender</b> is a trademark of Northern.tech AS. Qawk's orchestrator is
+inspired by the published design of Mender Orchestrator and reads and writes its
+YAML; it is not affiliated with Northern.tech.</p>
+
+<h2 id="thanks">Credits</h2>
+
+<p>Qawk stands on the work of the <b>Eclipse hawkBit</b> project, whose protocol
+it speaks and whose design decisions it inherits, and on <b>Mender
+Orchestrator</b>, whose model for updating systems of devices it follows on the
+server side. Neither project is responsible for anything here.</p>
+
+<h2 id="contributing">Contributing</h2>
+
+<p>By opening a pull request you agree that your contribution is licensed under
+AGPL-3.0-or-later, and you keep your copyright in it. See
+<a href="https://github.com/padovanl/qawk/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>
+
+</div>
+</body>
+</html>

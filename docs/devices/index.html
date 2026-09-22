@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connecting devices · Qawk documentation</title>
+<meta name="description" content="How a device talks to Qawk: SWUpdate suricatta, gateway tokens, the attributes that drive channels, centres and systems, and simulated devices.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>Connecting devices</h1>
+
+<p class="lead">A device talks to Qawk exactly as it talks to hawkBit. If you have
+devices already updating from hawkBit, changing one URL is the entire migration.</p>
+
+<h2 id="how">How a device talks to Qawk</h2>
+
+<p>Devices poll:</p>
+
+<pre><code>http://&lt;server&gt;:8080/&lt;tenant&gt;/controller/v1/&lt;controller id&gt;</code></pre>
+
+<p>The loop is always the same four steps, and the device drives all of them —
+Qawk never reaches into a machine:</p>
+
+<ol class="steps">
+<li><b>Poll.</b> "Anything for me?" The answer carries how long to wait before
+asking again, and a link when there is work.</li>
+<li><b>Fetch.</b> Follow the link. It says what to install, with download URLs and
+hashes, and whether the install is <i>forced</i>, may be deferred, or must wait for
+a maintenance window.</li>
+<li><b>Download and install.</b> Downloads support <code>Range</code>, so a device
+on a bad line resumes rather than starting over.</li>
+<li><b>Report.</b> Say how it went. <b>Everything turns on this</b> — gates, error
+thresholds and system rollbacks are all driven by what devices report.</li>
+</ol>
+
+<h2 id="auth">Authenticating a device</h2>
+
+<table>
+<thead><tr><th>Kind</th><th>Header</th><th>Use it when</th></tr></thead>
+<tbody>
+<tr><td><b>Gateway token</b></td><td><code>Authorization: GatewayToken &lt;key&gt;</code></td>
+  <td>One shared secret for a fleet. A device that has never been seen <b>registers itself</b> on its first poll.</td></tr>
+<tr><td><b>Target token</b></td><td><code>Authorization: TargetToken &lt;key&gt;</code></td>
+  <td>A secret per device. Stronger, but each device must be created first.</td></tr>
+</tbody>
+</table>
+
+<p>Turn gateway tokens on in the console (<b>Configuration</b>) or through the
+API:</p>
+
+<pre><code>A='-u admin:a-long-admin-password'
+curl $A -X PUT -H 'Content-Type: application/json' -d '{"value": true}' \
+  http://localhost:8080/rest/v1/system/configs/authentication.gatewaytoken.enabled
+curl $A -X PUT -H 'Content-Type: application/json' -d '{"value": "a-random-token"}' \
+  http://localhost:8080/rest/v1/system/configs/authentication.gatewaytoken.key</code></pre>
+
+<div class="warn-box">
+<p><b>A gateway token is a fleet-wide secret.</b> Anything holding it can register
+a device and take updates. Keep it out of images that leave your control, put the
+server behind TLS, and rotate it if a device is lost.</p>
+</div>
+
+<h2 id="swupdate">SWUpdate (suricatta)</h2>
+
+<p>The common case. In <code>swupdate.cfg</code>:</p>
+
+<pre><code>suricatta: {
+  url          = "https://updates.example.com";
+  tenant       = "DEFAULT";
+  id           = "device-0001";
+  gatewaytoken = "a-random-token";
+};</code></pre>
+
+<p>That is all. <code>id</code> is the controller id — what the device is called
+everywhere in Qawk, so use something you can find a machine by.</p>
+
+<div class="note">
+<p><b>Maintenance windows and SWUpdate.</b> SWUpdate answers a deployment it is
+told to skip with <code>closed</code>/<code>success</code> and <i>"Skipped
+Update."</i>. hawkBit takes that at face value and marks the device updated when
+it is not. Qawk, outside a maintenance window, reads it as the skip being
+acknowledged: the action stays open and <code>scheduled</code>, and the device
+installs when the window opens. This is a
+<a href="../hawkbit/#differences">deliberate difference</a> from hawkBit, and it
+is what makes maintenance windows usable with SWUpdate at all.</p>
+</div>
+
+<h2 id="attributes">The attributes that matter</h2>
+
+<p>A device reports attributes in <code>configData</code>. In hawkBit they are
+searchable labels. <b>In Qawk they decide what the device is</b>: which channel it
+joins, which centre it is in, which system it belongs to and which component of
+it. Get them right and the rest of Qawk arranges itself.</p>
+
+<table>
+<thead><tr><th>Attribute</th><th>Drives</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td><code>ring</code></td><td>Which channel adopts it, via a channel rule.</td><td><code>attribute.ring==beta</code></td></tr>
+<tr><td><code>centerid</code></td><td>Which <a href="../centres/">centre</a> it is in — and so, which channel.</td><td><code>attribute.centerid==c03</code></td></tr>
+<tr><td><code>device_type</code></td><td>Which <b>component</b> of a system it is.</td><td><code>attribute.device_type==device2</code></td></tr>
+<tr><td><code>device</code></td><td>Which <b>system</b> it belongs to.</td><td><code>attribute.device==device-07</code></td></tr>
+<tr><td><code>os_version</code></td><td>Nothing by itself — useful to search and to see.</td><td><code>attribute.os_version==2.1.0</code></td></tr>
+</tbody>
+</table>
+
+<p>The names are yours: the channel rule, the centre setting and the system type
+each name the field they read. Those above are the demo's, and are a reasonable
+set to copy.</p>
+
+<pre><code>PUT /DEFAULT/controller/v1/device-0001/configData
+{
+  "mode": "merge",
+  "data": {
+    "ring": "beta",
+    "centerid": "c03",
+    "device_type": "device2",
+    "device": "device-07",
+    "os_version": "2.1.0"
+  }
+}</code></pre>
+
+<div class="tip">
+<p><b>Report them on every boot.</b> A device that reports its centre once and
+never again is fine until it is replaced or reflashed. A device that reports on
+every start is always in the right place, and a machine swapped into a lane picks
+up that lane's identity by itself.</p>
+</div>
+
+<h2 id="software">Getting software in</h2>
+
+<p>This is hawkBit's Management API, unchanged: create a software module, upload
+its artifact, put it in a distribution set. Anything written for hawkBit does it,
+and so does the console.</p>
+
+<pre><code>A='-u admin:a-long-admin-password'; Q=http://localhost:8080
+
+SM=$(curl -s $A -X POST -H 'Content-Type: application/json' \
+  -d '[{"name":"app","version":"1.2.0","type":"application"}]' \
+  $Q/rest/v1/softwaremodules | python3 -c 'import sys,json;print(json.load(sys.stdin)[0]["id"])')
+
+curl -s $A -X POST -F "file=@app-1.2.0.swu" $Q/rest/v1/softwaremodules/$SM/artifacts
+
+curl -s $A -X POST -H 'Content-Type: application/json' \
+  -d '[{"name":"app","version":"1.2.0","type":"app","modules":[{"id":'$SM'}]}]' \
+  $Q/rest/v1/distributionsets</code></pre>
+
+<h2 id="simulate">Simulated devices</h2>
+
+<p>You do not need hardware to test any of this. <code>qawk-sim</code> registers,
+reports the attributes a real device would, polls, takes what it is given, waits a
+random while and reports. It speaks the real device API over the real network — it
+is not a mock inside the server.</p>
+
+<pre><code># 50 devices reporting ring=lab, polling every 30 s
+demo/simulate.sh --url http://localhost:8080 --token &lt;token&gt; --fleet lab:50
+
+# several groups at once, and a name to tell runs apart
+demo/simulate.sh --name shop --url http://localhost:8080 --token &lt;token&gt; \
+  --fleet dev:20 --fleet beta:40 --fleet prod:500
+
+# 16 systems -- a device1 with two device2 and a device3 -- in four centres
+demo/simulate.sh --name centres --url http://localhost:8080 --token &lt;token&gt; --systems 16
+
+demo/simulate.sh --list            # what is running
+demo/simulate.sh --stop shop       # stop one run; --stop alone stops them all
+docker logs -f qawk-sim-shop       # what they are doing, every 10 s</code></pre>
+
+<p>A simulated device's controller id is <code>&lt;name&gt;-&lt;group&gt;-&lt;n&gt;</code>
+(<code>shop-prod-017</code>). It downloads nothing — it waits and reports
+<code>finished</code> — but it answers a deployment outside its maintenance window
+the way SWUpdate does, and a download-only one as <code>downloaded</code>.</p>
+
+<h3>Making things fail on purpose</h3>
+
+<p>This is the part worth knowing about, because you cannot trust a safety
+mechanism you have never seen fire:</p>
+
+<table>
+<thead><tr><th>Flag</th><th>Does</th><th>Shows you</th></tr></thead>
+<tbody>
+<tr><td>a module named <code>broken</code></td><td>Fails on every device.</td><td>a release halting on its threshold.</td></tr>
+<tr><td><code>-- -fail-rate 0.1</code></td><td>One deployment in ten fails, at random.</td><td>how a real, imperfect fleet looks.</td></tr>
+<tr><td><code>-- -fail-where device=device-07,device_type=device3,set=2.0</code></td><td>Those devices fail, only for that set.</td><td><b>one component of one system failing</b> — and the whole system rolling back.</td></tr>
+<tr><td><code>-- -install-min 5s -install-max 60s</code></td><td>How long an install takes.</td><td>waves and timeouts behaving.</td></tr>
+<tr><td><code>--interval 10s</code></td><td>How often each device polls.</td><td>everything, faster.</td></tr>
+</tbody>
+</table>
+
+<p>Everything after <code>--</code> goes to <code>qawk-sim</code> unchanged;
+<code>docker run --rm --entrypoint qawk-sim qawk:local -help</code> lists it all.</p>
+
+<h3>Load</h3>
+
+<p><code>qawk-load</code> measures how many polls a server holds:</p>
+
+<pre><code>docker run --rm --network host --ulimit nofile=65536:65536 \
+  --entrypoint qawk-load qawk:local \
+  -url http://localhost:8080 -token &lt;token&gt; \
+  -devices 10000 -interval 30s -ramp 30s -duration 180s -act</code></pre>
+
+<p>It prints requests per second, latency percentiles and errors. See
+<a href="../operations/#scaling">Scaling</a> for what the numbers mean.</p>
+
+<h2 id="api">API</h2>
+
+<p>Every device operation is in <a href="../api/#/ddi">the Device API reference</a>,
+with the call in curl, Python, JavaScript, Go and PowerShell.</p>
+
+</div>
+</body>
+</html>

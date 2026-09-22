@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Operations · Qawk documentation</title>
+<meta name="description" content="Metrics, tracing, health checks, what to alert on, how Qawk scales to ten thousand devices, and how to troubleshoot it.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>Operations</h1>
+
+<p class="lead">What to watch, what to alert on, how far it goes, and what to do
+when it misbehaves.</p>
+
+<h2 id="health">Health</h2>
+
+<table>
+<thead><tr><th>Endpoint</th><th>Says</th><th>Use as</th></tr></thead>
+<tbody>
+<tr><td><code>/live</code></td><td>The process is up.</td><td>Liveness probe.</td></tr>
+<tr><td><code>/health</code></td><td>It can reach the database.</td><td>Readiness probe.</td></tr>
+<tr><td><code>/metrics</code></td><td>Prometheus text format.</td><td>Scrape target.</td></tr>
+</tbody>
+</table>
+
+<p>Protect <code>/metrics</code> with <code>QAWK_METRICS_TOKEN</code> unless it is
+only reachable from inside — it tells a reader how many devices you have, how many
+are failing, and what your channels are called.</p>
+
+<h2 id="metrics">Metrics</h2>
+
+<p>Prometheus' text format, with no library behind it.</p>
+
+<table>
+<thead><tr><th>Metric</th><th>Kind</th><th>What</th></tr></thead>
+<tbody>
+<tr><td><code>qawk_http_requests_total{surface,method,code}</code></td><td>counter</td><td>Requests served. <code>surface</code> is <code>ddi</code> (devices), <code>mgmt</code>, <code>qawk</code> or <code>other</code>.</td></tr>
+<tr><td><code>qawk_http_request_duration_seconds{surface}</code></td><td>histogram</td><td>Latency, 5 ms to 10 s.</td></tr>
+<tr><td><code>qawk_targets{status}</code></td><td>gauge</td><td>Devices by update status.</td></tr>
+<tr><td><code>qawk_actions_active</code>, <code>qawk_rollouts_running</code></td><td>gauge</td><td>What is in flight.</td></tr>
+<tr><td><code>qawk_fleet_devices{fleet}</code> and friends</td><td>gauge</td><td>Each channel's members, on-release, updating, failed.</td></tr>
+<tr><td><code>qawk_fleet_releases_pending</code></td><td>gauge</td><td><b>Approvals waiting.</b></td></tr>
+<tr><td><code>qawk_fleet_releases_halted</code></td><td>gauge</td><td><b>Releases stopped by their threshold.</b></td></tr>
+<tr><td><code>qawk_leader</code></td><td>gauge</td><td>1 on the instance running the background jobs.</td></tr>
+<tr><td><code>qawk_db_connections{state}</code></td><td>gauge</td><td>This instance's pool: acquired, idle, total.</td></tr>
+<tr><td><code>qawk_uptime_seconds</code>, <code>qawk_goroutines</code>, <code>qawk_heap_bytes</code></td><td>gauge</td><td>The process.</td></tr>
+</tbody>
+</table>
+
+<p>The counters are per instance — sum them. The database gauges are the same on
+every instance — take one, or <code>max</code>.</p>
+
+<h3>The four alerts worth having</h3>
+
+<table>
+<thead><tr><th>Alert on</th><th>Means</th></tr></thead>
+<tbody>
+<tr><td><code>qawk_fleet_releases_halted &gt; 0</code></td><td>A release stopped on failures. <b>Someone has to look.</b> Nothing else will move it.</td></tr>
+<tr><td><code>qawk_fleet_releases_pending &gt; 0</code> for hours</td><td>A release is waiting for an approval nobody has noticed.</td></tr>
+<tr><td><code>sum(qawk_leader) != 1</code></td><td>Nobody is running the background jobs (nothing progresses), or two instances think they are.</td></tr>
+<tr><td><code>qawk_targets{status="error"}</code> rising</td><td>Devices failing outside any threshold you set.</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<p><b>A halted release is the one alert not to route to a dashboard nobody reads.</b>
+Halting is Qawk deciding it should not carry on without a human. If nobody is told,
+the fleet simply stops updating, quietly, for as long as it takes someone to
+notice.</p>
+</div>
+
+<h3>Tracing</h3>
+
+<p>The standard <code>OTEL_*</code> environment variables turn on OTLP export —
+traces and metrics. Nothing else to configure.</p>
+
+<h2 id="scaling">Scaling</h2>
+
+<p>The target is ten thousand devices polling every thirty seconds: about 330 polls
+a second, plus downloads.</p>
+
+<h3>What makes it work</h3>
+
+<ul>
+<li><b>The HTTP side is stateless.</b> Any number of instances behind a load
+balancer on one database; a device can poll one and report to another.</li>
+<li><b>Background jobs run once.</b> Whichever instance holds a PostgreSQL advisory
+lock. The lock belongs to a connection, so an instance that dies — or loses its
+database — loses it, and another takes over within ten seconds. No extra
+component, no leader-election sidecar.</li>
+<li><b>The polling path is short.</b> One transaction on the device's row and its
+open actions. Tenant settings are cached five seconds per instance instead of read
+on every request.</li>
+<li><b>A poll does not wait for the disk.</b> What a poll writes — when the device
+was last seen, from where — commits with <code>synchronous_commit = off</code>:
+lost in a crash, it is written again at the next poll thirty seconds later.
+Everything that matters — assignments, reports, releases — commits
+synchronously.</li>
+</ul>
+
+<h3>Measured</h3>
+
+<p>Ten thousand simulated devices from <code>qawk-load</code>, against one instance
+with the default pool of 20 connections and PostgreSQL 16 in a container, on a lab
+machine whose disk was busy with other builds (17–21% of the time stalled on
+I/O during the runs):</p>
+
+<table>
+<thead><tr><th>Devices</th><th>Polling every</th><th>Requests</th><th>p50</th><th>p99</th><th>Max</th><th>Errors</th></tr></thead>
+<tbody>
+<tr><td>10,000</td><td>60 s</td><td>167/s</td><td>1 ms</td><td>2 ms</td><td>1.1 s</td><td>0 of 39,995</td></tr>
+<tr><td>10,000</td><td>30 s</td><td>333/s</td><td>1 ms</td><td>2 ms</td><td>1.2 s</td><td>0 of 69,994</td></tr>
+<tr><td>10,000</td><td>60 s, <i>before</i> the asynchronous poll commit</td><td>162/s</td><td>841 ms</td><td>23.4 s</td><td>25.6 s</td><td>0 of 38,941</td></tr>
+</tbody>
+</table>
+
+<p>The process sat below 200 MiB. The third row is why the second exists: without
+the asynchronous poll commit, every poll waited for its own fsync, and on a busy
+disk ten thousand devices meant twenty-second stalls.</p>
+
+<div class="warn-box">
+<p><b>These are polls, not downloads.</b> Ten thousand devices each pulling a
+200&nbsp;MB artifact is a bandwidth and storage problem, not a request-rate one,
+and it is bounded by your disk and your network. Use waves
+(<code>wavePercent</code>) to spread it, which is what they are for.</p>
+</div>
+
+<h3>Running more than one</h3>
+
+<ul>
+<li>Artifacts must be shared: a volume every instance mounts (ReadWriteMany).</li>
+<li>Keep the sum of <code>QAWK_DB_MAX_CONNS</code> across instances under
+PostgreSQL's <code>max_connections</code>.</li>
+<li>Roll one instance at a time. Devices retry.</li>
+</ul>
+
+<h2 id="troubleshooting">Troubleshooting</h2>
+
+<h3>Nothing is progressing</h3>
+
+<p>No waves go out, no system deployment moves, no channel adopts anything. Check
+<code>sum(qawk_leader)</code>: if it is 0, no instance is running the background
+jobs — usually because every instance has lost the database. Check
+<code>/health</code>.</p>
+
+<h3>A device is not being updated</h3>
+
+<p>Go down this list in order; it is ordered by how often each turns out to be the
+answer:</p>
+
+<ol>
+<li><b>Is it in a channel?</b> A device in none gets nothing. Check its
+attributes against the channel's rule.</li>
+<li><b>Is it part of a system?</b> Then the <a href="../orchestrator/">orchestrator</a>
+updates it, never the channel's set. Look at the system deployment, not the
+channel.</li>
+<li><b>Is its system <code>mixed</code>?</b> The orchestrator leaves a system alone
+while its devices are in different channels.</li>
+<li><b>Is the channel frozen?</b> Or its release halted?</li>
+<li><b>Does it have an action open already?</b> A device with one is waited for,
+never overtaken — the channel reaches it on the next pass.</li>
+<li><b>Is it calling in at all?</b> <code>lastControllerRequestAt</code> on the
+device. If it is old, this is a network or a device problem, not a Qawk one.</li>
+<li><b>Is the set assignable to it?</b> Incomplete, invalid, or a type its target
+type does not accept.</li>
+</ol>
+
+<h3>A device downloads and downloads</h3>
+
+<p>Check <code>/qawk/v1/downloads</code>. A download that restarts from zero
+repeatedly usually means a proxy in front of Qawk is not passing
+<code>Range</code> through, so a device that loses its connection starts over
+instead of resuming.</p>
+
+<h3>Links point at the wrong host</h3>
+
+<p>Devices get download URLs they cannot reach. Set <code>QAWK_PUBLIC_URL</code> to
+the address devices actually use.</p>
+
+<h3>Uploads fail at a certain size</h3>
+
+<p>The proxy, not Qawk. nginx's <code>client_max_body_size</code> defaults to
+1&nbsp;MB. See <a href="../install/#tls">TLS and reverse proxies</a>.</p>
+
+<h3>Everything is slow after an upgrade</h3>
+
+<p>Check <code>qawk_db_connections</code>. If <code>acquired</code> sits at the
+pool limit, raise <code>QAWK_DB_MAX_CONNS</code> — or find the query holding
+them, which the <code>debug</code> log level will show.</p>
+
+<h3>Reading more</h3>
+
+<p><code>QAWK_LOG_LEVEL=debug</code> logs every request. It is loud; turn it off
+again.</p>
+
+</div>
+</body>
+</html>

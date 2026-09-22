@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Users and audit · Qawk documentation</title>
+<meta name="description" content="Users, roles, API tokens and the audit log: who can sign in, what each role may do, and what is recorded.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>Users, roles and API tokens</h1>
+
+<p class="lead">hawkBit keeps its users in a configuration file. Qawk keeps them in
+the database, managed from the console and shared by every instance — so adding a
+person does not mean a deployment.</p>
+
+<h2 id="signin">Who can sign in</h2>
+
+<p>Three kinds of credential, checked in this order:</p>
+
+<ol class="steps">
+
+<li><b>The administrator, from the environment.</b><br>
+<code>QAWK_ADMIN_USER</code> / <code>QAWK_ADMIN_PASSWORD</code>, with every
+permission. It is <b>never stored in the database</b> and always works — which is
+how a brand-new server is set up, and how a lost password is fixed by a restart.
+It is also why the password must not be left at <code>admin</code>.</li>
+
+<li><b>An API token.</b><br>
+<code>qawk_</code> and 48 hex digits, sent as
+<code>Authorization: Bearer &lt;token&gt;</code> or as the password of basic
+authentication (<code>curl -u alice:qawk_…</code>), for tools that only speak
+that. Only its SHA-256 is stored; the token itself is shown <b>once</b>, when it
+is made. Expiry is optional.
+<br><br>
+A token acts with its owner's permissions <b>at the time of use</b>. Take a role
+away from someone and their tokens lose it in the same moment — there is no
+separate list of token scopes to remember to revoke.</li>
+
+<li><b>A user in the database.</b><br>
+A password (PBKDF2-SHA256, 600,000 iterations) and any number of roles. A disabled
+user cannot sign in.</li>
+
+</ol>
+
+<div class="note">
+<p><b>Why signing in takes half a second.</b> The password hash is deliberately
+expensive, and the console sends credentials with every request. So a successful
+check is remembered for thirty seconds. Any change to a user, role or token
+forgets them all at once on the instance that made the change; other instances
+catch up within the same thirty seconds.</p>
+</div>
+
+<h2 id="roles">Roles</h2>
+
+<p>A role is a named set of <b>hawkBit's own permissions</b>. Every route keeps the
+permission hawkBit gives it, so a role means the same thing here as it would
+there.</p>
+
+<p>Four roles are built in and rewritten at every start, so they cannot drift:</p>
+
+<table>
+<thead><tr><th>Role</th><th>May</th><th>May not</th></tr></thead>
+<tbody>
+<tr><td><code>admin</code></td><td>Everything, including users, roles and the audit log.</td><td>—</td></tr>
+<tr><td><code>operator</code></td><td>Targets, channels, software, rollouts. The daily job.</td><td>Delete anything, change server configuration, approve a release.</td></tr>
+<tr><td><code>release-manager</code></td><td>An operator who also approves releases and can force a gate.</td><td>Manage users and roles.</td></tr>
+<tr><td><code>viewer</code></td><td>Read everything.</td><td>Change anything.</td></tr>
+</tbody>
+</table>
+
+<p>Make your own from any set of permissions. Deleting a role takes it away from
+whoever had it. <code>SYSTEM_ADMIN</code> is the permission that manages users and
+roles and reads the audit log.</p>
+
+<pre><code>curl -u admin:$PW $Q/qawk/v1/permissions      # every permission there is
+
+curl -u admin:$PW -X POST -H 'Content-Type: application/json' \
+  -d '{"name": "centre-manager", "description": "moves centres between channels",
+       "permissions": ["READ_TARGET", "UPDATE_TARGET"]}' $Q/qawk/v1/roles</code></pre>
+
+<div class="tip">
+<p><b>Separate who ships from who approves.</b> Four-eyes approval only means
+something if the two people are different — and Qawk enforces that a release
+cannot be approved by whoever asked for it. Give operators <code>operator</code>
+and keep <code>release-manager</code> for the people who sign things off.</p>
+</div>
+
+<h2 id="tokens">API tokens</h2>
+
+<p>For CI and scripts. Console: <b>My account</b> → <b>new API token</b>.</p>
+
+<pre><code>curl -u rm-1:$PW -H 'Content-Type: application/json' \
+  -d '{"name": "ci", "expiresInDays": 90}' $Q/qawk/v1/tokens
+
+curl -H "Authorization: Bearer qawk_…" "$Q/rest/v1/targets?limit=1"</code></pre>
+
+<p>Give a token an expiry unless you have a reason not to. A token with no expiry
+outlives the job it was made for, and usually the person too.</p>
+
+<h2 id="audit">The audit log</h2>
+
+<p>Every request that <b>changes</b> something is recorded: method, path, result,
+user, how they signed in, and their address — the first
+<code>X-Forwarded-For</code> behind a proxy. So is every <b>refused sign-in</b>.</p>
+
+<p>Reads are not recorded, on purpose: a console refreshing every two seconds would
+bury everything that matters under itself.</p>
+
+<pre><code>curl -u admin:$PW "$Q/qawk/v1/audit?all=true&amp;limit=50"
+curl -u admin:$PW "$Q/qawk/v1/audit?q=user==alice;status=ge=400"</code></pre>
+
+<p>It is filtered like any hawkBit list, on <code>user</code>, <code>via</code>,
+<code>method</code>, <code>path</code>, <code>status</code>, <code>address</code>
+and <code>at</code>. It is kept for <code>QAWK_AUDIT_DAYS</code> — 180 by default,
+<code>0</code> for ever — and pruned hourly.</p>
+
+<h3>What it is good for</h3>
+
+<ul>
+<li><b>Who forced that gate, and why.</b> Forcing requires a written reason, and
+the reason is in the release's history as well as here.</li>
+<li><b>Who assigned a set to a device in a frozen channel.</b> A freeze stops the
+pipeline, not a person with the permission — and this is where that shows up.</li>
+<li><b>Whether someone is guessing passwords.</b> Refused sign-ins, with
+addresses.</li>
+</ul>
+
+<div class="warn-box">
+<p><b>The audit log is not tamper-proof.</b> It is a table in the same database as
+everything else, and anyone who can reach that database can change it. If you need
+evidence rather than a record, ship it out — <code>/metrics</code> and the
+OpenTelemetry export are the hooks for that.</p>
+</div>
+
+<h2 id="console">In the console</h2>
+
+<p><b>Users and roles</b> and <b>Audit log</b> appear for those with
+<code>SYSTEM_ADMIN</code>. <b>My account</b> — password and tokens — is there for
+everyone. The header shows who you are signed in as, with your roles.</p>
+
+<h2 id="api">API</h2>
+
+<p><a href="../api/#/qawk/me">Who am I</a>,
+<a href="../api/#/qawk/users-create">create a user</a>,
+<a href="../api/#/qawk/roles-create">create a role</a>,
+<a href="../api/#/qawk/tokens-create">create a token</a>,
+<a href="../api/#/qawk/audit">the audit log</a>.</p>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hawkBit compatibility · Qawk documentation</title>
+<meta name="description" content="What 'the same as hawkBit' means in Qawk, how it is kept true, the deliberate differences and their reasons, and how to migrate.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>hawkBit compatibility</h1>
+
+<p class="lead">Qawk speaks <a href="https://eclipse.dev/hawkbit/">Eclipse
+hawkBit</a> 1.1.0. Not a subset, not a dialect: the same operations, the same
+JSON, the same status and error codes, the same query language, paging and
+download headers. This page says exactly what that claim covers, how it is kept
+true, and where it is deliberately broken.</p>
+
+<h2 id="scope">What is implemented</h2>
+
+<table>
+<thead><tr><th>API</th><th>Path</th><th>Operations</th></tr></thead>
+<tbody>
+<tr><td><b>Direct Device Integration</b></td><td><code>/{tenant}/controller/v1</code></td><td>All 16.</td></tr>
+<tr><td><b>Management</b></td><td><code>/rest/v1</code></td><td>All 153.</td></tr>
+</tbody>
+</table>
+
+<p>That includes targets with their attributes, metadata, tags, types, groups,
+auto-confirmation, actions and action history; software modules and artifacts;
+distribution sets and their types; rollouts with groups, thresholds and the
+approval flow; target filters with auto-assignment; and tenant configuration.</p>
+
+<div class="tip">
+<p><b>The authoritative list is the server's own.</b> Qawk serves hawkBit's OpenAPI
+document where hawkBit serves it, filtered to the operations it really implements —
+so a generated client cannot be built against something that is not there:</p>
+<pre><code>curl -s 'https://qawk.example.com/v3/api-docs/swagger-config'
+curl -s 'https://qawk.example.com/v3/api-docs/Management%20API' &gt; management.json</code></pre>
+<p>Ask the server you are actually talking to. It is the one document that cannot
+be out of date.</p>
+</div>
+
+<h2 id="kept-true">How it is kept true</h2>
+
+<p>A claim of compatibility is worth what tests it. Qawk's is a <b>contract
+test</b>: a flow recorded from a real hawkBit 1.1.0 is replayed against Qawk and
+every answer is compared field by field, against samples the real server gave.
+The deliberate deviations below are the test's explicit allow-list, each with its
+reason in the code — so a difference is either listed or a failure, and there is
+no third state where it quietly drifts.</p>
+
+<pre><code>python3 server/test/contract.py http://localhost:8080</code></pre>
+
+<h2 id="differences">Where Qawk differs, on purpose</h2>
+
+<p>Five differences. Each was a real problem before it was a decision.</p>
+
+<h3>1. A new rollout answers <code>ready</code>, not <code>creating</code></h3>
+
+<p>hawkBit creates the groups in the background and answers <code>creating</code>.
+Qawk creates them in the same transaction and answers <code>ready</code>. A client
+written for hawkBit polls until <code>ready</code> — and gets it immediately.
+Nothing breaks; there is just nothing to wait for.</p>
+
+<h3>2. A deleted module's name and version can be used again</h3>
+
+<p>hawkBit soft-deletes and reserves the name for ever. That reservation is why a
+demo has to be torn down to start over. Qawk frees the name; the deleted rows are
+still kept, for the history that points at them.</p>
+
+<h3>3. Range requests do not each write a history entry</h3>
+
+<p>hawkBit writes a <code>download</code> entry into the action's history for every
+range request. A delta update reads one file in hundreds of ranges, which buries
+the history and pushes past status-entry limits. Qawk records only the start of a
+download — no <code>Range</code>, or one starting at 0.</p>
+
+<h3>4. The Management API's 401 carries no <code>WWW-Authenticate</code></h3>
+
+<p>The console calls the API with <code>fetch()</code>, and that header makes
+browsers throw their own login dialog over the page. Removing it is the difference
+between a console that can show you a sign-in form and one that cannot.</p>
+
+<h3>5. A success outside a maintenance window does not finish the action</h3>
+
+<p>The one that actually changes behaviour, and the one to know about.</p>
+
+<p>SWUpdate answers a deployment it is told to skip with
+<code>closed</code>/<code>success</code> and <i>"Skipped Update."</i> — that is
+what real devices send. hawkBit takes it at its word and marks the device
+updated when it is not, which makes maintenance windows unusable with SWUpdate.</p>
+
+<p>Qawk, <b>outside an action's maintenance window</b>, reads that success as the
+skip being acknowledged: the action goes to <code>scheduled</code>, stays open, and
+the installed set does not change. When the window opens, the device is told
+<code>forced</code> and installs.</p>
+
+<div class="note">
+<p>Inside a window — and for every action with no window at all — the behaviour is
+hawkBit's exactly. The difference applies only where hawkBit's behaviour would
+record something untrue.</p>
+</div>
+
+<h2 id="notimplemented">What is not there</h2>
+
+<ul>
+<li><b>Multi-tenancy.</b> One tenant per server. <code>QAWK_TENANT</code> names
+the single tenant devices use in their URL. hawkBit's tenant isolation is not
+implemented.</li>
+<li><b>hawkBit's own UI.</b> Qawk has its own console, which also works against a
+stock hawkBit.</li>
+<li><b>DMF / AMQP.</b> The device-management federation interface is not
+implemented. Devices speak DDI over HTTP.</li>
+<li><b>Object storage for artifacts.</b> They live on a filesystem.</li>
+</ul>
+
+<h2 id="migrating">Migrating from hawkBit</h2>
+
+<ol class="steps">
+<li><b>Stand Qawk up beside it.</b> Same network, its own database. Nothing is
+shared.</li>
+<li><b>Point the console at it.</b> The Qawk console works against both — run it
+against your hawkBit first, then against Qawk, and compare the same screens.</li>
+<li><b>Move the catalogue.</b> Module types, distribution set types, modules,
+artifacts and sets, through the Management API. The same script reads one and
+writes the other, because it is the same API on both ends.</li>
+<li><b>Move a few devices.</b> Change the <code>url</code> in their
+<code>swupdate.cfg</code>. Nothing else on the device changes. With a gateway
+token they register themselves on the first poll.</li>
+<li><b>Set up what hawkBit did not have.</b> Channels with rules so devices land
+where they belong, centres if your fleet has sites, system types if you have
+machines that must move together.</li>
+<li><b>Move the rest.</b> Then turn hawkBit off.</li>
+</ol>
+
+<div class="warn-box">
+<p><b>History does not come across.</b> Actions, rollouts and their status entries
+stay in hawkBit. If you need them, keep the old server readable for as long as your
+retention requires. Qawk starts with the devices' <i>current</i> state, not their
+past.</p>
+</div>
+
+<h2 id="both">Running the console against hawkBit</h2>
+
+<p>The console asks <code>/qawk/v1/info</code> first. Against a stock hawkBit that
+endpoint does not exist, so it shows the hawkBit part — targets, sets, modules,
+deployments, rollouts, filters, tags — and hides channels, centres, the
+orchestrator, users and the audit log. A bar warns when an endpoint it calls is
+missing.</p>
+
+<pre><code>python3 console/serve.py --port 8090 --hawkbit http://hawkbit:8080</code></pre>
+
+<h2 id="trademark">Trademark</h2>
+
+<p>hawkBit is a trademark of the Eclipse Foundation. Qawk is not affiliated with,
+endorsed by or a product of the Eclipse Foundation. It is an independent
+implementation of the published protocols.</p>
+
+</div>
+</body>
+</html>
