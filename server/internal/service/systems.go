@@ -416,9 +416,30 @@ type picked struct {
 //
 // It is asked again at every tick, not only when the deployment starts: what
 // a channel holds changes under it (see adoptSystems).
-func (s *Service) pickSystems(ctx context.Context, d model.SystemDeployment, m model.Manifest) (picked, error) {
+// systemsCache holds the systems of a type for the length of one tick.
+// Working out what systems exist is a query per component of the type, and
+// several channels share one type -- without this, four channels on one type
+// asked the same four questions four times, every ten seconds.
+type systemsCache map[int64][]SystemInstance
+
+func (s *Service) systemsOf(ctx context.Context, c systemsCache, typeID int64) ([]SystemInstance, error) {
+	if in, ok := c[typeID]; ok {
+		return in, nil
+	}
+	in, err := s.Systems(ctx, typeID)
+	if err != nil {
+		return nil, err
+	}
+	if c != nil {
+		c[typeID] = in
+	}
+	return in, nil
+}
+
+func (s *Service) pickSystems(ctx context.Context, d model.SystemDeployment, m model.Manifest,
+	cache systemsCache) (picked, error) {
 	var p picked
-	all, err := s.Systems(ctx, m.SystemTypeID)
+	all, err := s.systemsOf(ctx, cache, m.SystemTypeID)
 	if err != nil {
 		return p, err
 	}
@@ -488,7 +509,7 @@ func (s *Service) scope(ctx context.Context, d model.SystemDeployment) (picked, 
 	if err != nil {
 		return picked{}, "", err
 	}
-	p, err := s.pickSystems(ctx, d, m)
+	p, err := s.pickSystems(ctx, d, m, nil)
 	if err != nil {
 		return picked{}, "", err
 	}
@@ -532,6 +553,7 @@ func (s *Service) adoptSystems(ctx context.Context) error {
 		return err
 	}
 	now := httpx.Now()
+	cache := systemsCache{}
 	for _, f := range fleets {
 		rel, err := s.st.CurrentRelease(ctx, s.st.DB(), f.ID)
 		if err != nil {
@@ -540,14 +562,14 @@ func (s *Service) adoptSystems(ctx context.Context) error {
 		if rel == nil || rel.SystemDeploymentID == nil || rel.Status == model.ReleaseHalted || f.Frozen(now) {
 			continue
 		}
-		if err := s.rescope(ctx, f, *rel.SystemDeploymentID, now); err != nil && ctx.Err() == nil {
+		if err := s.rescope(ctx, f, *rel.SystemDeploymentID, cache); err != nil && ctx.Err() == nil {
 			s.log.Warn("orchestrator scope", "fleet", f.Name, "err", err)
 		}
 	}
 	return nil
 }
 
-func (s *Service) rescope(ctx context.Context, f model.Fleet, deployment, now int64) error {
+func (s *Service) rescope(ctx context.Context, f model.Fleet, deployment int64, cache systemsCache) error {
 	d, err := s.st.SystemDeployment(ctx, s.st.DB(), deployment)
 	if err != nil {
 		return err
@@ -561,7 +583,7 @@ func (s *Service) rescope(ctx context.Context, f model.Fleet, deployment, now in
 	if err != nil {
 		return err
 	}
-	p, err := s.pickSystems(ctx, d, m)
+	p, err := s.pickSystems(ctx, d, m, cache)
 	if err != nil {
 		return err
 	}
