@@ -30,9 +30,10 @@ Anything that lets someone:
 These are documented behaviours, not vulnerabilities. Reporting them will get you
 a link back to this list:
 
-- **TLS is not built in.** Qawk is meant to run behind a proxy that terminates it.
-  Plain HTTP exposing tokens is the deployment's problem, and is
-  [documented](https://padovanl.github.io/qawk/install/#tls).
+- **Plain HTTP exposes tokens.** Qawk speaks HTTPS when given a certificate
+  (`QAWK_TLS_CERT` / `QAWK_TLS_KEY`), and works behind a proxy that terminates
+  TLS. Running it on plain HTTP anyway is a deployment choice, and a
+  [documented](https://padovanl.github.io/qawk/install/#tls) one.
 - **The default administrator password is `admin`.** It is documented in four
   places, and the server is meant to be started with `QAWK_ADMIN_PASSWORD` set.
 - **A gateway token is a fleet-wide secret.** Anything holding one can register a
@@ -43,6 +44,9 @@ a link back to this list:
 - **`/qawk/v1/info` needs no credentials.** It exists so a console can find out
   what it is talking to before anyone signs in. It exposes the version and the
   feature list, nothing else.
+- **CORS is off unless `QAWK_CORS_ORIGINS` names an origin.** Turning it on lets
+  a browser page from those origins read the API's answers, which is the point of
+  it. Naming an origin you do not control is a deployment mistake, not a flaw.
 - **The audit log is not tamper-proof.** It is a table in the same database as
   everything else. Ship it out if you need evidence rather than a record.
 - **One tenant per server.** hawkBit's multi-tenant isolation is not implemented,
@@ -59,6 +63,11 @@ a link back to this list:
 - Every change and every refused sign-in is in the audit log, with the address.
 - The server runs as an unprivileged user in its image, opens one port and writes
   one directory.
+- With TLS on: TLS 1.2 is the floor, 1.3 is used whenever the client can, and
+  `QAWK_TLS_CLIENT_CA` makes a verified client certificate a precondition of
+  reaching any handler at all.
+- Half a pair of TLS variables stops the server at startup rather than falling
+  back to plain HTTP.
 - Uploaded artifacts are checked against the hashes the uploader declared before
   they are accepted.
 

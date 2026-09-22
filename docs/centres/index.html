@@ -7,6 +7,7 @@
 <meta name="description" content="A centre is where a device is. Put a centre in a channel and every device of it follows — the machines that stand alone and the ones inside systems alike.">
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/icons.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
 <body>
@@ -57,6 +58,14 @@ set it from the console as metadata rather than having the device report it:</p>
 
 <p>Console: <b>Centres</b> — every centre, its channel, how many devices it has and
 how many of them are already there. Tick the centres and press <b>move</b>.</p>
+
+<figure>
+  <img src="../assets/img/ui-centres.png"
+       alt="The Centres screen: a table of centres with the channel each is in and how many of its devices have followed.">
+  <figcaption>Tick the centres, press <b>move</b>, choose the channel. Their devices
+  follow a hundred at a time, which is why <b>on channel</b> catches up with
+  <b>devices</b> over the next minute rather than instantly.</figcaption>
+</figure>
 
 <pre><code>curl -u admin:$PW $Q/qawk/v1/centres
 

@@ -51,6 +51,10 @@ for page in pages:
         if not os.path.exists(target):
             bad.append((page, href, "missing file"))
         elif frag and not frag.startswith("/") and target.endswith(".html"):
+            # the API reference draws its own content, so its anchors are not
+            # in the file on disk -- its links are checked by docs/check.mjs
+            if "api" + os.sep + "index.html" in target:
+                continue
             if frag not in ids_of(target):
                 bad.append((page, href, "no such anchor in the target"))
 

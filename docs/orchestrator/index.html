@@ -7,6 +7,7 @@
 <meta name="description" content="Systems updated as a whole: topologies, manifests, component order, rollback of the whole system, and releases that carry a manifest down the pipeline.">
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/icons.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
 <body>
@@ -128,6 +129,13 @@ second time.</p>
 <p>A system deployment applies a manifest to systems. Created as a <b>draft</b> —
 nothing moves until you start it.</p>
 
+<figure>
+  <img src="../assets/img/ui-orchestrator.png"
+       alt="The Orchestrator screen: deployments, system types and manifests, each in its own table.">
+  <figcaption>The <b>Orchestrator</b> screen holds all three pieces: deployments at
+  the top, the system types below, and the manifests under those.</figcaption>
+</figure>
+
 <pre><code>curl -u admin:$PW -X POST -H 'Content-Type: application/json' -d '{
   "name": "prod 2.0",
   "manifestId": 3,
@@ -202,6 +210,163 @@ lane is misbehaving:</p>
 back to, and inventing something would be worse than leaving it. The deployment
 says so in its reason: <i>"n ran nothing before and were left as they are"</i>.</p>
 </div>
+
+<h2 id="recovery">A system rolled back. Now what?</h2>
+
+<p>This is the situation that matters, so it gets its own section. A lane
+computer with two terminals and a display: the terminals and the display go
+first, and if they are fine the lane computer follows. <b>The lane computer
+fails.</b> The whole system goes back to what it ran before, and it now sits on
+the old version while the rest of the fleet is on the new one.</p>
+
+<figure>
+  <img src="../assets/img/ui-rolled-back.png"
+       alt="The Orchestrator screen with a deployment drawer open. Three systems succeeded; device-07 shows a red 'rolled back' pill with the reason, and a 'take again' button.">
+  <figcaption><b>Orchestrator</b> → click the deployment. Every system, its state, and
+  each component's devices. <code>device-07</code> rolled back and says why;
+  the deployment itself is <b>failed</b>, because more systems failed than it
+  allowed.</figcaption>
+</figure>
+
+<h3>1. Read what it says before you touch anything</h3>
+
+<p>The run's reason is written for this moment. It tells you three things:</p>
+
+<pre><code>1 device(s) failed at order 10 -- rolled back: 0 of 0 devices on their
+previous set again, 3 ran nothing before and were left as they are</code></pre>
+
+<ul>
+<li><b>Which order failed.</b> Order 10 is the terminals, order 20 the lane
+computer. That alone usually says whether the problem is the firmware or the
+application.</li>
+<li><b>How many went back.</b> "0 of 0 … 3 ran nothing before" means those
+devices had never installed anything through Qawk, so there was nothing to go
+back to and they were left alone. On a fleet that has been updated before you
+will see "3 of 3 devices on their previous set again".</li>
+<li><b>Whether any device failed to go back</b> — the worst case, and it is
+called out separately.</li>
+</ul>
+
+<p>Then open the device itself (<b>Targets</b> → the controller id) and read what
+<i>it</i> reported. The orchestrator only knows the update failed; the device
+knows why.</p>
+
+<h3>2. Decide which of two situations you are in</h3>
+
+<p>Everything that follows turns on this one question, and getting it wrong is
+the only way to make things worse:</p>
+
+<table>
+<thead><tr><th>If…</th><th>Then</th><th>Do</th></tr></thead>
+<tbody>
+<tr><td><b>The update itself is fine</b> — the machine was off, the disk was
+full, the network dropped, one device is faulty</td>
+<td>Nothing needs rebuilding. The system just needs another go.</td>
+<td><b>Take it again</b> (below).</td></tr>
+<tr><td><b>The update is wrong</b> — the build is bad, the versions in the
+manifest do not go together</td>
+<td>Retrying would fail again, and on more systems if you let it.</td>
+<td><b>Fix the build, release a new manifest</b> (below). Do <i>not</i> retry.</td></tr>
+</tbody>
+</table>
+
+<div class="tip">
+<p><b>The quick test:</b> did other systems succeed with this same manifest? On
+the screenshot above, three did. That makes it a problem with that one system,
+not with the manifest — so a retry is the right move. If <i>every</i> system
+rolled back, the manifest is the suspect.</p>
+</div>
+
+<h3>3a. Take one system again</h3>
+
+<p>Press <b>take again</b> on the row.</p>
+
+<figure>
+  <img src="../assets/img/ui-take-again.png"
+       alt="The confirmation dialog for taking a system again, explaining that it uses this deployment's manifest, from where the system is now.">
+  <figcaption>It tells you exactly what it will do — and what to do instead if
+  the manifest itself was wrong.</figcaption>
+</figure>
+
+<p>What happens:</p>
+
+<ul>
+<li>The run goes back to <b>pending</b> and the deployment, if it had finished
+or failed, is <b>running</b> again for this one system.</li>
+<li>The system is <b>photographed afresh</b>: its devices and what each is
+running <i>now</i> are recorded again. So if it rolls back a second time, it
+goes back to where it actually is — not to where it was before the first
+attempt.</li>
+<li>The deployment's <b>own manifest</b> is used again, not whatever the channel
+has moved on to since.</li>
+<li>That run no longer counts as failed, so <code>maxFailed</code> stops
+blocking the rest.</li>
+</ul>
+
+<pre><code>curl -u admin:$PW -X POST -H 'Content-Type: application/json' \
+  -d '{"reason": "lane 7 PSU replaced"}' \
+  $Q/qawk/v1/systemdeployments/51/runs/700/retry</code></pre>
+
+<div class="warn-box">
+<p><b>If the deployment's release was halted, the channel is still halted.</b>
+Taking a system again restarts the <i>orchestrator</i>, not the release. Go to
+<b>Fleets</b> and press <b>resume</b> on the channel as well. Two separate
+decisions, deliberately: one says "this system is worth another go", the other
+says "this release is safe to keep sending".</p>
+</div>
+
+<h3>3b. Fix the build and release a new manifest</h3>
+
+<p>When the update itself was wrong, retrying the same manifest just fails
+again. Instead:</p>
+
+<ol class="steps">
+<li><b>Fix the build</b> and upload it as a new distribution set —
+<code>app:2.0.1</code>, not a replacement for <code>app:2.0</code>. Versions
+that change meaning are how you lose track of what is where.</li>
+<li><b>Make a new manifest</b> pointing at it, keeping the same orders.</li>
+<li><b>Release it to the channel</b> — set and manifest together. A fresh system
+deployment starts, and <b>every system in the channel is in scope again</b>,
+including the one that rolled back: it is a new deployment, with a new
+photograph.</li>
+<li><b>Let the pipeline do its job.</b> Send it to dev first. The whole point of
+having a pipeline is that a bad build gets caught in a channel where it is cheap.</li>
+</ol>
+
+<h3>4. Make sure nothing was left behind</h3>
+
+<p>The check worth doing before you call it done. A system that rolled back is
+left alone by design, so it will not fix itself:</p>
+
+<ul>
+<li><b>Fleets</b> — the channel says how its systems ended:
+<i>"15 of 16 systems updated, 1 rolled back"</i>. A number other than zero after
+"rolled back" is a system still on the old version.</li>
+<li><b>Orchestrator</b> — the deployment's bar shows the rolled-back share in
+red, and the drawer names the system.</li>
+<li>Alert on <code>qawk_fleet_releases_halted &gt; 0</code>
+(<a href="../operations/#metrics">Operations</a>). A halted release is Qawk
+saying it will not continue without a person; if nobody is told, the channel
+simply stops updating, quietly.</li>
+</ul>
+
+<h3>What never happens on its own</h3>
+
+<p>Worth being explicit, because the absence of these is deliberate:</p>
+
+<ul>
+<li><b>A rolled-back system is never retried automatically.</b> A device that
+fails every time would be retried for ever, rolling the same system back and
+forth. Somebody decides.</li>
+<li><b>A halted release never resumes itself.</b></li>
+<li><b>An aborted deployment does not restart</b> because a centre moved or a
+system joined.</li>
+</ul>
+
+<p>Everything else — a centre moved into the channel, a system that was split
+across channels while its devices were moving, a system registering for the
+first time — <i>is</i> picked up automatically, on the next pass. See
+<a href="#releases">below</a>.</p>
 
 <h2 id="releases">Releases through the orchestrator</h2>
 

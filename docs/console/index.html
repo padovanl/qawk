@@ -7,6 +7,7 @@
 <meta name="description" content="The Qawk console for the person who ships the update: every screen, what to press, what the colours mean, and what to do when something goes wrong.">
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/icons.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
 <body>
@@ -30,6 +31,13 @@ cannot take back is an artifact you deleted.</p>
 <p>The list down the left side is everything there is. It is grouped, and it hides
 what the server does not support or what your account may not see — so if a screen
 below is missing for you, that is why.</p>
+
+<figure>
+  <img src="../assets/img/ui-dashboard.png"
+       alt="The Qawk console dashboard: cards showing devices by status, channels and what is updating right now.">
+  <figcaption>The <b>Dashboard</b>. The cards are yours — drag them, resize them,
+  add and remove them from the tray. It is saved per account.</figcaption>
+</figure>
 
 <h3>The screens you will use</h3>
 
@@ -118,6 +126,15 @@ so, and the next gate will not open.</li>
 
 </ol>
 
+<figure>
+  <img src="../assets/img/ui-fleets.png"
+       alt="The Fleets screen showing the dev, beta and prod pipeline as cards, each with its release, progress bar and buttons.">
+  <figcaption><b>Fleets</b> is where you spend your time. Each channel shows its
+  release, how far it has got, and — when the channel has systems — a second bar
+  for the orchestrator. The arrows between the cards are the pipeline;
+  <b>promote</b> is the gate.</figcaption>
+</figure>
+
 <h3>The other way: straight at some devices</h3>
 
 <p>Sometimes you do not want the pipeline — one machine, one set, now. <b>Targets</b>
@@ -132,6 +149,13 @@ means the device may choose its moment. There is also <b>download only</b> (get
 the bytes now, install later) and a <b>maintenance window</b> (download any time,
 install only inside these hours).</p>
 </div>
+
+<figure>
+  <img src="../assets/img/ui-inprogress.png"
+       alt="The In progress screen listing devices currently updating, with download progress bars.">
+  <figcaption><b>In progress</b> — everything happening right now, with how far
+  each download has got. The place to watch after you press go.</figcaption>
+</figure>
 
 <h2 id="reading">Reading what you see</h2>
 
@@ -212,6 +236,14 @@ finished yet.</li>
 written reason, and the reason is kept in the release's history and the audit log
 for ever. That is by design: forcing a gate is allowed, forgetting that you did
 is not.</p>
+
+<figure>
+  <img src="../assets/img/ui-rolled-back.png"
+       alt="A system deployment drawer: three systems succeeded, one shows 'rolled back' in red with its reason and a 'take again' button.">
+  <figcaption>One system of four failed and went back on its own. The reason says
+  which order failed and how many devices went back. <b>take again</b> is the way
+  forward once you know why.</figcaption>
+</figure>
 
 <h3>A system rolled back</h3>
 

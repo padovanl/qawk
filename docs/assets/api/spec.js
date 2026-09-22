@@ -480,6 +480,25 @@ window.QAWK_API = {
           body: { reason: 'wrong manifest' },
           res: { 200: { d: 'Aborted.' } } },
 
+        { id: 'sd-retry', m: 'POST', p: '/qawk/v1/systemdeployments/{did}/runs/{rid}/retry',
+          t: 'Take one system again',
+          d: 'For a system that <b>rolled back</b> or was <b>skipped</b>. The orchestrator never ' +
+             'retries one by itself — a device that fails every time would be rolled back and forth ' +
+             'for ever — so this is the decision that it is worth another go.<br><br>' +
+             'The run starts from nothing: its devices and what each is running are recorded again, ' +
+             '<i>now</i>, so a rollback after this one goes back to where the system really is rather ' +
+             'than to where it was before the first attempt. The deployment\'s <b>own manifest</b> is ' +
+             'used again, not the channel\'s current one — a manifest that was itself wrong is fixed ' +
+             'by releasing a new one, which is a different act with a different audit trail.<br><br>' +
+             'A deployment that had finished or failed is running again for this system, and that ' +
+             'run no longer counts against <code>maxFailed</code>. <b>A halted release stays ' +
+             'halted</b>: resume the channel separately.',
+          perm: 'HANDLE_ROLLOUT',
+          pp: [['did', 'integer', 1, 'The deployment.'], ['rid', 'integer', 1, 'The run — one system.']],
+          body: { reason: 'lane 7 PSU replaced' },
+          res: { 200: { d: 'The deployment, with that system pending again.' },
+            409: { d: 'That system did not roll back and was not skipped; or the deployment was aborted.' } } },
+
         { id: 'sd-rollback', m: 'POST', p: '/qawk/v1/systemdeployments/{did}/runs/{rid}/rollback',
           t: 'Roll one system back',
           d: 'By hand, for a system that is running or has finished. Every device of it the ' +

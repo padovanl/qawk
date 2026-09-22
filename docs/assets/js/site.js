@@ -51,12 +51,14 @@
       { t: 'Manifests', h: 'orchestrator/#manifest' },
       { t: 'Running a deployment', h: 'orchestrator/#deployment' },
       { t: 'Rollback', h: 'orchestrator/#rollback' },
+      { t: 'A system rolled back. Now what?', h: 'orchestrator/#recovery' },
       { t: 'Releases through the orchestrator', h: 'orchestrator/#releases' },
       { t: 'Mender YAML', h: 'orchestrator/#yaml' }
     ] },
     { t: 'Connecting devices', n: 7, items: [
       { t: 'How a device talks to Qawk', h: 'devices/' },
       { t: 'SWUpdate (suricatta)', h: 'devices/#swupdate' },
+      { t: 'HTTPS on a device', h: 'devices/#tls' },
       { t: 'Attributes that matter', h: 'devices/#attributes' },
       { t: 'Simulated devices', h: 'devices/#simulate' }
     ] },
@@ -64,7 +66,10 @@
       { t: 'Docker and compose', h: 'install/' },
       { t: 'Configuration', h: 'install/#config' },
       { t: 'Kubernetes', h: 'install/#kubernetes' },
-      { t: 'TLS and reverse proxies', h: 'install/#tls' },
+      { t: 'HTTPS', h: 'install/#tls' },
+      { t: 'A test certificate', h: 'install/#testcert' },
+      { t: 'Mutual TLS', h: 'install/#mtls' },
+      { t: 'Letting a browser call it', h: 'install/#cors' },
       { t: 'Backup and upgrade', h: 'install/#backup' }
     ] },
     { t: 'Users and audit', n: 9, items: [
@@ -111,9 +116,9 @@
     ['console/', 'Using the console', 'gui buttons screens dashboard targets deployments how to ship an update operator'],
     ['channels/', 'Channels and the release pipeline', 'fleet dev beta prod promote gate approval wave error threshold freeze rollout'],
     ['centres/', 'Centres', 'centerid site location move centre channel'],
-    ['orchestrator/', 'The orchestrator', 'system topology manifest component order rollback mender orchestrate yaml'],
+    ['orchestrator/', 'The orchestrator', 'system topology manifest component order rollback retry recover take again mender orchestrate yaml'],
     ['devices/', 'Connecting devices', 'swupdate suricatta gateway token ddi poll attributes register simulate'],
-    ['install/', 'Installing the server', 'docker compose kubernetes postgres environment variables tls proxy backup upgrade'],
+    ['install/', 'Installing the server', 'docker compose kubernetes postgres environment variables https tls certificate self-signed mutual mtls cors proxy backup upgrade'],
     ['users/', 'Users, roles and the audit log', 'permission role admin operator release-manager viewer token password audit'],
     ['operations/', 'Operations', 'prometheus metrics opentelemetry tracing health live scaling load backup'],
     ['api/', 'API reference', 'rest api curl python go javascript endpoints'],
@@ -189,6 +194,10 @@
 
   function sidebar() {
     var a = el('aside', { class: 'side' });
+    // The API reference routes on the hash and marks its own tree, so the
+    // section links here must not also light up: two highlighted entries read
+    // as "you are in two places".
+    var ownTree = !!document.querySelector('#api-main');
     NAV.forEach(function (sec) {
       var g = el('div', { class: 'grp' });
       var b = el('button', { type: 'button' },
@@ -199,7 +208,7 @@
         var li = el('li');
         var link = el('a', { href: url(it.h) }, it.t);
         // the page itself, not one of its anchors, is the one highlighted
-        if (it.h === here || (here && it.h.indexOf(here) === 0 && it.h === here)) {
+        if (!ownTree && it.h === here) {
           link.className = 'on'; mine = true;
         } else if (here && it.h.split('#')[0] === here) { mine = true; }
         li.appendChild(link); ul.appendChild(li);

@@ -7,6 +7,7 @@
 <meta name="description" content="How a device talks to Qawk: SWUpdate suricatta, gateway tokens, the attributes that drive channels, centres and systems, and simulated devices.">
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/icons.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
 <body>
@@ -64,6 +65,63 @@ curl $A -X PUT -H 'Content-Type: application/json' -d '{"value": "a-random-token
 a device and take updates. Keep it out of images that leave your control, put the
 server behind TLS, and rotate it if a device is lost.</p>
 </div>
+
+<h2 id="tls">Talking to it over HTTPS</h2>
+
+<p>Use <code>https://</code>. A device sends its token on every poll, and over
+plain HTTP anyone on the path has it — and with a gateway token, has the whole
+fleet.</p>
+
+<p>If the server's certificate comes from a public authority, there is nothing to
+do: the device already trusts it. The two cases that need work are a certificate
+from <b>your own internal authority</b> and a <b>self-signed</b> one.</p>
+
+<h3>Telling a device to trust your authority</h3>
+
+<p>Put the authority's certificate on the device, where its TLS library looks —
+on most Linux images:</p>
+
+<pre><code>cp your-ca.pem /usr/local/share/ca-certificates/your-ca.crt
+update-ca-certificates</code></pre>
+
+<p>Or point SWUpdate at it directly, which keeps it out of the system store:</p>
+
+<pre><code>suricatta: {
+  url    = "https://updates.example.com";
+  tenant = "DEFAULT";
+  id     = "device-0001";
+  gatewaytoken = "a-random-token";
+  cafile = "/etc/ssl/certs/your-ca.pem";
+};</code></pre>
+
+<p>Check it from the device before blaming anything else:</p>
+
+<pre><code>curl --cacert /etc/ssl/certs/your-ca.pem https://updates.example.com/qawk/v1/info</code></pre>
+
+<div class="warn-box">
+<p><b>Never turn verification off to make it work.</b> A device that accepts any
+certificate accepts any server, and an update server that can be impersonated is
+a way to install anything on your fleet. If the handshake fails, the usual cause
+is a certificate whose <code>subjectAltName</code> does not list the name the
+device actually uses — not the device.</p>
+</div>
+
+<h3>Client certificates</h3>
+
+<p>With <code>QAWK_TLS_CLIENT_CA</code> set, the server demands a certificate from
+the device as well, checked during the handshake before any request exists. The
+device needs its own key and certificate:</p>
+
+<pre><code>suricatta: {
+  url      = "https://updates.example.com";
+  id       = "device-0001";
+  cafile   = "/etc/ssl/certs/your-ca.pem";
+  sslkey   = "/etc/ssl/private/device-0001-key.pem";
+  sslcert  = "/etc/ssl/certs/device-0001.pem";
+};</code></pre>
+
+<p>Generating those, and running the server this way, is in
+<a href="../install/#mtls">Installing the server</a>.</p>
 
 <h2 id="swupdate">SWUpdate (suricatta)</h2>
 

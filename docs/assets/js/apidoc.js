@@ -190,6 +190,155 @@
     return '<span class="pill ' + m.toLowerCase() + '">' + m + '</span>';
   }
 
+  function ic(name, size) {
+    return window.QawkIcons ? window.QawkIcons.markup(name, size) : '';
+  }
+
+  function copyText(text, btn) {
+    var done = function () {
+      btn.innerHTML = ic('check', 12) + 'copied';
+      btn.classList.add('done');
+      setTimeout(function () {
+        btn.innerHTML = ic('copy', 12) + 'copy';
+        btn.classList.remove('done');
+      }, 1500);
+    };
+    if (navigator.clipboard) { navigator.clipboard.writeText(text).then(done, function () {}); return; }
+    var ta = el('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) {}
+    ta.remove();
+  }
+
+  // ------------------------------------------------------------ try it out
+
+  // Where the requests go, and who they go as. Kept in the browser only: the
+  // password never leaves this page except to the server it is typed for.
+  function saved(k, d) {
+    try { return localStorage.getItem('qawk-try-' + k) || d; } catch (e) { return d; }
+  }
+  function save(k, v) { try { localStorage.setItem('qawk-try-' + k, v); } catch (e) {} }
+
+  // tryPanel: fill in the parameters, press send, read the answer.
+  function tryPanel(ep, api) {
+    var p = el('div', { class: 'panel try' });
+    p.appendChild(el('div', { class: 'ph' }, ic('send', 13) + 'Send this request'));
+    var body = el('div', { class: 'pb' });
+
+    function field(label, attrs, hint) {
+      var w = el('label', { class: 'fld' }, '<span>' + label + '</span>');
+      var i = el('input', attrs);
+      w.appendChild(i);
+      if (hint) w.appendChild(el('small', null, hint));
+      return { wrap: w, input: i };
+    }
+
+    var base = field('Base URL', { type: 'url', value: saved('base', api.base), spellcheck: 'false' });
+    base.input.oninput = function () { save('base', base.input.value); };
+    body.appendChild(base.wrap);
+
+    var auth = ep.auth || api.auth;
+    var user, pass, token;
+    if (auth === 'basic') {
+      user = field('User', { type: 'text', value: saved('user', 'admin'), autocomplete: 'off' });
+      pass = field('Password or API token', { type: 'password', value: '', autocomplete: 'off' },
+        'Kept in this page only, and sent to the base URL above and nowhere else.');
+      user.input.oninput = function () { save('user', user.input.value); };
+      body.appendChild(user.wrap);
+      body.appendChild(pass.wrap);
+    } else if (auth === 'device') {
+      token = field('Gateway token', { type: 'password', value: '', autocomplete: 'off' });
+      body.appendChild(token.wrap);
+    }
+
+    // one input per {slot} and per query parameter
+    var slots = [...ep.p.matchAll(/\{(\w+)\}/g)].map(function (m) { return m[1]; });
+    var inputs = {};
+    pathParams(ep, api).forEach(function (row) {
+      if (slots.indexOf(row[0]) < 0) return;
+      var f = field(row[0] + ' — path', { type: 'text', value: SLOTS[row[0]] || '' });
+      inputs['path:' + row[0]] = f.input;
+      body.appendChild(f.wrap);
+    });
+    (ep.q || []).forEach(function (q) {
+      var f = field(q[0] + ' — query' + (q[2] ? ' *' : ''), { type: 'text', value: '' });
+      inputs['query:' + q[0]] = f.input;
+      body.appendChild(f.wrap);
+    });
+
+    var bodyBox = null;
+    if (ep.body !== undefined || ep.raw) {
+      var w = el('label', { class: 'fld' }, '<span>Body</span>');
+      bodyBox = el('textarea', { rows: '6', spellcheck: 'false' });
+      bodyBox.value = ep.raw ? ep.raw : json(ep.body);
+      w.appendChild(bodyBox);
+      body.appendChild(w);
+    }
+
+    var send = el('button', { class: 'btn-send', type: 'button' }, ic('send', 14) + 'Send request');
+    body.appendChild(send);
+    var out = el('div', { class: 'resp' });
+    body.appendChild(out);
+    p.appendChild(body);
+
+    send.onclick = function () {
+      var url = (base.input.value || api.base).replace(/\/$/, '');
+      var path = ep.p.replace(/\{(\w+)\}/g, function (m, k) {
+        var i = inputs['path:' + k];
+        return i && i.value ? encodeURIComponent(i.value) : m;
+      });
+      var qs = [];
+      (ep.q || []).forEach(function (q) {
+        var i = inputs['query:' + q[0]];
+        if (i && i.value) qs.push(encodeURIComponent(q[0]) + '=' + encodeURIComponent(i.value));
+      });
+      var full = url + path + (qs.length ? '?' + qs.join('&') : '');
+
+      var headers = { Accept: 'application/json' };
+      if (auth === 'basic' && pass.input.value) {
+        headers.Authorization = /^qawk_/.test(pass.input.value)
+          ? 'Bearer ' + pass.input.value
+          : 'Basic ' + btoa(user.input.value + ':' + pass.input.value);
+      } else if (auth === 'device' && token.input.value) {
+        headers.Authorization = 'GatewayToken ' + token.input.value;
+      }
+      var init = { method: ep.m, headers: headers };
+      if (bodyBox && ep.m !== 'GET' && ep.m !== 'HEAD') {
+        headers['Content-Type'] = ep.ctype || 'application/json';
+        init.body = bodyBox.value;
+      }
+
+      out.className = 'resp busy';
+      out.textContent = 'Sending…';
+      var t0 = Date.now();
+      fetch(full, init).then(function (r) {
+        return r.text().then(function (t) { return { r: r, t: t }; });
+      }).then(function (x) {
+        var ms = Date.now() - t0;
+        var pretty = x.t;
+        try { pretty = json(JSON.parse(x.t)); } catch (e) {}
+        out.className = 'resp ' + (x.r.ok ? 'ok' : 'bad');
+        out.innerHTML = '<div class="rline"><span class="pill ' + (x.r.ok ? 'get' : 'delete') + '">' +
+          x.r.status + '</span> <span>' + esc(x.r.statusText || '') + '</span>' +
+          '<span class="ms">' + ms + ' ms</span></div>' +
+          '<pre><code>' + esc(pretty || '(no body)') + '</code></pre>';
+      }).catch(function (e) {
+        // A browser refuses to hand this page an answer from another origin
+        // unless that server says it may. That is not a bug in either of them.
+        out.className = 'resp bad';
+        out.innerHTML = '<div class="rline"><span class="pill delete">blocked</span></div>' +
+          '<p>' + esc(String(e && e.message || e)) + '</p>' +
+          '<p>Almost always this is the browser refusing a cross-origin request, ' +
+          'not the server refusing you. Start Qawk with the origin of this page allowed:</p>' +
+          '<pre><code>QAWK_CORS_ORIGINS=' + esc(location.origin) + '</code></pre>' +
+          '<p>Or copy the sample above and run it in a terminal, where no such rule applies.</p>';
+      });
+    };
+    return p;
+  }
+
   // An endpoint's path parameters: the API's common ones that its path really
   // uses, then its own, in the order the path names them.
   function pathParams(ep, api) {
@@ -299,25 +448,22 @@
     var right = el('div', { class: 'rightcol' });
 
     var lp = el('div', { class: 'panel' });
-    lp.appendChild(el('div', { class: 'ph' }, 'Request sample'));
+    lp.appendChild(el('div', { class: 'ph' }, ic('terminal', 13) + 'Request sample'));
     var lt = el('div', { class: 'lang-tabs' });
     var codeBox = el('div', { class: 'pb' });
     function drawCode() {
-      codeBox.innerHTML = '<pre><code>' + esc(GEN[lang](ep, api)) + '</code></pre>';
-      var pre = codeBox.querySelector('pre');
+      var text = GEN[lang](ep, api);
+      codeBox.innerHTML = '';
       var wrap = el('div', { class: 'pre-wrap' });
-      pre.parentNode.insertBefore(wrap, pre); wrap.appendChild(pre);
-      var cb = el('button', { class: 'copy', type: 'button' }, 'copy');
+      wrap.innerHTML = '<pre><code>' + esc(text) + '</code></pre>';
+      var cb = el('button', { class: 'copy always', type: 'button' }, ic('copy', 12) + 'copy');
       wrap.appendChild(cb);
-      cb.onclick = function () {
-        navigator.clipboard && navigator.clipboard.writeText(pre.innerText).then(function () {
-          cb.textContent = 'copied'; cb.className = 'copy done';
-          setTimeout(function () { cb.textContent = 'copy'; cb.className = 'copy'; }, 1400);
-        }, function () {});
-      };
+      codeBox.appendChild(wrap);
+      cb.onclick = function () { copyText(text, cb); };
     }
     LANGS.forEach(function (L) {
-      var b = el('button', { type: 'button', class: L === lang ? 'on' : '' }, L === 'javascript' ? 'JS' : L);
+      var b = el('button', { type: 'button', class: L === lang ? 'on' : '' },
+        ic(L, 14) + (L === 'javascript' ? 'JS' : L === 'powershell' ? 'PS' : L));
       b.onclick = function () {
         lang = L;
         try { localStorage.setItem('qawk-docs-lang', L); } catch (e) {}
@@ -329,6 +475,8 @@
     });
     lp.appendChild(lt); lp.appendChild(codeBox); drawCode();
     right.appendChild(lp);
+
+    right.appendChild(tryPanel(ep, api));
 
     var ip = el('div', { class: 'panel' });
     ip.appendChild(el('div', { class: 'ph' }, 'Endpoint'));
@@ -426,6 +574,18 @@
       '<code>qawk.fleet.gateClosed</code>, <code>qawk.system.state</code>, ' +
       '<code>qawk.release.fourEyes</code> — so a client that already handles hawkBit\'s errors ' +
       'handles these without a new branch.</p>' +
+
+      '<h2 id="try">Sending a request from this page</h2>' +
+      '<p>Every endpoint page has a <b>Send this request</b> panel: put in your server\'s address ' +
+      'and credentials, fill the parameters, press send, read the answer. What you type stays in ' +
+      'this page and goes to the base URL you gave it, nowhere else.</p>' +
+      '<p>A browser will not hand a page an answer from another origin unless that server says it ' +
+      'may, so the server has to allow this documentation\'s origin — off by default, because a ' +
+      'server that only devices and scripts talk to gains nothing from it:</p>' +
+      '<pre><code>QAWK_CORS_ORIGINS=' + esc(location.origin) + '</code></pre>' +
+      '<p>Without it the panel says so and points at the sample, which runs in a terminal where no ' +
+      'such rule applies. Never point the panel at the server that updates real machines: the ' +
+      'requests are real.</p>' +
 
       '<h2 id="generated">Generated clients</h2>' +
       '<p>For the two hawkBit APIs, ask the server itself for its OpenAPI document and generate from ' +

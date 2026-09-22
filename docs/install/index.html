@@ -7,6 +7,7 @@
 <meta name="description" content="Running Qawk for real: Docker, compose, Kubernetes, every environment variable, TLS behind a proxy, users from a file, backup and upgrade.">
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/icons.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
 <body>
@@ -92,15 +93,151 @@ alone</b> — the file adds and corrects, it does not delete. A file that breaks
 rules stops the server, naming the user it could not take: a server that came up
 with half its users applied would be worse.</p>
 
-<h2 id="tls">TLS and reverse proxies</h2>
+<h2 id="tls">HTTPS</h2>
 
-<div class="warn-box">
-<p><b>TLS is not built in.</b> Put Qawk and the console behind a proxy that
-terminates it. Devices send a bearer token on every poll; over plain HTTP anyone on
-the path has your gateway token.</p>
+<p>Devices send a bearer token on every poll. Over plain HTTP anyone on the path
+has your gateway token, and with it your whole fleet. So this is not a detail to
+leave for later — it is the difference between an update server and a way to
+install software on somebody's machines.</p>
+
+<p>There are two ways to get it, and both are fine:</p>
+
+<table>
+<thead><tr><th></th><th>Use when</th></tr></thead>
+<tbody>
+<tr><td><b>Qawk terminates TLS itself</b></td>
+  <td>A server in a centre, a single box, a lab — anywhere putting a proxy in
+  front of one Go binary is a second thing to install, configure and patch for
+  no gain.</td></tr>
+<tr><td><b>A proxy terminates it</b></td>
+  <td>Something already owns your certificates, or you are on Kubernetes where
+  it is the ingress's job.</td></tr>
+</tbody>
+</table>
+
+<h3>Qawk terminating TLS</h3>
+
+<p>Give it a certificate and a key. Both, or neither — half a pair is refused at
+startup, because a server that quietly fell back to plain HTTP because of a typo
+would be the worst possible answer to one.</p>
+
+<pre><code>docker run -d --name qawk --network qawk --restart unless-stopped -p 443:8443 \
+  -v qawk-artifacts:/var/lib/qawk \
+  -v /etc/qawk/tls:/tls:ro \
+  -e QAWK_LISTEN=':8443' \
+  -e QAWK_TLS_CERT=/tls/cert.pem \
+  -e QAWK_TLS_KEY=/tls/key.pem \
+  -e QAWK_DATABASE_URL='postgres://qawk:db-secret@qawk-db:5432/qawk?sslmode=disable' \
+  -e QAWK_ADMIN_PASSWORD='a-long-admin-password' \
+  qawk:local</code></pre>
+
+<table>
+<thead><tr><th>Variable</th><th>Does</th></tr></thead>
+<tbody>
+<tr><td><code>QAWK_TLS_CERT</code><br><code>QAWK_TLS_KEY</code></td>
+  <td>PEM certificate and private key. Both together turn HTTPS on. The
+  certificate file should carry the full chain, leaf first.</td></tr>
+<tr><td><code>QAWK_TLS_CLIENT_CA</code></td>
+  <td>A PEM bundle of authorities. Set it and <b>a device must present its own
+  certificate</b>, verified before any handler runs — mutual TLS.</td></tr>
+<tr><td><code>QAWK_REDIRECT_HTTP</code></td>
+  <td>An extra plain-HTTP address (<code>:8080</code>) that answers everything
+  with a <b>308</b> to the HTTPS one, so devices still pointed at the old URL are
+  told where to go. 308, not 301: it keeps the method and the body, so a device
+  POSTing its feedback does not have it turned into a GET and lost.</td></tr>
+</tbody>
+</table>
+
+<p>TLS 1.2 is the floor — devices in the field outlive fashions in cryptography —
+and 1.3 is used whenever the client can. Check what you got:</p>
+
+<pre><code>openssl s_client -connect updates.example.com:443 &lt;/dev/null | grep -E 'Protocol|Cipher'</code></pre>
+
+<div class="tip">
+<p><b>The container does not run as root</b>, so it cannot bind port 443 inside
+itself. Listen on a high port and let Docker map it —
+<code>-p 443:8443</code> with <code>QAWK_LISTEN=':8443'</code>, as above. The
+certificate files must be readable by uid <code>10001</code>.</p>
 </div>
 
-<p>Three things the proxy must get right:</p>
+<h3 id="testcert">Making a certificate to test with</h3>
+
+<p>A self-signed certificate is enough to prove the setup works. It is <b>not</b>
+enough for production — nothing trusts it, so every client needs to be told to,
+and that is exactly the habit you do not want devices to have.</p>
+
+<pre><code>mkdir -p /etc/qawk/tls &amp;&amp; cd /etc/qawk/tls
+
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+  -keyout key.pem -out cert.pem \
+  -subj "/CN=updates.example.com" \
+  -addext "subjectAltName=DNS:updates.example.com,DNS:localhost,IP:127.0.0.1"
+
+chmod 644 cert.pem key.pem      # the container runs as uid 10001</code></pre>
+
+<div class="warn-box">
+<p><b>Put every name devices use in <code>subjectAltName</code>.</b> Modern
+clients ignore the common name entirely and check only the SAN list. A
+certificate whose CN is right and whose SAN is missing is rejected by everything,
+and the error rarely says so.</p>
+</div>
+
+<p>Then start the server as above and check it end to end:</p>
+
+<pre><code># the certificate is its own authority, so hand it to curl
+curl --cacert /etc/qawk/tls/cert.pem https://localhost/qawk/v1/info
+
+# which protocol and cipher were negotiated
+openssl s_client -connect localhost:443 -CAfile /etc/qawk/tls/cert.pem &lt;/dev/null \
+  2&gt;/dev/null | grep -E 'Protocol|Cipher|Verify return'
+
+# a client that does not know the certificate refuses -- as it should
+curl https://localhost/qawk/v1/info        # exit 60: certificate not trusted
+
+# the plain-HTTP port redirects, keeping the method
+curl -i -X POST http://localhost:8080/anything   # 308, Location: https://...</code></pre>
+
+<p>For a device, point <code>swupdate.cfg</code> at <code>https://</code> and give
+it the certificate as a CA — <a href="../devices/#tls">Connecting devices</a> has
+the detail. With a real certificate from a public authority, or from your own
+internal one, nothing has to be told anything.</p>
+
+<h3 id="mtls">Mutual TLS, if you want it</h3>
+
+<p>A gateway token is a fleet-wide secret: anything holding it can register a
+device. Client certificates raise that floor — a device must also hold a key
+signed by your authority, checked during the handshake, before any request
+exists.</p>
+
+<pre><code># your device authority, once
+openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+  -keyout ca-key.pem -out ca.pem -subj "/CN=Qawk device CA"
+
+# a certificate per device
+openssl req -newkey rsa:2048 -nodes -keyout dev-key.pem -out dev.csr \
+  -subj "/CN=device-0001"
+openssl x509 -req -in dev.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial \
+  -out dev.pem -days 365</code></pre>
+
+<pre><code>-e QAWK_TLS_CLIENT_CA=/tls/ca.pem</code></pre>
+
+<pre><code># with a certificate: served
+curl --cacert cert.pem --cert dev.pem --key dev-key.pem https://localhost/qawk/v1/info
+
+# without: refused during the handshake, before any handler runs
+curl --cacert cert.pem https://localhost/qawk/v1/info</code></pre>
+
+<div class="note">
+<p><b>This applies to everything, not only devices</b> — the console and your
+scripts need a client certificate too. And you now have certificates to issue,
+ship and renew per device. Worth it for a fleet you cannot physically trust;
+overkill for one on a private network.</p>
+</div>
+
+<h3>A proxy terminating TLS instead</h3>
+
+<p>Leave <code>QAWK_TLS_CERT</code> unset and Qawk speaks plain HTTP. Three things
+the proxy must get right:</p>
 
 <ol>
 <li><b>A generous body size and timeout.</b> Artifacts are uploaded and downloaded
@@ -109,7 +246,7 @@ reject every artifact you have.</li>
 <li><b><code>QAWK_PUBLIC_URL</code></b>, if the proxy changes the address devices
 reach Qawk at — otherwise the download links Qawk hands out point somewhere the
 device cannot get to.</li>
-<li><b>Range requests passed through</b>, so a device on a bad line can resume a
+<li><b>Range requests passed through</b>, so a device on a bad line resumes a
 download instead of starting over.</li>
 </ol>
 
@@ -134,6 +271,22 @@ download instead of starting over.</li>
 <p><code>X-Forwarded-For</code> matters beyond routing: it is the address the audit
 log records for every change and every refused sign-in. Without it, every entry
 says the proxy did it.</p>
+
+<h2 id="cors">Letting a browser call the API</h2>
+
+<p>A browser refuses to hand a page an answer from another origin unless that
+server says it may. So a front end of your own — or the
+<a href="../api/#try">"send this request" panel</a> in this documentation — needs
+the origin allowed:</p>
+
+<pre><code>-e QAWK_CORS_ORIGINS='https://tools.example.com,http://localhost:8099'</code></pre>
+
+<p>Off by default, and that is the right default: a server only devices and
+scripts talk to gains nothing from it, and a browser refusing somebody else's
+answer is a protection rather than an obstacle. Name the origins; <code>*</code>
+is accepted but browsers refuse it for credentialed requests anyway. The
+console does not need it — it is served through its own proxy, so the browser
+sees one origin.</p>
 
 <h2 id="kubernetes">Kubernetes</h2>
 

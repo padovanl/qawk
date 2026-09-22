@@ -56,11 +56,12 @@ back together when one of them fails.
 |---|---|
 | 🐝 **hawkBit, the same** | All 16 device operations and all 153 management operations. A contract test replays a flow recorded from a real hawkBit 1.1.0 and compares every answer field by field; the [five deliberate differences](https://padovanl.github.io/qawk/hawkbit/#differences) are listed with their reasons. |
 | 🚦 **Channels and a release pipeline** | Devices join by rule (`attribute.ring==beta`); channels chain `dev → beta → prod`; a release is promoted through a **gate** (devices on it, share of success, soak time) and, when asked, a **second person's approval**. It goes out in waves and **halts by itself** over an error threshold. Freezes. Temporary channels whose devices go home afterwards. |
-| 🧩 **Systems (the orchestrator)** | Devices that work together, updated as one, after [Mender Orchestrator](https://docs.mender.io/orchestrate-updates/overview) — components in a chosen order, **the whole system rolled back when one device fails**. Mender's topology and manifest YAML in and out. Runs server-side: **nothing is installed on the devices.** |
+| 🧩 **Systems (the orchestrator)** | Devices that work together, updated as one, after [Mender Orchestrator](https://docs.mender.io/orchestrate-updates/overview) — components in a chosen order, **the whole system rolled back when one device fails**, and one system [taken again](https://padovanl.github.io/qawk/orchestrator/#recovery) once you know why. Mender's topology and manifest YAML in and out. Runs server-side: **nothing is installed on the devices.** |
 | 🏢 **Centres** | A device says where it is (`attribute.centerid`), a **centre** goes in a channel, and all its devices follow. You move a place, not a list of machines. |
 | ⏰ **Scheduling** | Maintenance windows (a Quartz cron, a duration, an offset), rollouts that start at a set time, time-forced and download-only deployments. |
 | 👥 **Users** | Users and roles in the database with hawkBit's permissions; built-in `admin`, `operator`, `release-manager`, `viewer`; personal API tokens; users from a file at startup. |
 | 📋 **Audit log** | Every change and every refused sign-in: who, what, when, from where. |
+| 🔒 **HTTPS, on its own** | A certificate and a key and it terminates TLS itself — TLS 1.2 floor, 1.3 when the client can. Mutual TLS with `QAWK_TLS_CLIENT_CA`; a redirect for devices still on the old plain-HTTP URL. Or put a proxy in front, as before. |
 | 📊 **Operations** | Prometheus at `/metrics`, OpenTelemetry over OTLP, `/live` and `/health`, download progress per device, background jobs elected through PostgreSQL so any number of instances can run. |
 | ⚡ **Scale** | Measured with 10,000 devices polling every 30 s: **333 requests/s, p99 2 ms**. |
 
@@ -121,17 +122,22 @@ watch sixteen systems update in order.
 
 ### 🐳 Images
 
-```bash
-docker pull padovanl/qawk:0.1.0            # the server, with qawk-sim and qawk-load
-docker pull padovanl/qawk-console:0.1.0    # the console
-```
-
-Or build them — you need only Docker, the console has nothing to install:
+Build them — you need only Docker, and the console has nothing to install: no
+npm, no bundler, no build step.
 
 ```bash
 docker build -t qawk:local server/
 docker build -t qawk-console:local console/
 ```
+
+> 📦 **No images are published yet.** When you publish your own, give the server
+> its version — it reports it at `/qawk/v1/info` and on the console's About page:
+>
+> ```bash
+> V=0.1.0
+> docker build --build-arg VERSION=$V -t <you>/qawk:$V server/
+> docker build -t <you>/qawk-console:$V console/
+> ```
 
 ### ▶️ Server, database and console
 
@@ -147,11 +153,11 @@ docker run -d --name qawk --network qawk --restart unless-stopped -p 8080:8080 \
   -v qawk-artifacts:/var/lib/qawk \
   -e QAWK_DATABASE_URL='postgres://qawk:db-secret@qawk-db:5432/qawk?sslmode=disable' \
   -e QAWK_ADMIN_PASSWORD='a-long-admin-password' \
-  padovanl/qawk:0.1.0
+  qawk:local
 
 docker run -d --name qawk-console --network qawk --restart unless-stopped -p 8090:8090 \
   -e HB_URL=http://qawk:8080 \
-  padovanl/qawk-console:0.1.0
+  qawk-console:local
 ```
 
 On its first start Qawk creates its schema, the built-in roles and hawkBit's
@@ -161,9 +167,18 @@ default types. **Back up two things:** the database, and `/var/lib/qawk`.
 > `admin`. That administrator is never stored: it always works, which is how a new
 > server is set up and how a lost password is fixed.
 
-> 🔒 **TLS is not built in.** Put Qawk behind a reverse proxy that terminates it,
-> give the proxy a generous body size and timeout, and set `QAWK_PUBLIC_URL` if it
-> changes the address devices reach Qawk at.
+> 🔒 **Use HTTPS.** Devices send a bearer token on every poll. Give Qawk a
+> certificate and it terminates TLS itself:
+>
+> ```bash
+> -e QAWK_LISTEN=':8443' -e QAWK_TLS_CERT=/tls/cert.pem -e QAWK_TLS_KEY=/tls/key.pem
+> ```
+>
+> `QAWK_TLS_CLIENT_CA` demands a certificate from the device too (mutual TLS), and
+> `QAWK_REDIRECT_HTTP` points the old plain-HTTP address at the new one. A proxy in
+> front is still fine — see
+> [HTTPS](https://padovanl.github.io/qawk/install/#tls), which also shows how to
+> make a certificate to test with.
 
 📖 Compose, Kubernetes, every environment variable, users from a file, backup and
 upgrade: **[Installing the server](https://padovanl.github.io/qawk/install/)**.
@@ -221,7 +236,7 @@ you have never seen fire:
 
 ```bash
 docker run --rm --network host --ulimit nofile=65536:65536 --entrypoint qawk-load \
-  padovanl/qawk:0.1.0 -url http://localhost:8080 -token <token> \
+  qawk:local -url http://localhost:8080 -token <token> \
   -devices 10000 -interval 30s -ramp 30s -duration 180s -act
 ```
 

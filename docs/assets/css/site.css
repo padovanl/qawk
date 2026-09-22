@@ -16,7 +16,6 @@
   --accent:    #3ba9a1;
   --accent-2:  #57c7bf;
   --accent-soft: rgba(59, 169, 161, .14);
-  --pink:      #d6448f;
   --ok:        #3fb950;
   --warn:      #d29922;
   --err:       #f05d5d;
@@ -144,9 +143,9 @@ aside.side .grp ul a {
 }
 aside.side .grp ul a:hover { color: var(--fg); background: var(--bg-3); text-decoration: none; }
 aside.side .grp ul a.on {
-  color: #fff; background: var(--pink); border-left-color: var(--pink); font-weight: 500;
+  color: var(--accent-2); background: var(--accent-soft);
+  border-left-color: var(--accent); font-weight: 600;
 }
-:root[data-theme="light"] aside.side .grp ul a.on { color: #fff; }
 aside.side .sec-label {
   color: var(--fg-faint); font-size: 10.5px; font-weight: 600; letter-spacing: 1px;
   text-transform: uppercase; padding: 14px 10px 6px;
@@ -340,11 +339,12 @@ blockquote {
 }
 .panel > .pb { padding: 12px 14px; }
 .panel pre { background: var(--bg); margin: 0; font-size: 12px; border-radius: 7px; }
-.lang-tabs { display: flex; gap: 3px; flex-wrap: wrap; padding: 10px 12px 0; }
+.lang-tabs { display: flex; gap: 2px; flex-wrap: nowrap; padding: 10px 10px 0; }
 .lang-tabs button {
-  background: none; border: 1px solid transparent; border-radius: 6px; padding: 4px 9px;
-  font-size: 11px; cursor: pointer; color: var(--fg-faint); font-family: var(--mono);
-  text-transform: uppercase; letter-spacing: .4px; font-weight: 600;
+  background: none; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px;
+  font-size: 10.5px; cursor: pointer; color: var(--fg-faint); font-family: var(--mono);
+  text-transform: uppercase; letter-spacing: .3px; font-weight: 600;
+  display: inline-flex; align-items: center; flex: 1 1 auto; justify-content: center;
 }
 .lang-tabs button:hover { color: var(--fg); }
 .lang-tabs button.on { color: var(--accent-2); border-color: var(--accent); background: var(--accent-soft); }
@@ -358,6 +358,76 @@ blockquote {
 .ep-list .pill { flex: 0 0 52px; text-align: center; }
 .ep-list .p { font-family: var(--mono); font-size: 13px; }
 .ep-list .s { color: var(--fg-faint); font-size: 12.5px; margin-left: auto; text-align: right; }
+
+/* ------------------------------------------------------------- icons */
+
+.ico { vertical-align: -.18em; flex: none; }
+h2 > .ico, h3 > .ico { margin-right: 9px; color: var(--accent); vertical-align: -.1em; }
+.card .ico { color: var(--accent); }
+.note > .ico, .tip > .ico, .warn-box > .ico { color: var(--info); margin-right: 8px; }
+.tip > .ico { color: var(--ok); }
+.warn-box > .ico { color: var(--warn); }
+.panel > .ph .ico { color: var(--fg-faint); }
+.lang-tabs button .ico, .copy .ico, .btn-send .ico { margin-right: 5px; }
+td .ico, li > .ico { color: var(--accent); margin-right: 6px; }
+
+/* the copy button on a generated sample is always there: it is the point */
+.copy.always { opacity: 1; display: inline-flex; align-items: center; }
+.panel .pre-wrap .copy { top: 6px; right: 6px; background: var(--bg-3); }
+
+/* ------------------------------------------------------- send a request */
+
+.panel.try .pb { display: flex; flex-direction: column; gap: 10px; }
+.fld { display: flex; flex-direction: column; gap: 4px; }
+.fld > span {
+  color: var(--fg-dim); font-size: 11px; font-weight: 600; letter-spacing: .4px;
+  text-transform: uppercase;
+}
+.fld input, .fld textarea {
+  background: var(--bg); border: 1px solid var(--line-2); border-radius: 7px;
+  padding: 7px 10px; font-size: 12.5px; font-family: var(--mono); color: var(--fg);
+  outline: none; width: 100%; resize: vertical;
+}
+.fld input:focus, .fld textarea:focus { border-color: var(--accent); }
+.fld small { color: var(--fg-faint); font-size: 11px; line-height: 1.4; }
+
+.btn-send {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #04211f; border: 1px solid var(--accent);
+  border-radius: 8px; padding: 9px 14px; font-size: 13.5px; font-weight: 600; cursor: pointer;
+}
+.btn-send:hover { background: var(--accent-2); }
+:root[data-theme="light"] .btn-send { color: #fff; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .btn-send { color: #fff; } }
+
+.resp:empty { display: none; }
+.resp {
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+  background: var(--bg); font-size: 12.5px;
+}
+.resp.busy { color: var(--fg-faint); }
+.resp.ok { border-color: rgba(63,185,80,.5); }
+.resp.bad { border-color: rgba(240,93,93,.45); }
+.resp .rline { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.resp .ms { margin-left: auto; color: var(--fg-faint); font-size: 11px; font-family: var(--mono); }
+.resp pre { max-height: 300px; overflow: auto; margin: 0; font-size: 11.5px; }
+.resp p { margin: 0 0 8px; color: var(--fg-dim); font-size: 12.5px; line-height: 1.5; }
+.resp pre code { white-space: pre-wrap; word-break: break-word; }
+
+/* a long generated sample wraps rather than hiding behind a scrollbar */
+.panel .pre-wrap pre code { white-space: pre-wrap; word-break: break-word; }
+
+/* ------------------------------------------------------------ figures */
+
+figure { margin: 0 0 22px; }
+figure img {
+  display: block; width: 100%; height: auto; border: 1px solid var(--line);
+  border-radius: 10px; background: var(--bg-2);
+}
+figure figcaption {
+  color: var(--fg-faint); font-size: 12.5px; margin-top: 8px; line-height: 1.5;
+}
+figure figcaption b { color: var(--fg-dim); }
 
 /* ------------------------------------------------------------- mobile */
 
