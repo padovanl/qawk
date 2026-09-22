@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concepts · Qawk documentation</title>
+<meta name="description" content="How Qawk is put together: targets, software modules, distribution sets, actions, channels, centres, systems and manifests — and a glossary.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>How Qawk is put together</h1>
+
+<p class="lead">Qawk has two halves. The bottom half is hawkBit's model, which you
+may already know and which cannot change without breaking every device. The top
+half is what Qawk adds, and it is built <i>on</i> the bottom half rather than
+beside it — which is why none of it requires anything new on a device.</p>
+
+<h2 id="catalogue">The bottom half: hawkBit's model</h2>
+
+<p>Four nouns. Everything a device ever sees is made of them.</p>
+
+<table>
+<thead><tr><th>Thing</th><th>What it is</th></tr></thead>
+<tbody>
+<tr><td><b>Target</b></td>
+  <td>A device. Identified by its <b>controller id</b> — the name it calls in with.
+  Carries <b>attributes</b> it reports about itself and <b>metadata</b> you set
+  from the outside.</td></tr>
+<tr><td><b>Software module</b></td>
+  <td>One installable thing with a version, holding one or more <b>artifacts</b>
+  (the actual files). A module has a <i>type</i>: <code>os</code>,
+  <code>application</code>, and whatever else you define.</td></tr>
+<tr><td><b>Distribution set</b></td>
+  <td>A named, versioned bundle of modules — <code>app:1.2.0</code>. <b>This is
+  the unit a device is given.</b> You never assign a module; you assign a set.</td></tr>
+<tr><td><b>Action</b></td>
+  <td>One attempt to get one set onto one device. It is created when the set is
+  assigned, it is <i>active</i> while the device works on it, and it ends
+  <code>finished</code> or <code>error</code> when the device says so.</td></tr>
+</tbody>
+</table>
+
+<p>A device is <code>in_sync</code> when what it has installed is what it was
+assigned, <code>pending</code> while an action is open, and <code>error</code>
+when the last one failed.</p>
+
+<div class="note">
+<p><b>Everything reports through the device.</b> Qawk never reaches into a machine.
+A device polls, is told what to do, does it, and says how it went. Every gate,
+every threshold, every rollback is driven by those reports — which is also why a
+device that stops calling in is simply a device Qawk knows nothing new about,
+rather than a failure.</p>
+</div>
+
+<h2 id="grouping">The top half: what Qawk adds</h2>
+
+<p>hawkBit can put a set on a device. It has no opinion about <i>which</i> devices,
+<i>in what order</i>, <i>under what conditions</i>, or <i>what to do when it goes
+wrong</i>. That is the part Qawk is.</p>
+
+<h3>Channel (a fleet)</h3>
+
+<p>A set of devices that should all run the same release. A channel can have a
+<b>rule</b> — a query like <code>attribute.ring==beta</code> — and any device
+matching it <i>that is in no channel yet</i> joins by itself. So a device
+registering for the first time lands where it belongs, from what it says about
+itself, with nobody deciding.</p>
+
+<p>Channels <b>chain</b>: beta names dev as its upstream, prod names beta. A
+release reaches a channel with an upstream only by <b>promotion</b> from it, and
+only through that channel's <b>gate</b>.</p>
+
+<h3>Centre</h3>
+
+<p>Where a device physically is — a shop, a site, a bowling centre. The device says
+so (<code>attribute.centerid</code> by default) and <b>the centre is put in a
+channel</b>. Every device of that centre follows.</p>
+
+<p>This matters more than it sounds. Without it, moving a site from beta to prod
+means finding its forty machines and moving them one by one, and getting it wrong
+silently. With it, you move <i>the place</i>, and the lane computers, the
+terminals and the standalone machines all go together — because they belong to the
+place, not to a list someone maintains.</p>
+
+<h3>System</h3>
+
+<p>Devices that only make sense updated together. A lane computer and the two
+terminals bolted to it are one machine to the person using them; they are three
+targets to hawkBit.</p>
+
+<p>A <b>system type</b> (Mender calls it a <i>topology</i>) says what components
+the system has and how a device declares which system it is in. A <b>manifest</b>
+says what each component should run, and in what <b>order</b>. The orchestrator
+applies the manifest to each system in turn: lower orders first, equal orders
+together, and if one device fails, <b>the whole system goes back</b> to what it
+was running.</p>
+
+<h3>Release</h3>
+
+<p>What a channel runs, and the history of what it was asked to run. A release
+carries a <b>distribution set</b> for the devices that stand alone and, when the
+channel has systems, a <b>manifest</b> for those — because a lane computer and the
+terminal under it cannot share one set.</p>
+
+<h2 id="fits">How they fit together</h2>
+
+<p>The awkward question is: if a device is in a channel <i>and</i> a centre
+<i>and</i> a system, who decides what it runs? The answer is a single rule, and it
+is worth learning:</p>
+
+<div class="tip">
+<p><b>A device that belongs to a system is updated by the orchestrator, never by
+its channel's set.</b> Everything else in the channel gets the channel's set.</p>
+</div>
+
+<p>So the three layers do not fight:</p>
+
+<ol>
+<li><b>The centre decides the channel.</b> If a device's centre is in a channel,
+that is the device's channel. You cannot move it elsewhere by hand — its centre
+would take it straight back — though you can <i>lend</i> it to a temporary
+channel.</li>
+<li><b>The channel decides the release.</b> Which distribution set, and which
+manifest.</li>
+<li><b>Being in a system decides who delivers it.</b> Standalone devices take the
+set from the channel. System members take their components' sets from the
+orchestrator, in the manifest's order.</li>
+</ol>
+
+<p>And a release is only <b>complete</b> when both halves are done: the standalone
+devices are on the set <i>and</i> the orchestrator has finished with the systems.
+The next gate checks both, so a release cannot be promoted out of a channel whose
+systems it never actually reached.</p>
+
+<h2 id="engine">The engine</h2>
+
+<p>None of this happens when you press a button. Pressing a button records an
+intention; a background loop makes it true, every ten seconds:</p>
+
+<ul>
+<li>channels adopt the devices their rules match;</li>
+<li>centres pull their devices into their channel, a hundred at a time;</li>
+<li>each channel's release goes to the members that do not have it, all at once or
+in waves, halting by itself over the error threshold;</li>
+<li>the orchestrator steps every running system deployment, and picks up the
+systems that joined a channel since — a centre moved in this morning is taken
+this afternoon, without anyone starting anything;</li>
+<li>a channel set to promote itself checks its gate and promotes when it opens.</li>
+</ul>
+
+<p>With several instances of Qawk on one database, exactly one runs that loop: they
+elect a leader through PostgreSQL, and another takes over within ten seconds if it
+stops. See <a href="../operations/#scaling">Scaling</a>.</p>
+
+<div class="warn-box">
+<p><b>A device with an action under way is waited for, never overtaken.</b> A
+forced assignment cancels a running action — and a system half armed, or an
+application half live, would lose the deployment it belongs to. So the channel
+reaches a busy device on the next pass instead. This is why a wave sometimes
+appears to skip a machine and pick it up a minute later: it is deliberate.</p>
+</div>
+
+<h2 id="glossary">Glossary</h2>
+
+<table>
+<thead><tr><th>Term</th><th>Means</th></tr></thead>
+<tbody>
+<tr><td><b>action</b></td><td>One attempt to put one distribution set on one device.</td></tr>
+<tr><td><b>artifact</b></td><td>A file inside a software module. What actually downloads.</td></tr>
+<tr><td><b>attribute</b></td><td>Something a device says about itself, in <code>configData</code>. <code>attribute.ring</code>, <code>attribute.centerid</code>.</td></tr>
+<tr><td><b>centre</b></td><td>Where a device is. Put in a channel; its devices follow.</td></tr>
+<tr><td><b>channel</b> / <b>fleet</b></td><td>The same thing. Devices that should run the same release. "Fleet" is the name in the API and the console; "channel" is the name in this documentation when the pipeline is the point.</td></tr>
+<tr><td><b>component</b></td><td>One role inside a system type — <code>device1</code>, <code>device2</code> — with a query saying which devices fill it.</td></tr>
+<tr><td><b>controller id</b></td><td>A device's identity. What it calls in with.</td></tr>
+<tr><td><b>DDI</b></td><td>hawkBit's Direct Device Integration API: what devices speak.</td></tr>
+<tr><td><b>distribution set</b></td><td>A named, versioned bundle of software modules. The unit assigned to a device.</td></tr>
+<tr><td><b>freeze</b></td><td>A period in which no release reaches a channel.</td></tr>
+<tr><td><b>gate</b></td><td>What a channel's upstream must show before a release may be promoted in.</td></tr>
+<tr><td><b>manifest</b></td><td>What each component of a system type should run, and in what order.</td></tr>
+<tr><td><b>metadata</b></td><td>Something <i>you</i> set on a device from the outside, as opposed to what it reports.</td></tr>
+<tr><td><b>promotion</b></td><td>Moving a release from one channel to the next, through the gate.</td></tr>
+<tr><td><b>release</b></td><td>What a channel runs: a set, optionally a manifest, and the history of both.</td></tr>
+<tr><td><b>rollout</b></td><td>hawkBit's own staged deployment, with groups and thresholds. A different tool from channels; Qawk has both.</td></tr>
+<tr><td><b>run</b></td><td>One system inside a system deployment.</td></tr>
+<tr><td><b>soft / forced</b></td><td>Whether the device may choose when to install, or is told to do it now.</td></tr>
+<tr><td><b>system</b></td><td>Devices that work together and are updated as one.</td></tr>
+<tr><td><b>system deployment</b></td><td>Applying a manifest to some systems, a few at a time.</td></tr>
+<tr><td><b>target</b></td><td>hawkBit's word for a device.</td></tr>
+<tr><td><b>topology</b></td><td>Mender's word for a system type.</td></tr>
+<tr><td><b>wave</b></td><td>A share of a channel's members given the release at a time.</td></tr>
+</tbody>
+</table>
+
+</div>
+</body>
+</html>

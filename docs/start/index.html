@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Get started · Qawk documentation</title>
+<meta name="description" content="Run a Qawk server, its console and three hundred simulated devices in five minutes, then ship your first update.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>Get started</h1>
+
+<p class="lead">In five minutes you will have a server, a database, a console and
+about three hundred simulated devices updating themselves, with nothing to
+configure and nothing to buy.</p>
+
+<h2 id="what-qawk-is">What Qawk is, in one paragraph</h2>
+
+<p>Qawk hands software to devices over the air. Devices call in on a schedule and
+ask "anything for me?"; Qawk answers with a link to download and install, and the
+device reports back how it went. That much is <a href="https://eclipse.dev/hawkbit/">Eclipse
+hawkBit</a>, whose protocols Qawk speaks exactly, so existing devices and tools work
+unchanged. On top of it Qawk adds the parts a real fleet needs: <b>channels</b> a
+release moves through under conditions, <b>centres</b> so you move a place rather
+than a list of machines, and an <b>orchestrator</b> for machines that only make
+sense updated together.</p>
+
+<h2 id="demo">Try it in five minutes</h2>
+
+<p>You need <b>docker</b>, <b>python3</b> and <b>curl</b>, and ports 8080 and 8090
+free. Nothing is installed on your machine outside Docker, and the demo keeps no
+data.</p>
+
+<pre><code>git clone https://github.com/padovanl/qawk.git
+cd qawk
+demo/start.sh</code></pre>
+
+<p>That builds two images, starts PostgreSQL, the server and the console, loads
+sample data and starts simulated devices. When it settles, open
+<b>http://localhost:8090</b> and sign in as <code>admin</code> /
+<code>changeme</code>.</p>
+
+<h3>What you just started</h3>
+
+<ul>
+<li>A catalogue: <code>app</code> 1.0.0 to 1.2.0, <code>app-broken</code> 1.3.0
+(the simulated devices fail anything named <i>broken</i>, on purpose),
+<code>os</code>, <code>device2-fw</code>, <code>device3-fw</code>.</li>
+<li>Channels <code>dev</code> → <code>beta</code> → <code>prod</code> (prod needs
+an approval) and a temporary <code>expo</code>.</li>
+<li>About 270 simulated devices spread across those channels, and 16 simulated
+<b>systems</b> — a <code>device1</code> with two <code>device2</code> and a
+<code>device3</code> each — in four centres.</li>
+<li><code>dev</code> has already been given <code>app</code> 1.1.0, so something
+is moving the moment you open the page.</li>
+</ul>
+
+<pre><code>demo/start.sh seed     # load the sample data again
+demo/start.sh down     # stop and remove everything</code></pre>
+
+<div class="note">
+<p><b>Everything is configurable.</b> <code>QAWK_ADMIN_PASSWORD</code>,
+<code>QAWK_PORT</code>, <code>CONSOLE_PORT</code>, <code>PROD_DEVICES</code>,
+<code>SYSTEMS</code>, <code>USERS_FILE</code>. The same thing with docker compose
+is in <code>demo/compose.yml</code>.</p>
+</div>
+
+<h2 id="run">Run it yourself, with the smallest configuration there is</h2>
+
+<p>The demo above is a toy with sample data in it. This is the real thing: a
+server, a database and a console, and nothing else. Two commands' worth of
+configuration — a database URL and an administrator password.</p>
+
+<h3>A. From Docker Hub</h3>
+
+<p>Nothing to build. Two images, one network, one command each.</p>
+
+<pre><code>docker pull padovanl/qawk:0.1.0            # the server, with qawk-sim and qawk-load
+docker pull padovanl/qawk-console:0.1.0    # the console</code></pre>
+
+<pre><code>docker network create qawk
+
+docker run -d --name qawk-db --network qawk --restart unless-stopped \
+  -v qawk-db:/var/lib/postgresql/data \
+  -e POSTGRES_USER=qawk -e POSTGRES_PASSWORD='db-secret' -e POSTGRES_DB=qawk \
+  postgres:16-alpine
+
+docker run -d --name qawk --network qawk --restart unless-stopped -p 8080:8080 \
+  -v qawk-artifacts:/var/lib/qawk \
+  -e QAWK_DATABASE_URL='postgres://qawk:db-secret@qawk-db:5432/qawk?sslmode=disable' \
+  -e QAWK_ADMIN_PASSWORD='a-long-admin-password' \
+  padovanl/qawk:0.1.0
+
+docker run -d --name qawk-console --network qawk --restart unless-stopped -p 8090:8090 \
+  -e HB_URL=http://qawk:8080 \
+  padovanl/qawk-console:0.1.0</code></pre>
+
+<p>Open <b>http://localhost:8090</b> and sign in as <code>admin</code> with the
+password you just set. On its first start Qawk creates its own schema, the
+built-in roles and hawkBit's default types — there is no migration step to run and
+no schema to load.</p>
+
+<div class="warn-box">
+<p><b>Set <code>QAWK_ADMIN_PASSWORD</code>.</b> Without it the administrator's
+password is <code>admin</code>. That administrator is never stored in the
+database: it always works, which is how a new server is set up and how a lost
+password is fixed — and why the password must not be the default on anything
+reachable.</p>
+</div>
+
+<h3>B. Built from this repository</h3>
+
+<p>You need only Docker. The server's image builds its own Go toolchain stage, and
+the console has nothing to install at all — no npm, no bundler, no build step.</p>
+
+<pre><code>git clone https://github.com/padovanl/qawk.git
+cd qawk
+
+docker build -t qawk:local server/
+docker build -t qawk-console:local console/</code></pre>
+
+<p>Then run exactly the three <code>docker run</code> commands above, with
+<code>qawk:local</code> and <code>qawk-console:local</code> in place of the Docker
+Hub names.</p>
+
+<p>To publish under your own namespace, give the server its version — it reports it
+at <code>/qawk/v1/info</code> and on the console's About page — and push both with
+the same tag:</p>
+
+<pre><code>V=0.1.0
+docker build --build-arg VERSION=$V -t &lt;you&gt;/qawk:$V server/
+docker build -t &lt;you&gt;/qawk-console:$V console/
+docker push &lt;you&gt;/qawk:$V
+docker push &lt;you&gt;/qawk-console:$V</code></pre>
+
+<h3>C. With docker compose</h3>
+
+<p>A <code>compose.yml</code> with the same three services and nothing else:</p>
+
+<pre><code>name: qawk
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    volumes: ["db:/var/lib/postgresql/data"]
+    environment:
+      POSTGRES_USER: qawk
+      POSTGRES_PASSWORD: db-secret
+      POSTGRES_DB: qawk
+
+  server:
+    image: padovanl/qawk:0.1.0
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    volumes: ["artifacts:/var/lib/qawk"]
+    environment:
+      QAWK_DATABASE_URL: postgres://qawk:db-secret@db:5432/qawk?sslmode=disable
+      QAWK_ADMIN_PASSWORD: a-long-admin-password
+    depends_on: [db]
+
+  console:
+    image: padovanl/qawk-console:0.1.0
+    restart: unless-stopped
+    ports: ["8090:8090"]
+    environment:
+      HB_URL: http://server:8080
+    depends_on: [server]
+
+volumes: { db: {}, artifacts: {} }</code></pre>
+
+<pre><code>docker compose up -d</code></pre>
+
+<p>The demo's own compose file, with the sample data and the simulated devices
+wired in, is <code>demo/compose.yml</code> in the repository.</p>
+
+<h3>D. Without Docker at all</h3>
+
+<p>The server is one static binary and the console is a Python script. If you have
+Go 1.25 and a PostgreSQL to point at:</p>
+
+<pre><code>cd server && go build -o qawk ./cmd/qawk
+QAWK_DATABASE_URL='postgres://qawk:qawk@localhost:5432/qawk?sslmode=disable' \
+QAWK_ADMIN_PASSWORD='a-long-admin-password' ./qawk
+
+# in another terminal
+python3 console/serve.py --port 8090 --hawkbit http://localhost:8080</code></pre>
+
+<h3>The two things to back up</h3>
+
+<p>The <b>database</b> and the <b>artifact directory</b> (<code>/var/lib/qawk</code>
+in the image). Everything else is rebuilt from them. Full configuration, TLS,
+Kubernetes and upgrades are in <a href="../install/">Installing the server</a>.</p>
+
+<h2 id="first-update">Your first update</h2>
+
+<p>Four things worth doing, in order. Each takes a minute and each shows you one
+of the ideas Qawk is built on.</p>
+
+<ol class="steps">
+
+<li><b>Watch a release reach a channel.</b><br>
+Open <b>Fleets</b>. <code>dev</code> is running <code>app:1.1.0</code> and its bar
+is filling as the simulated devices take it. Click <code>dev</code> to open its
+drawer: the members, what each runs, what each was given.</li>
+
+<li><b>Promote it to beta.</b><br>
+Still in <b>Fleets</b>, press <b>promote</b> on <code>beta</code>. Qawk shows you
+the gate first — a ✓ or a ✗ per condition — and refuses if it is closed, telling
+you exactly which line failed. When it opens, promote, and watch beta fill in
+waves.</li>
+
+<li><b>Break something on purpose.</b><br>
+Give <code>dev</code> the release <code>app-broken:1.3.0</code>. The simulated
+devices fail anything named <i>broken</i>. Within a minute the release
+<b>halts by itself</b>: failures passed dev's error threshold, and no further
+device is sent it. Press <b>resume</b> and the failures already seen stop
+counting — only new ones can halt it again.</li>
+
+<li><b>Update sixteen systems as sixteen wholes.</b><br>
+Open <b>Systems</b> and deploy the manifest <code>device-system-2.0</code>. Each
+system's terminals go first, its lane computer second — the manifest's order — and
+one system that fails takes <i>itself</i> back to what it ran before while the
+other fifteen carry on. That is the <a href="../orchestrator/">orchestrator</a>,
+and it is the part hawkBit has no answer for.</li>
+
+</ol>
+
+<h2 id="simulated">There is no hardware anywhere in this</h2>
+
+<p>Every device above is <code>qawk-sim</code>: a program that registers, reports
+the attributes a real device would, polls, takes what it is given, waits a random
+while and says how it went. It is not a mock inside the server — it speaks the real
+device API over the real network, so what you are watching is the real thing with
+the hardware replaced.</p>
+
+<p>You can point it at any Qawk server, not only the demo's:</p>
+
+<pre><code># 50 devices reporting ring=lab, polling every 30 s
+demo/simulate.sh --url http://localhost:8080 --token &lt;gateway token&gt; --fleet lab:50
+
+# 16 systems -- a device1 with two device2 and a device3 -- in four centres
+demo/simulate.sh --name centres --url http://localhost:8080 --token &lt;token&gt; --systems 16
+
+demo/simulate.sh --list          # what is running
+demo/simulate.sh --stop          # stop it all</code></pre>
+
+<p>More, including how to make devices fail on demand so you can watch halts,
+thresholds and rollbacks, is in <a href="../devices/#simulate">Connecting devices</a>.</p>
+
+<h2 id="next">Next</h2>
+
+<p>If you are going to <b>use</b> Qawk, read <a href="../console/">Using the
+console</a>. If you are going to <b>run</b> it, read <a href="../install/">Installing
+the server</a>. If you want to know how the pieces fit before either, read
+<a href="../concepts/">Concepts</a>.</p>
+
+</div>
+</body>
+</html>

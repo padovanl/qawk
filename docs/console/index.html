@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Using the console · Qawk documentation</title>
+<meta name="description" content="The Qawk console for the person who ships the update: every screen, what to press, what the colours mean, and what to do when something goes wrong.">
+<link rel="icon" href="../assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script defer src="../assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>Using the console</h1>
+
+<p class="lead">This page is for whoever actually ships the update. It assumes no
+command line, no API and no knowledge of how any of it works underneath. If you
+can read a table and press a button, you can do everything here.</p>
+
+<div class="tip">
+<p><b>Nothing you press is irreversible in one click.</b> Anything that reaches a
+device asks you to confirm and tells you how many machines it will touch first.
+Anything that halts, freezes or rolls back can be undone. The only thing you
+cannot take back is an artifact you deleted.</p>
+</div>
+
+<h2 id="tour">A tour of the console</h2>
+
+<p>The list down the left side is everything there is. It is grouped, and it hides
+what the server does not support or what your account may not see — so if a screen
+below is missing for you, that is why.</p>
+
+<h3>The screens you will use</h3>
+
+<table>
+<thead><tr><th>Screen</th><th>What it is for</th><th>You are here when…</th></tr></thead>
+<tbody>
+<tr><td><b>Dashboard</b></td><td>The state of everything, in cards you arrange yourself.</td><td>you want to know if anything is wrong.</td></tr>
+<tr><td><b>In progress</b></td><td>Every update happening right now, with download bars.</td><td>you pressed go and want to watch.</td></tr>
+<tr><td><b>Targets</b></td><td>Every device. Search, filter, and pick the columns you care about.</td><td>you are looking for one machine.</td></tr>
+<tr><td><b>Fleets</b></td><td>The channels — dev, beta, prod — and the pipeline between them.</td><td><b>you are shipping a release.</b> This is the main screen.</td></tr>
+<tr><td><b>Centres</b></td><td>Every centre and which channel it is in.</td><td>a site should move from beta to prod.</td></tr>
+<tr><td><b>Orchestrator</b></td><td>Systems, their manifests, and deployments over them.</td><td>machines that work together need updating.</td></tr>
+<tr><td><b>Distribution sets</b></td><td>The things you can actually give a device.</td><td>a new build needs uploading.</td></tr>
+<tr><td><b>Modules</b></td><td>The pieces a distribution set is made of, and their files.</td><td>you are assembling a new set.</td></tr>
+</tbody>
+</table>
+
+<h3>The rest</h3>
+
+<p><b>Filters</b> are saved searches, which can also auto-assign a set to whatever
+matches them. <b>Tags</b> label devices and sets by hand. <b>Rollouts</b> are
+hawkBit's own staged deployments — a separate tool from Fleets, useful for a
+one-off campaign that does not fit your channels.
+<b>Configuration</b>, <b>Users and roles</b> and the <b>Audit log</b> are the
+server's settings and who did what. <b>My account</b> is your password and your
+API tokens.</p>
+
+<h3>Things that are true on every screen</h3>
+
+<ul>
+<li><b>Everything updates itself.</b> Numbers, bars and rows follow the server
+without reloading. If a value has not changed, it is because it has not changed —
+there is no refresh button to hunt for and no stale page.</li>
+<li><b>Clicking a row opens a drawer</b> on the right with the detail, and the
+drawer follows the thing it is showing while it changes.</li>
+<li><b>Notifications</b> appear at the corner and stay out of the way. The bell
+counts things waiting for <i>you</i> — a release wanting your approval.</li>
+<li><b>Light or dark</b> is in the top bar, and it is remembered.</li>
+</ul>
+
+<h2 id="ship">Ship an update, step by step</h2>
+
+<p>This is the whole job, from a file on your disk to a fleet running it. Follow it
+in order the first time.</p>
+
+<ol class="steps">
+
+<li><b>Put the software in.</b><br>
+<b>Modules</b> → <b>new module</b>. Give it a name and a version, choose its type
+(<code>os</code>, <code>application</code>), and upload the file. Qawk checks the
+file's hash against what you declared before it accepts it — if that check fails,
+the upload was corrupted and you want to know now, not on a device.</li>
+
+<li><b>Bundle it into something you can give out.</b><br>
+<b>Distribution sets</b> → <b>new set</b>. Name and version it
+(<code>app</code>, <code>1.2.0</code>), and add the modules. A set that is missing
+a module its type says is mandatory is <b>incomplete</b>, and Qawk will refuse to
+assign it — deliberately. Fix it before you go on.</li>
+
+<li><b>Give it to the first channel.</b><br>
+<b>Fleets</b> → the channel with no upstream, usually <code>dev</code> →
+<b>release</b>. Pick the set. If that channel has systems in it, pick a
+<b>manifest</b> too — that is how the machines that work together get their
+matching versions. Press it, and the release starts.</li>
+
+<li><b>Watch it land.</b><br>
+The channel's card fills as devices take it. The numbers under it are the ones
+that matter: how many run it, how many are working on it, how many failed. Open
+the drawer to see which.</li>
+
+<li><b>Promote it onward.</b><br>
+On the next channel, press <b>promote</b>. Before anything happens, Qawk shows
+you <b>the gate</b>: a list with a ✓ or a ✗ against each condition. If every line
+is ✓, promote. If one is ✗, it tells you exactly what is missing — usually "it has
+not been in beta long enough".</li>
+
+<li><b>Get it approved, if the channel asks.</b><br>
+A channel can require a second person. The release then waits instead of going
+out, and appears under the bell for everyone who may approve. <b>The person who
+asked cannot approve it</b> — that is the point of asking.</li>
+
+<li><b>Let it finish.</b><br>
+A release is complete when the standalone devices run the set <b>and</b> the
+orchestrator has finished with the systems. Until both are true, the channel says
+so, and the next gate will not open.</li>
+
+</ol>
+
+<h3>The other way: straight at some devices</h3>
+
+<p>Sometimes you do not want the pipeline — one machine, one set, now. <b>Targets</b>
+→ tick the devices → <b>deploy</b>. You can also deploy to everything matching a
+query, and the dialog shows you a live count of how many devices that is
+<i>before</i> you commit. Press <b>check the devices first</b> and it will tell you
+which of them cannot take the set and why.</p>
+
+<div class="note">
+<p><b>Mode: forced or soft.</b> <i>Forced</i> means install it now. <i>Soft</i>
+means the device may choose its moment. There is also <b>download only</b> (get
+the bytes now, install later) and a <b>maintenance window</b> (download any time,
+install only inside these hours).</p>
+</div>
+
+<h2 id="reading">Reading what you see</h2>
+
+<h3>Device status</h3>
+
+<table>
+<thead><tr><th>Says</th><th>Means</th><th>Do</th></tr></thead>
+<tbody>
+<tr><td><b>in sync</b></td><td>It runs what it was given.</td><td>Nothing.</td></tr>
+<tr><td><b>pending</b></td><td>It has been given something and is working on it.</td><td>Wait.</td></tr>
+<tr><td><b>error</b></td><td>The last update failed on the device.</td><td>Open it and read what it reported.</td></tr>
+<tr><td><b>registered</b></td><td>It has called in but has never been given anything.</td><td>Nothing, usually — a channel rule will pick it up.</td></tr>
+<tr><td><b>unknown</b></td><td>It has never called in.</td><td>Check the device can reach the server at all.</td></tr>
+</tbody>
+</table>
+
+<h3>Release status</h3>
+
+<table>
+<thead><tr><th>Says</th><th>Means</th></tr></thead>
+<tbody>
+<tr><td><b>active</b></td><td>Going out now.</td></tr>
+<tr><td><b>waiting for approval</b></td><td>Someone else has to say yes.</td></tr>
+<tr><td><b>halted</b></td><td><b>Qawk stopped it</b> — too many devices failed. Nothing more will be sent until a person resumes it.</td></tr>
+<tr><td><b>completed</b></td><td>Everything that should have it, has it.</td></tr>
+<tr><td><b>denied</b></td><td>Someone said no. It never went out.</td></tr>
+<tr><td><b>superseded</b></td><td>A newer release replaced it.</td></tr>
+</tbody>
+</table>
+
+<h3>System status, on the Orchestrator screen</h3>
+
+<table>
+<thead><tr><th>Says</th><th>Means</th></tr></thead>
+<tbody>
+<tr><td><b>pending</b></td><td>Its turn has not come.</td></tr>
+<tr><td><b>running</b></td><td>Its components are updating, in the manifest's order.</td></tr>
+<tr><td><b>succeeded</b></td><td>Every component is on the manifest's set.</td></tr>
+<tr><td><b>rolling back</b></td><td>Something in it failed; every device it updated is being put back.</td></tr>
+<tr><td><b>rolled back</b></td><td>It is back on what it ran before.</td></tr>
+<tr><td><b>skipped</b></td><td>It was never started — the deployment was aborted, too many others had failed, or it left the channel first.</td></tr>
+</tbody>
+</table>
+
+<h3>Bars and colours</h3>
+
+<p>A bar that is <b>filling</b> is progress against a total. A bar with a <b>calm
+moving band</b> means devices are working and there is nothing to count yet — it is
+not stuck, it is waiting on machines. Green is done, amber is in progress, red is
+failed, and grey is not started.</p>
+
+<h2 id="wrong">When something goes wrong</h2>
+
+<h3>The release halted by itself</h3>
+
+<p><b>This is the system working.</b> Too many devices failed, so Qawk stopped
+sending it to more. Open the channel, read which devices failed and what they
+reported. Then either fix the build and release a new version, or — if the
+failures were not the build's fault — press <b>resume</b>. Resuming marks the
+failures already seen as seen: only <i>new</i> ones can halt it again, so you will
+not have to press it twice for the same problem.</p>
+
+<h3>The gate will not open</h3>
+
+<p>Read the report. Every line is a condition and it says the actual numbers
+against the required ones. The common ones:</p>
+
+<ul>
+<li><i>"it has been in beta for 41 minutes (at least 120)"</i> — wait, or the
+channel's soak time is set longer than you want.</li>
+<li><i>"94% of beta runs it (at least 95%)"</i> — some devices have not taken it.
+Often a handful are switched off.</li>
+<li><i>"the orchestrator took beta's systems… running"</i> — the systems are not
+finished yet.</li>
+</ul>
+
+<p>If you have to go anyway, <b>force</b> the gate. It requires permission and a
+written reason, and the reason is kept in the release's history and the audit log
+for ever. That is by design: forcing a gate is allowed, forgetting that you did
+is not.</p>
+
+<h3>A system rolled back</h3>
+
+<p>One device of it failed, so all of them went back to what they ran before. Open
+the deployment and the system's row tells you which component failed and at which
+order. The other systems carried on — one bad machine does not stop the fleet. If
+<i>more</i> systems failed than the deployment allows, no new system is started
+and the whole thing stops.</p>
+
+<h3>I cannot move this device into that channel</h3>
+
+<p>Its <b>centre</b> is in a different channel, and the centre would take it back
+within seconds. Either move the whole centre (<b>Centres</b> → tick → <b>move</b>),
+or, for one machine going to a trade show, lend it to a <b>temporary</b> channel —
+it remembers where it came from and can be sent home.</p>
+
+<h3>I need everything to stop, now</h3>
+
+<p><b>Freeze</b> the channel. <b>Fleets</b> → the channel → <b>freeze</b>, with a
+reason. No release reaches it until you lift it. You can set a start and an end,
+so "no updates during league nights" can be arranged in advance. The reason is
+shown to anyone who tries to release into it, so nobody has to ask why.</p>
+
+<h2 id="yours">Making it yours</h2>
+
+<ul>
+<li><b>The dashboard is yours.</b> Drag the cards, resize them, add and remove
+them from the tray. It is saved per account.</li>
+<li><b>Table columns are yours.</b> Every table lets you choose columns and their
+order, and remembers.</li>
+<li><b>Filters are saved searches.</b> Build one on <b>Targets</b>, save it, and
+it is one click from then on. A filter can also <b>auto-assign</b> a set to
+whatever matches it, which is how "every new device of this type gets this
+firmware" is arranged once.</li>
+<li><b>API tokens</b> are under <b>My account</b>, for scripts and CI. The token
+is shown once. It acts with your permissions <i>at the time it is used</i>, so it
+loses access the moment your role does.</li>
+</ul>
+
+<h3>Running the console yourself</h3>
+
+<p>The console is a page and a small proxy. It keeps no credentials: your browser's
+own sign-in is passed through, and closing the tab signs you out.</p>
+
+<pre><code>python3 console/serve.py --port 8090 --hawkbit http://localhost:8080</code></pre>
+
+<p>It works against a stock <b>hawkBit 1.1.0</b> too — point it there and it shows
+the hawkBit part and hides the rest.</p>
+
+</div>
+</body>
+</html>

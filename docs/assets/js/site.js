@@ -17,6 +17,7 @@
     { t: 'Get started', n: 1, items: [
       { t: 'What Qawk is', h: 'start/' },
       { t: 'Try it in five minutes', h: 'start/#demo' },
+      { t: 'Build it and run it', h: 'start/#run' },
       { t: 'Your first update', h: 'start/#first-update' }
     ] },
     { t: 'Concepts', n: 2, items: [

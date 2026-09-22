@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Qawk documentation</title>
+<meta name="description" content="Qawk is an over-the-air update server for fleets of devices. It speaks Eclipse hawkBit's protocols, and adds release channels, centres, and systems updated as a whole.">
+<link rel="icon" href="assets/img/qawk-logo.svg">
+<link rel="stylesheet" href="assets/css/site.css">
+<script defer src="assets/js/site.js"></script>
+</head>
+<body>
+<div class="page-content">
+
+<h1>Qawk documentation</h1>
+
+<p class="lead">Qawk is an over-the-air update server for fleets of devices, and a
+web console for it. It speaks <a href="https://eclipse.dev/hawkbit/">Eclipse hawkBit</a> 1.1.0,
+so the devices and the tools you already have work with it unchanged — and it adds
+what running a real fleet needs.</p>
+
+<div class="cards">
+  <a class="card" href="start/">
+    <span class="ic">🚀</span><b>Get started</b>
+    <span>A server, a console and three hundred simulated devices, running in five minutes.</span>
+  </a>
+  <a class="card" href="console/">
+    <span class="ic">🖱️</span><b>Using the console</b>
+    <span>For whoever ships the update. Every screen, every button, what to press and what it does.</span>
+  </a>
+  <a class="card" href="orchestrator/">
+    <span class="ic">🧩</span><b>The orchestrator</b>
+    <span>Devices that work together, updated as one, in the order you decide — and rolled back as one.</span>
+  </a>
+  <a class="card" href="api/">
+    <span class="ic">⌨️</span><b>API reference</b>
+    <span>Ninety endpoints, with the call in curl, Python, JavaScript, Go and PowerShell.</span>
+  </a>
+</div>
+
+<h2 id="what">What it is</h2>
+
+<p>An update server has one job: get the right software onto the right machines
+without breaking any of them. Qawk does that job the way a fleet actually works.</p>
+
+<p><b>It is hawkBit, so nothing has to change.</b> All 16 operations of the device
+API and all 153 of the management API, with hawkBit's JSON, status codes, error
+codes, query language, paging and download headers. A device running SWUpdate's
+<i>suricatta</i> is pointed at a different host and carries on. A script written
+against hawkBit keeps working. A contract test replays a flow recorded from a real
+hawkBit 1.1.0 and compares every answer field by field.</p>
+
+<p><b>And then it is more than hawkBit.</b> Releases move down a pipeline —
+dev → beta → prod — through a gate that will not open until enough devices have
+run the release for long enough, and, when you ask for it, until a second person
+approves. Devices are grouped by where they physically are. Machines that work
+together are updated together, in order, and put back together when one of them
+fails.</p>
+
+<div class="tip">
+<p><b>Written for two readers.</b> If you press buttons in the console and need
+the update to go out tonight, read <a href="console/">Using the console</a> and
+nothing else. If you are wiring Qawk into something, everything else is for you.</p>
+</div>
+
+<h2 id="ideas">The four ideas</h2>
+
+<p>Almost everything in Qawk is one of these four things. If you understand them,
+the rest of the documentation is detail.</p>
+
+<table>
+<thead><tr><th>Idea</th><th>What it is</th><th>Where</th></tr></thead>
+<tbody>
+<tr><td><b>Channel</b></td>
+  <td>A set of devices that should run the same release. Channels chain into a
+  pipeline, and a release moves from one to the next only through a gate.</td>
+  <td><a href="channels/">Channels</a></td></tr>
+<tr><td><b>Centre</b></td>
+  <td>Where a device physically is. A centre goes in a channel, and every device
+  in the centre follows it — you move a place, not a list of machines.</td>
+  <td><a href="centres/">Centres</a></td></tr>
+<tr><td><b>System</b></td>
+  <td>Devices that work together and must be updated as one: a lane computer and
+  the terminals attached to it. Components go in a chosen order; if one fails,
+  the whole system goes back.</td>
+  <td><a href="orchestrator/">Orchestrator</a></td></tr>
+<tr><td><b>Release</b></td>
+  <td>What a channel runs. It carries a distribution set for the devices that
+  stand alone, and — when the channel has systems — a manifest for those.</td>
+  <td><a href="channels/">Channels</a></td></tr>
+</tbody>
+</table>
+
+<h2 id="typical">What a day looks like</h2>
+
+<ol class="steps">
+<li><b>A build lands.</b> You upload it as a distribution set, or your CI does it
+through the same API a person would use.</li>
+<li><b>It goes to dev.</b> One channel, a handful of machines, no ceremony. The
+devices that stand alone get the set; the systems get the manifest, component by
+component.</li>
+<li><b>The gate into beta opens by itself</b> once enough of dev is running it,
+long enough, with few enough failures — and once the orchestrator has finished
+with dev's systems. Someone looks at the gate and presses <b>promote</b>.</li>
+<li><b>Beta runs it for a week.</b> If too many devices fail, the release halts on
+its own and waits for a person.</li>
+<li><b>Prod needs a second pair of eyes.</b> The release waits in the approval
+queue; someone who is not you approves it; it goes out in waves, centre by
+centre.</li>
+<li><b>A centre opens next month.</b> Its machines register, land in the right
+channel from what they report about themselves, and are brought up to what that
+channel runs — without anyone remembering to do it.</li>
+</ol>
+
+<h2 id="honest">What it is not</h2>
+
+<p>Documentation that only lists strengths is an advertisement. So:</p>
+
+<ul>
+<li><b>TLS is not built in.</b> Put Qawk behind a reverse proxy that terminates
+it. See <a href="install/#tls">TLS and reverse proxies</a>.</li>
+<li><b>One tenant per server.</b> hawkBit's multi-tenancy is not implemented;
+<code>QAWK_TENANT</code> names the single tenant devices use in their URL.</li>
+<li><b>Artifacts live on a filesystem</b>, not in object storage. On Kubernetes
+that means a ReadWriteMany volume.</li>
+<li><b>It is young.</b> It is tested hard — a recorded hawkBit contract, end-to-end
+suites, ten thousand simulated devices — but it has not been running in a hundred
+companies for ten years, and hawkBit has.</li>
+</ul>
+
+<h2 id="where">Where to go next</h2>
+
+<table>
+<thead><tr><th>If you are…</th><th>Start here</th></tr></thead>
+<tbody>
+<tr><td>Curious, with ten minutes</td><td><a href="start/">Get started</a> — the demo runs itself</td></tr>
+<tr><td>The person who ships updates</td><td><a href="console/">Using the console</a></td></tr>
+<tr><td>Setting a server up</td><td><a href="install/">Installing the server</a></td></tr>
+<tr><td>Putting Qawk on a device</td><td><a href="devices/">Connecting devices</a></td></tr>
+<tr><td>Writing a script or a CI job</td><td><a href="api/">API reference</a></td></tr>
+<tr><td>Coming from hawkBit</td><td><a href="hawkbit/">hawkBit compatibility</a></td></tr>
+<tr><td>Wondering about the licence</td><td><a href="about/">Licence and credits</a></td></tr>
+</tbody>
+</table>
+
+</div>
+</body>
+</html>
