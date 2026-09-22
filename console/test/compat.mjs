@@ -108,14 +108,14 @@ for (const [p, methods] of called) {
     if (gone.length) unlisted.push(`${real} — ${gone.join(',')} not listed`);
   }
 }
-ok('ogni endpoint chiamato dal codice è nella lista di compat.js',
+ok("every endpoint the source calls is in compat.js's list",
    unlisted.length === 0, unlisted.join(' | '));
 
 const reachable = new Set();
 for (const p of called.keys()) for (const real of EXPANDS[p] || [p]) reachable.add(shape(real));
 const dead = [...listed.keys()].filter(p => !reachable.has(p));
-ok('la lista non contiene endpoint che nessuno chiama', dead.length === 0, dead.join(' '));
-console.log(`       ${listed.size} endpoint elencati, ${called.size} chiamati dal codice`);
+ok('the list holds no endpoint nobody calls', dead.length === 0, dead.join(' '));
+console.log(`       ${listed.size} endpoints listed, ${called.size} called by the source`);
 
 /* ---- 2. against a running hawkBit ------------------------------------- */
 if (process.argv.includes('--live')) {
@@ -127,7 +127,7 @@ if (process.argv.includes('--live')) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     doc = await r.json();
   } catch (e) {
-    console.log(`\n  hawkBit non raggiungibile su ${BASE}: ${e.message}`);
+    console.log(`\n  hawkBit is not reachable at ${BASE}: ${e.message}`);
     process.exit(2);
   }
   const have = new Map(Object.entries(doc.paths || {})
@@ -135,14 +135,14 @@ if (process.argv.includes('--live')) {
   const missing = [];
   for (const [p, methods] of Object.entries(NEEDED)) {
     const got = have.get(shape(p));
-    if (!got) { missing.push(p + ' assente'); continue; }
+    if (!got) { missing.push(p + ' is absent'); continue; }
     const gone = methods.filter(m => !got.has(m));
-    if (gone.length) missing.push(`${p} senza ${gone.join(',')}`);
+    if (gone.length) missing.push(`${p} without ${gone.join(',')}`);
   }
-  ok(`il server ha tutti gli endpoint attesi da hawkBit ${EXPECTED_VERSION}`,
+  ok(`the server has every endpoint hawkBit ${EXPECTED_VERSION} is expected to have`,
      missing.length === 0, missing.join(' | '));
-  ok('il server dichiara API v1', ((doc.info || {}).version) === 'v1', (doc.info || {}).version);
+  ok('the server declares API v1', ((doc.info || {}).version) === 'v1', (doc.info || {}).version);
 }
 
-console.log(`\n  ${pass} ok, ${failed} falliti`);
+console.log(`\n  ${pass} ok, ${failed} failed`);
 process.exit(failed ? 1 : 0);

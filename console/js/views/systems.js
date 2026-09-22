@@ -159,11 +159,22 @@ async function runsDrawer(id) {
             return h('span.pill.' + cls, { title: `order ${c.order}` + (c.back ? ` · ${c.back} back on the previous set` : '') },
               back ? `${c.componentType} back ${c.back}/${c.devices}` : `${c.componentType} ${c.onSet}/${c.devices}`);
           })),
-          ['running', 'succeeded'].includes(r.status) ? h('button.btn.sm.danger', { onclick: async () => {
-            if (!await ask('Roll back ' + r.system, 'Every device of this system the deployment updated goes back to what it ran before.',
-              { okLabel: 'Roll back', danger: true })) return;
-            try { await qawk.post(`/systemdeployments/${id}/runs/${r.id}/rollback`, {}); refreshDrawer(); } catch (e) { fail(e); }
-          } }, 'roll back') : null],
+          // A system that rolled back or was skipped sits on its old version
+          // until somebody decides it is worth another go: that is this
+          // button, and it is the way back from a failed system without
+          // releasing again to the whole channel.
+          ['rolled_back', 'skipped'].includes(r.status) ? h('button.btn.sm', { onclick: async () => {
+            if (!await ask('Take ' + r.system + ' again',
+              'It is taken again with this deployment\'s manifest, from where the system is now. '
+              + 'If the manifest itself was wrong, release a new one to the channel instead.',
+              { okLabel: 'Take it again' })) return;
+            try { await qawk.post(`/systemdeployments/${id}/runs/${r.id}/retry`, {}); refreshDrawer(); } catch (e) { fail(e); }
+          } }, icon('refresh', 13), 'take again')
+            : ['running', 'succeeded'].includes(r.status) ? h('button.btn.sm.danger', { onclick: async () => {
+              if (!await ask('Roll back ' + r.system, 'Every device of this system the deployment updated goes back to what it ran before.',
+                { okLabel: 'Roll back', danger: true })) return;
+              try { await qawk.post(`/systemdeployments/${id}/runs/${r.id}/rollback`, {}); refreshDrawer(); } catch (e) { fail(e); }
+            } }, 'roll back') : null],
       }))));
   };
   // it follows the deployment while it is open (chrome.js, refreshDrawer)

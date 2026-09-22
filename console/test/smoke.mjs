@@ -24,9 +24,9 @@ process.on('unhandledRejection', e => { console.log('  RIFIUTO:', e && e.stack);
 /* --- 1. the whole tree links and runs ---------------------------------- */
 try {
   await import(JS + 'main.js');
-  ok('ogni import risolve e ogni modulo viene eseguito', true);
+  ok('every import resolves and every module runs', true);
 } catch (e) {
-  ok('ogni import risolve e ogni modulo viene eseguito', false, e.message);
+  ok('every import resolves and every module runs', false, e.message);
   console.log(String(e.stack).split('\n').slice(1, 4).join('\n'));
   process.exit(1);
 }
@@ -34,25 +34,25 @@ try {
 /* --- 2. the view registry and the menu agree --------------------------- */
 const { VIEWS } = await import(JS + 'router.js');
 const ids = Object.keys(VIEWS).sort();
-ok('le viste si registrano da sole', ids.length === 16, ids.join(' '));
+ok('the views register themselves', ids.length === 16, ids.join(' '));
 const routerSrc = await readFile(JS + 'router.js', 'utf8');
 const navBlock = routerSrc.slice(routerSrc.indexOf('const NAV'), routerSrc.indexOf('];', routerSrc.indexOf('const NAV')));
 const navIds = [...navBlock.matchAll(/id: '([^']+)'/g)].map(m => m[1]);
 const orphan = navIds.filter(i => !VIEWS[i]);
-ok('ogni voce di menù punta a una vista esistente', orphan.length === 0, orphan.join(' '));
-ok('ogni vista ha titolo e render', ids.every(i => VIEWS[i].title && VIEWS[i].render));
+ok('every menu entry points at a view that exists', orphan.length === 0, orphan.join(' '));
+ok('every view has a title and a render', ids.every(i => VIEWS[i].title && VIEWS[i].render));
 
 /* --- 3. helpers that cross module boundaries --------------------------- */
 const { compact, bytes } = await import(JS + 'util.js');
-ok('compact arrotonda i numeri grandi', compact(1482) === '1.5k' && compact(7) === '7',
+ok('compact rounds large numbers', compact(1482) === '1.5k' && compact(7) === '7',
    `${compact(1482)} / ${compact(7)}`);
-ok('bytes legge le dimensioni', bytes(622000000).endsWith('MiB'), bytes(622000000));
+ok('bytes reads sizes', bytes(622000000).endsWith('MiB'), bytes(622000000));
 
 const { pg, fiqlOf, pagedPath, filterRow } = await import(JS + 'table.js');
 const { cols, headsFor } = await import(JS + 'columns.js');
 const { pill, typePill } = await import(JS + 'badges.js');
-ok('le colonne di default esistono', cols('targets').length === 8, cols('targets').join(','));
-ok('le intestazioni seguono le colonne scelte', headsFor('targets', cols('targets')).length === 8);
+ok('the default columns exist', cols('targets').length === 8, cols('targets').join(','));
+ok('the headers follow the chosen columns', headsFor('targets', cols('targets')).length === 8);
 {
   // a browser that chose its columns before Fleet existed gets Fleet, after
   // Name; one that has seen it and taken it away does not
@@ -62,14 +62,14 @@ ok('le intestazioni seguono le colonne scelte', headsFor('targets', cols('target
     getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) } });
   store.set('hb-cols-targets', JSON.stringify(['controllerId', 'name', 'status', 'ip']));
   const merged = cols('targets');
-  ok('una scelta vecchia riceve la colonna Fleet, dopo Name', merged.join() === 'controllerId,name,fleet,status,ip', merged.join());
+  ok('an older choice is given the Fleet column, after Name', merged.join() === 'controllerId,name,fleet,status,ip', merged.join());
   store.set('hb-cols-seen-targets', JSON.stringify(['controllerId', 'name', 'fleet', 'status', 'ds', 'lastPoll', 'nextPoll', 'ip']));
-  ok('chi l\'ha tolta non se la ritrova', !cols('targets').includes('fleet'), cols('targets').join());
+  ok('whoever removed it does not get it back', !cols('targets').includes('fleet'), cols('targets').join());
   if (prev) Object.defineProperty(globalThis, 'localStorage', prev); else delete globalThis.localStorage;
 }
-ok('i badge di tipo sono coerenti', typePill('os_app').className.includes('ty-both'));
-ok('i pill di stato prendono la classe', pill('in_sync', 'ok').className.includes('ok'));
-ok('pagedPath impagina', pagedPath('/targets', pg('targets'), '', 'id:DESC').includes('offset=0'));
+ok('the type badges agree', typePill('os_app').className.includes('ty-both'));
+ok('the status pills take their class', pill('in_sync', 'ok').className.includes('ok'));
+ok('pagedPath pages', pagedPath('/targets', pg('targets'), '', 'id:DESC').includes('offset=0'));
 
 /* --- 4. the column filters: debounced, and they keep the caret --------- */
 const st = pg('targets'); st.f = {}; st.page = 3;
@@ -77,70 +77,70 @@ const fields = [{}, { key: 'name', ph: 'name' }, { key: 'type' }];
 let renders = 0; const onChange = () => renders++;
 
 let row = filterRow(fields, st, onChange);
-ok('la prima cella resta senza filtro', row.children[0].children.length === 0);
+ok('the first cell stays without a filter', row.children[0].children.length === 0);
 let box = row.children[1].find('fbox');
-ok('il campo ha icona, input e croce', !!box && box.children.length === 3);
-ok('a vuoto non è evidenziato', !box.classList.contains('has'));
+ok('the field has an icon, an input and a cross', !!box && box.children.length === 3);
+ok('empty, it is not highlighted', !box.classList.contains('has'));
 
 const inp = box.children[1];
 inp.handlers.input({ target: { value: 'neo', selectionStart: 3 } });
-ok('scrivere riporta alla prima pagina', st.page === 0);
-ok('scrivere non spara una query per tasto', renders === 0);
+ok('typing goes back to the first page', st.page === 0);
+ok('typing does not fire a query per keystroke', renders === 0);
 
 inp.selectionStart = 2;
 globalThis.document.activeElement = inp;
 row = filterRow(fields, st, onChange);
 box = row.children[1].find('fbox');
 const inp2 = box.children[1];
-ok('il valore sopravvive alla ricostruzione', inp2.value === 'neo', inp2.value);
-ok('un filtro pieno si vede', box.classList.contains('has'));
+ok('the value survives a rebuild', inp2.value === 'neo', inp2.value);
+ok('a filled filter shows', box.classList.contains('has'));
 globalThis.__frames.splice(0).forEach(f => f());
-ok('il fuoco torna nella stessa colonna', inp2.focused === true);
-ok('il caret torna dove era', inp2.caret === 2, String(inp2.caret));
+ok('focus returns to the same column', inp2.focused === true);
+ok('the caret returns where it was', inp2.caret === 2, String(inp2.caret));
 
 globalThis.document.activeElement = inp2;
 const other = filterRow(fields, st, onChange).children[2].find('fbox').children[1];
 globalThis.__frames.splice(0).forEach(f => f());
-ok('unaltra colonna non ruba il fuoco', other.focused !== true);
+ok('another column does not steal focus', other.focused !== true);
 
 inp2.handlers.keydown({ key: 'Escape', target: inp2 });
-ok('Esc svuota subito', st.f.name === '' && renders > 0);
+ok('Esc clears at once', st.f.name === '' && renders > 0);
 st.f.name = 'x';
 const before = renders;
 box.find('fx').handlers.click();
-ok('la croce svuota subito', st.f.name === '' && renders > before);
+ok('the cross clears at once', st.f.name === '' && renders > before);
 
 /* --- 5. the controls that replaced native widgets ---------------------- */
 const { colourPicker, fileField } = await import(JS + 'inputs.js');
 const cp = colourPicker('#12a594');
-ok('il colore parte dal valore dato', cp.value === '#12a594', cp.value);
+ok('the colour starts from the value given', cp.value === '#12a594', cp.value);
 const sw = cp.children[0].children;
-ok('la tavolozza ha dieci colori piu il custom', sw.length === 11, String(sw.length));
+ok('the palette has ten colours plus the custom one', sw.length === 11, String(sw.length));
 sw[3].handlers.click({ preventDefault() {} });          // h() aggancia come proprietà (onclick)
-ok('scegliere una tessera cambia il valore', cp.value === '#46a758', cp.value);
-ok('la tessera scelta si evidenzia', sw[3].classList.contains('on') && !sw[0].classList.contains('on'));
-ok('nessun input nativo di colore nel controllo',
+ok('choosing a swatch changes the value', cp.value === '#46a758', cp.value);
+ok('the chosen swatch is highlighted', sw[3].classList.contains('on') && !sw[0].classList.contains('on'));
+ok('no native colour input in the control',
    !JSON.stringify(cp, (k, v) => (k === 'handlers' ? undefined : v)).includes('"color"'));
 
 const hexIn = cp.find('hexbox').children[1];
 hexIn.value = 'ff0000'; hexIn.oninput();
-ok('lesadecimale valido viene accettato', cp.value === '#ff0000', cp.value);
+ok('a valid hex value is taken', cp.value === '#ff0000', cp.value);
 hexIn.value = 'nonsense'; hexIn.oninput();
-ok('lesadecimale non valido viene ignorato', cp.value === '#ff0000', cp.value);
+ok('an invalid hex value is ignored', cp.value === '#ff0000', cp.value);
 hexIn.onblur();     // uscendo dal campo si ripristina il valore buono
-ok('il campo si ripulisce da un valore non valido', hexIn.value === 'ff0000', hexIn.value);
-ok('il campo non mostra un doppio cancelletto', !hexIn.value.startsWith('#'), hexIn.value);
+ok('the field cleans an invalid value out of itself', hexIn.value === 'ff0000', hexIn.value);
+ok('the field does not show a double hash', !hexIn.value.startsWith('#'), hexIn.value);
 const panel = cp.find('cpick-panel');
-ok('il pannello custom parte chiuso', panel.classList.contains('hidden'));
+ok('the custom panel starts closed', panel.classList.contains('hidden'));
 sw[10].handlers.click({ preventDefault() {} });
-ok('il custom apre il pannello nostro', !panel.classList.contains('hidden'));
+ok('custom opens our own panel', !panel.classList.contains('hidden'));
 
 const fz = fileField({ multiple: true });
-ok('la zona di rilascio espone il suo input', fz.input && fz.input.nodeName === 'input');
-ok('parte senza file', !fz.classList.contains('has'));
+ok('the drop zone exposes its input', fz.input && fz.input.nodeName === 'input');
+ok('it starts with no file', !fz.classList.contains('has'));
 fz.input.files = [{ name: 'hello-1.1.3.swu', size: 622000000 }];
 fz.input.onchange();
-ok('mostra il file scelto', fz.classList.contains('has') && fz.textContent.includes('hello-1.1.3.swu'));
+ok('it shows the chosen file', fz.classList.contains('has') && fz.textContent.includes('hello-1.1.3.swu'));
 
 /* --- 6. the FIQL parser ------------------------------------------------ */
 const { check, tokenize, contextAt } = await import(JS + 'fiql.js');
@@ -167,27 +167,27 @@ const bad = [
 let pOk = 0;
 for (const q of good) if (check(q, 'targets').ok) pOk++;
    else console.log('       ^ rifiutata a torto:', JSON.stringify(q), '->', check(q, 'targets').msg);
-ok('accetta le query valide', pOk === good.length, `${pOk}/${good.length}`);
+ok('it takes valid queries', pOk === good.length, `${pOk}/${good.length}`);
 let nOk = 0;
 for (const [q, why] of bad) {
   const r = check(q, 'targets');
   if (!r.ok) nOk++; else console.log('       ^ accettata a torto:', JSON.stringify(q), '(' + why + ')');
 }
-ok('respinge le query rotte', nOk === bad.length, `${nOk}/${bad.length}`);
+ok('it refuses broken queries', nOk === bad.length, `${nOk}/${bad.length}`);
 const w = check('id==abc', 'targets');
-ok('un id non numerico avverte ma non blocca', w.ok && !!w.warn, w.warn || '(nessun avviso)');
-ok('lerrore indica la posizione', check('name==a;nonesuch==b', 'targets').at === 8,
+ok('a non-numeric id warns but does not block', w.ok && !!w.warn, w.warn || '(no warning)');
+ok('the error says where', check('name==a;nonesuch==b', 'targets').at === 8,
    String(check('name==a;nonesuch==b', 'targets').at));
-ok('lerrore suggerisce il campo vicino', /did you mean name/.test(check('nam==a', 'targets').msg || ''),
+ok('the error suggests the nearest field', /did you mean name/.test(check('nam==a', 'targets').msg || ''),
    check('nam==a', 'targets').msg);
-ok('il tokenizer tiene le virgolette', tokenize('name=="a;b"').length === 3);
-ok('a inizio riga si completano i campi', contextAt('', 0).want === 'field');
+ok('the tokenizer keeps the quotes', tokenize('name=="a;b"').length === 3);
+ok('at the start of a line the fields complete', contextAt('', 0).want === 'field');
 // mentre il campo si sta ancora scrivendo si completano i campi; l'operatore
 // arriva quando il campo e' chiuso
-ok('mentre si scrive il campo si completano i campi', contextAt('name', 4).want === 'field');
-ok('a campo chiuso si completa loperatore', contextAt('name ', 5).want === 'op');
-ok('dopo un operatore si completa il valore', contextAt('updatestatus==', 14).want === 'value');
-ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 'join');
+ok('while a field is being typed the fields complete', contextAt('name', 4).want === 'field');
+ok('once the field is closed the operator completes', contextAt('name ', 5).want === 'op');
+ok('after an operator the value completes', contextAt('updatestatus==', 14).want === 'value');
+ok('after a value the joiner completes', contextAt('name==a ', 8).want === 'join');
 
 /* --- 7. the query editor must not report a change nobody made ---------- */
 /* This is a regression test for a render loop: the Targets toolbar passes an
@@ -199,13 +199,13 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   let fired = 0;
   const ed = fiqlEditor({ entity: 'targets', value: 'name==*neo*', compact: true,
                           onChange: () => fired++ });
-  ok('costruire leditor non chiama onChange', fired === 0, `chiamate: ${fired}`);
-  ok('leditor porta comunque il valore iniziale', ed.value === 'name==*neo*', ed.value);
+  ok('building the editor does not call onChange', fired === 0, `chiamate: ${fired}`);
+  ok('the editor carries the initial value anyway', ed.value === 'name==*neo*', ed.value);
   // ...but typing must
   const inp = ed.find('fq-in') || ed.children[0].children[1];
   inp.value = 'name==*x*';
   inp.oninput();
-  ok('scrivere invece lo chiama', fired === 1, `chiamate: ${fired}`);
+  ok('typing does call it', fired === 1, `chiamate: ${fired}`);
 }
 
 /* --- 8. a closed action must not look like a running one --------------- */
@@ -215,14 +215,14 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
 {
   const { actionPill } = await import(JS + 'badges.js');
   const live = actionPill({ status: 'retrieved', active: true });
-  ok('unazione attiva gira', live.className.includes('live'), live.className);
+  ok('an open action spins', live.className.includes('live'), live.className);
   const closed = actionPill({ status: 'retrieved', active: false });
-  ok('unazione chiusa non gira', !closed.className.includes('live'), closed.className);
-  ok('e dice che e chiusa', closed.textContent.includes('closed'), closed.textContent);
+  ok('a closed action does not spin', !closed.className.includes('live'), closed.className);
+  ok('and says it is closed', closed.textContent.includes('closed'), closed.textContent);
   const done = actionPill({ status: 'finished', active: false });
-  ok('un esito resta un esito', done.className.includes('ok') && !done.textContent.includes('closed'));
+  ok('a result stays a result', done.className.includes('ok') && !done.textContent.includes('closed'));
   const err = actionPill({ status: 'error', active: false });
-  ok('un errore resta un errore', err.className.includes('err'));
+  ok('an error stays an error', err.className.includes('err'));
 }
 
 /* --- 9. "pending" broken down into what it is actually doing ----------- */
@@ -250,39 +250,39 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
                                E(205, 'running', 'All Chunks Installed.'));
   const polled    = chunk2.concat(E(206, 'retrieved', 'Target retrieved update action'));
 
-  ok('assegnata ma non ancora ritirata', lab(assigned) === 'assigned');
-  ok('ritirata = sta scaricando', lab(retrieved) === 'downloading');
+  ok('assigned but not yet collected', lab(assigned) === 'assigned');
+  ok('collected means it is downloading', lab(retrieved) === 'downloading');
   // hawkBit notes "Installing Update Chunk Artifacts" and the downloads follow,
   // so at that point the device really is downloading
-  ok('primo chunk: sta scaricando', lab(dl1) === 'downloading', lab(dl1));
+  ok('the first chunk: it is downloading', lab(dl1) === 'downloading', lab(dl1));
   // THERE IS NO SEPARATE "INSTALLING" TO SEE. Measured on two real updates:
   // the download entry lands, then eleven seconds of silence, then "Update
   // successful", "Installed Chunk" and "All Chunks Installed" all arrive in
   // the same second. The transfer and the write cannot be told apart, so one
   // label covers both rather than guessing.
-  ok('durante il silenzio resta una fase sola', lab(inst1) === 'downloading', lab(inst1));
+  ok('through the silence it stays one phase', lab(inst1) === 'downloading', lab(inst1));
   ok('e senza "(part N)" quando ce n e una sola', !/part/.test(lab(dl1)), lab(dl1));
   // "Update successful" arrives after EVERY chunk, so it cannot mean the end
-  ok('dopo il primo chunk non dice ancora riavvio', lab(chunk1) !== 'waiting for reboot', lab(chunk1));
-  ok('e dice che siamo alla seconda parte', /part 2/.test(lab(chunk1)), lab(chunk1));
-  ok('seconda parte in download', /downloading \(part 2\)/.test(lab(dl2)), lab(dl2));
+  ok('after the first chunk it does not say reboot yet', lab(chunk1) !== 'waiting for reboot', lab(chunk1));
+  ok('and says we are on the second part', /part 2/.test(lab(chunk1)), lab(chunk1));
+  ok('the second part, downloading', /downloading \(part 2\)/.test(lab(dl2)), lab(dl2));
   // WHAT "DONE" MEANS DEPENDS ON THE KIND OF SET. An application reboots
   // nothing; only a system part waits for a boot. "waiting for reboot" was on
   // screen during an application delta, which is simply false.
-  ok('un set di sistema finisce in attesa di riavvio',
+  ok('a system set ends up waiting for a reboot',
      lab2(chunk2, 'os') === 'waiting for reboot', lab2(chunk2, 'os'));
-  ok('un combinato pure', lab2(chunk2, 'os_app') === 'waiting for reboot', lab2(chunk2, 'os_app'));
-  ok('unapp invece risulta installata e basta',
+  ok('a combined one too', lab2(chunk2, 'os_app') === 'waiting for reboot', lab2(chunk2, 'os_app'));
+  ok('an application, instead, reads as simply installed',
      lab2(chunk2, 'app') === 'installed', lab2(chunk2, 'app'));
-  ok('senza sapere il tipo non promette un riavvio applicativo',
+  ok('not knowing the type, it does not promise an application reboot',
      lab(chunk2) === 'waiting for reboot', lab(chunk2));
   // THE REGRESSION: a poll after the end used to drag it back to downloading
-  ok('un poll dopo la fine non fa tornare indietro', lab(polled) === 'waiting for reboot', lab(polled));
+  ok('a poll after the end does not go backwards', lab(polled) === 'waiting for reboot', lab(polled));
 
-  ok('in attesa di conferma umana',
+  ok('waiting for someone to confirm',
      lab([E(1, 'wait_for_confirmation', '')]) === 'waiting for confirmation');
-  ok('annullamento in corso', lab([E(1, 'canceling', '')]) === 'cancelling');
-  ok('senza voci utili non inventa nulla', phaseFrom([]) === null);
+  ok('being cancelled', lab([E(1, 'canceling', '')]) === 'cancelling');
+  ok('with nothing useful to read it invents nothing', phaseFrom([]) === null);
 }
 
 /* --- 10. the legend explains every word the column can show ------------ */
@@ -296,14 +296,14 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   const produced = [...fn.matchAll(/label:\s*'([^']+)'/g)].map(m => m[1]);
   const described = new Set(PHASE_WORDS.map(([k]) => k));
   const missing = produced.filter(l => !described.has(l));
-  ok('ogni fase prodotta e descritta nella legenda', missing.length === 0,
+  ok('every phase it produces is described in the legend', missing.length === 0,
      missing.join(', ') || `${produced.length} fasi`);
   const dead = [...described].filter(k => !produced.includes(k));
-  ok('la legenda non descrive fasi che non esistono', dead.length === 0, dead.join(', '));
+  ok('the legend describes no phase that does not exist', dead.length === 0, dead.join(', '));
 
   // and the Targets legend is built from that same list
   const tsrc = await readFile(JS + 'views/targets.js', 'utf8');
-  ok('la legenda dei target usa quella lista', tsrc.includes('PHASE_WORDS'));
+  ok('the target legend uses that list', tsrc.includes('PHASE_WORDS'));
 }
 
 /* --- 11. a toast can be dismissed ------------------------------------- */
@@ -311,11 +311,11 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   const { toast } = await import(JS + 'chrome.js');
   const t = toast('Deployed', 'to one device', 'ok');
   const x = t.find('toast-x');
-  ok('il toast ha la croce', !!x);
+  ok('the toast has its cross', !!x);
   let removed = false;
   t.remove = () => { removed = true; };
   if (x) x.handlers.click();
-  ok('la croce lo chiude', removed);
+  ok('the cross closes it', removed);
 }
 
 /* --- 12. h() understands an id -------------------------------------- */
@@ -326,9 +326,9 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
 {
   const { h } = await import(JS + 'dom.js');
   const e = h('div#compat.compat.warn', 'x');
-  ok('h() ricava lid dal tag', e.id === 'compat', e.id || '(vuoto)');
-  ok('e le classi restano quelle', e.className === 'compat warn', e.className);
-  ok('senza id funziona come prima', h('span.mono').id === '');
+  ok('h() takes the id from the tag', e.id === 'compat', e.id || '(vuoto)');
+  ok('and the classes stay as they were', e.className === 'compat warn', e.className);
+  ok('with no id it works as before', h('span.mono').id === '');
 }
 
 /* --- 13. the page is covered while the server is missing --------------- */
@@ -336,34 +336,34 @@ ok('dopo un valore si completa la giunzione', contextAt('name==a ', 8).want === 
   const { serverGate } = await import(JS + 'chrome.js');
   const has = () => globalThis.document.__has('#offline');
   serverGate(false);
-  ok('senza server la pagina viene coperta', has());
+  ok('with no server the page is covered', has());
   serverGate(false);
-  ok('non ne mette due', globalThis.document.body.findAll('gate').length === 1);
+  ok('it does not put up two', globalThis.document.body.findAll('gate').length === 1);
   serverGate(true);
-  ok('quando torna si toglie da sola', !has());
+  ok('when it comes back it takes itself away', !has());
 }
 
 /* --- 14. notifications can be turned off, and are all on by default ---- */
 {
   const { NOTICES, noticeOn, setNotice } = await import(JS + 'prefs.js');
-  ok('ci sono sei categorie', NOTICES.length === 6, String(NOTICES.length));
-  ok('tutte attive senza aver scelto nulla', NOTICES.every(([id]) => noticeOn(id)));
+  ok('there are six categories', NOTICES.length === 6, String(NOTICES.length));
+  ok('all on, with nothing chosen', NOTICES.every(([id]) => noticeOn(id)));
   setNotice('deploy', false);
-  ok('spegnerne una funziona', !noticeOn('deploy'));
-  ok('e non tocca le altre', noticeOn('rollout') && noticeOn('devices'));
+  ok('turning one off works', !noticeOn('deploy'));
+  ok('and does not touch the others', noticeOn('rollout') && noticeOn('devices'));
   setNotice('deploy', true);
-  ok('e si riaccende', noticeOn('deploy'));
+  ok('and it comes back on', noticeOn('deploy'));
   // every category must be routed through the switch, or turning one off
   // silences most of it and not all
   const src = await readFile(JS + 'notices.js', 'utf8');
   const raised = [...src.matchAll(/notify\('([a-z]+)'/g)].map(m => m[1]);
   const known = new Set(NOTICES.map(([id]) => id));
-  ok('ogni notifica passa da una categoria nota',
+  ok('every notification goes through a known category',
      raised.every(k => known.has(k)), [...new Set(raised)].join(','));
-  ok('nessun toast sfugge agli interruttori',
+  ok('no toast escapes the switches',
      !/\n\s*toast\(/.test(src.replace(/const notify[\s\S]*?;\n/, '')),
-     'toast diretti in notices.js');
+     'toasts raised directly in notices.js');
 }
 
-console.log(`\n  ${pass} ok, ${failed} falliti`);
+console.log(`\n  ${pass} ok, ${failed} failed`);
 process.exit(failed ? 1 : 0);
