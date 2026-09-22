@@ -66,7 +66,7 @@ func fleetJSON(st service.FleetState) map[string]any {
 		"inSystems":  f.InSystems,
 		"manifestId": f.ManifestID, "manifest": f.ManifestLabel, "systems": nil,
 		"orchestrator": map[string]any{"maxParallel": f.Orchestrator.MaxParallel, "maxFailed": f.Orchestrator.MaxFailed,
-			"byCentre": f.Orchestrator.ByCentre},
+			"byCentre": f.Orchestrator.ByCentre, "centres": f.Orchestrator.Centres},
 		"release": releaseJSON(st.Release), "pending": releaseJSON(st.Pending), "progress": nil,
 		"createdAt": f.CreatedAt, "createdBy": f.CreatedBy, "lastModifiedAt": f.LastModifiedAt,
 		"lastModifiedBy": f.LastModifiedBy,
@@ -138,6 +138,8 @@ type orchBody struct {
 	MaxParallel *int  `json:"maxParallel"`
 	MaxFailed   *int  `json:"maxFailed"`
 	ByCentre    *bool `json:"byCentre"`
+	// the centres it takes, in that order; [] or absent: every centre, by name
+	Centres *[]string `json:"centres"`
 }
 
 func setInt(dst *int, v *int) {
@@ -191,6 +193,9 @@ func (b fleetBody) apply(f *model.Fleet) {
 		setInt(&f.Orchestrator.MaxFailed, o.MaxFailed)
 		if o.ByCentre != nil {
 			f.Orchestrator.ByCentre = *o.ByCentre
+		}
+		if o.Centres != nil {
+			f.Orchestrator.Centres = *o.Centres
 		}
 	}
 }

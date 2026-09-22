@@ -81,6 +81,7 @@ type SystemRun struct {
 	DeploymentID int64
 	SystemKey    string
 	Group        string // its centre
+	GroupRank    int    // its centre's place in the order the deployment takes them
 	Status       string
 	CurrentOrder *int
 	Reason       string

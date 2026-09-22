@@ -58,6 +58,9 @@ type Orchestration struct {
 	MaxParallel int  // systems at a time
 	MaxFailed   int  // systems that may fail before the rest are left alone
 	ByCentre    bool // one centre at a time: the next once every system of the last is done
+	// Centres the orchestrator takes, in the order it takes them. Empty (the
+	// default): every centre of the channel, by name.
+	Centres []string
 }
 
 // Gate is what a fleet's upstream must show before a release may enter it.

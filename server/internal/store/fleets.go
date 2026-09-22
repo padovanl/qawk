@@ -20,7 +20,7 @@ const fleetCols = `f.id, f.name, f.description, f.colour, f.rule, f.ds_id,
 	f.wave_percent, f.wave_timeout_minutes, f.error_threshold,
 	f.freeze_reason, f.freeze_from, f.freeze_until,
 	f.manifest_id, (SELECT m.name FROM manifests m WHERE m.id = f.manifest_id),
-	f.orch_max_parallel, f.orch_max_failed, f.orch_by_centre,
+	f.orch_max_parallel, f.orch_max_failed, f.orch_by_centre, f.orch_centres,
 	f.created_at, f.created_by, f.last_modified_at, f.last_modified_by,
 	(SELECT count(*) FROM targets t WHERE t.fleet_id = f.id),
 	(SELECT count(*) FROM targets t WHERE t.fleet_id = f.id AND f.ds_id IS NOT NULL AND t.installed_ds_id = f.ds_id),
@@ -36,6 +36,7 @@ func scanFleet(r pgx.Row) (model.Fleet, error) {
 		&f.WavePercent, &f.WaveTimeoutMinutes, &f.ErrorThreshold,
 		&f.FreezeReason, &f.FreezeFrom, &f.FreezeUntil,
 		&f.ManifestID, &f.ManifestLabel, &f.Orchestrator.MaxParallel, &f.Orchestrator.MaxFailed, &f.Orchestrator.ByCentre,
+		&f.Orchestrator.Centres,
 		&f.CreatedAt, &f.CreatedBy, &f.LastModifiedAt, &f.LastModifiedBy,
 		&f.Members, &f.OnRelease, &f.Updating, &f.Failed, &f.InSystems)
 	return f, err
@@ -71,14 +72,15 @@ func (s *Store) CreateFleet(ctx context.Context, tx pgx.Tx, user string, now int
 		                    upstream_id, temporary, gate_min_devices, gate_min_success, gate_soak_minutes,
 		                    approval_required, wave_percent, wave_timeout_minutes, error_threshold,
 		                    created_at, created_by, last_modified_at, last_modified_by, auto_promote,
-		                    orch_max_parallel, orch_max_failed, orch_by_centre)
+		                    orch_max_parallel, orch_max_failed, orch_by_centre, orch_centres)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $16, $17, $18,
-		        $19, $20, $21)
+		        $19, $20, $21, $22)
 		RETURNING id`,
 		s.tenant, f.Name, f.Description, f.Colour, f.Rule, f.ActionType,
 		f.UpstreamID, f.Temporary, f.Gate.MinDevices, f.Gate.MinSuccess, f.Gate.SoakMinutes,
 		f.Gate.ApprovalRequired, f.WavePercent, f.WaveTimeoutMinutes, f.ErrorThreshold, now, user,
-		f.AutoPromote, f.Orchestrator.MaxParallel, f.Orchestrator.MaxFailed, f.Orchestrator.ByCentre).Scan(&id)
+		f.AutoPromote, f.Orchestrator.MaxParallel, f.Orchestrator.MaxFailed, f.Orchestrator.ByCentre,
+		f.Orchestrator.Centres).Scan(&id)
 	return id, err
 }
 
@@ -89,13 +91,13 @@ func (s *Store) UpdateFleet(ctx context.Context, tx pgx.Tx, user string, now int
 		       gate_soak_minutes = $12, approval_required = $13, wave_percent = $14,
 		       wave_timeout_minutes = $15, error_threshold = $16,
 		       last_modified_at = $17, last_modified_by = $18, auto_promote = $19,
-		       orch_max_parallel = $20, orch_max_failed = $21, orch_by_centre = $22
+		       orch_max_parallel = $20, orch_max_failed = $21, orch_by_centre = $22, orch_centres = $23
 		WHERE tenant = $1 AND id = $2`,
 		s.tenant, f.ID, f.Name, f.Description, f.Colour, f.Rule, f.ActionType,
 		f.UpstreamID, f.Temporary, f.Gate.MinDevices, f.Gate.MinSuccess,
 		f.Gate.SoakMinutes, f.Gate.ApprovalRequired, f.WavePercent,
 		f.WaveTimeoutMinutes, f.ErrorThreshold, now, user, f.AutoPromote,
-		f.Orchestrator.MaxParallel, f.Orchestrator.MaxFailed, f.Orchestrator.ByCentre)
+		f.Orchestrator.MaxParallel, f.Orchestrator.MaxFailed, f.Orchestrator.ByCentre, f.Orchestrator.Centres)
 	return err
 }
 

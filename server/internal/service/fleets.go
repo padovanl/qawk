@@ -144,6 +144,21 @@ func (s *Service) SaveFleet(ctx context.Context, user string, f model.Fleet, rel
 	if f.Orchestrator.MaxParallel < 0 || f.Orchestrator.MaxFailed < 0 {
 		return 0, httpx.Validation("the orchestrator's systems at a time, and systems that may fail, cannot be negative")
 	}
+	// the centres the orchestrator takes, in order: named twice is a mistake
+	// worth saying, since the second one would never be reached
+	var centres []string
+	seen := map[string]bool{}
+	for _, c := range f.Orchestrator.Centres {
+		if c = strings.TrimSpace(c); c == "" {
+			continue
+		}
+		if seen[c] {
+			return 0, httpx.Validation("the orchestrator's centres name " + c + " twice")
+		}
+		seen[c] = true
+		centres = append(centres, c)
+	}
+	f.Orchestrator.Centres = centres
 	for _, c := range []struct {
 		v    int
 		name string
@@ -330,8 +345,8 @@ func (s *Service) orchestrate(ctx context.Context, tx pgx.Tx, user string, f mod
 	}
 	fid := f.ID
 	d := model.SystemDeployment{Name: fmt.Sprintf("%s · %s · release %d", f.Name, m.Name, r.ID), ManifestID: m.ID,
-		FleetID: &fid, MaxParallel: max(1, f.Orchestrator.MaxParallel), MaxFailed: f.Orchestrator.MaxFailed,
-		ActionType: f.ActionType, ByGroup: f.Orchestrator.ByCentre}
+		FleetID: &fid, Groups: f.Orchestrator.Centres, MaxParallel: max(1, f.Orchestrator.MaxParallel),
+		MaxFailed: f.Orchestrator.MaxFailed, ActionType: f.ActionType, ByGroup: f.Orchestrator.ByCentre}
 	id, err := s.st.CreateSystemDeployment(ctx, tx, user, now, d)
 	if err != nil {
 		return err
@@ -339,16 +354,19 @@ func (s *Service) orchestrate(ctx context.Context, tx pgx.Tx, user string, f mod
 	if d, err = s.st.SystemDeployment(ctx, tx, id); err != nil {
 		return err
 	}
-	keys, groups, note, err := s.scope(ctx, d)
+	p, note, err := s.scope(ctx, d)
 	if err != nil {
-		// what it says, not the error code in front of it
+		// No system in the channel yet -- but one may arrive: a centre is moved
+		// into the channel tomorrow, a system registers tonight. The deployment
+		// is left finished with the reason, and adoptSystems reopens it when
+		// there is something to take.
 		why := err.Error()
 		if i := strings.Index(why, ": "); i > 0 && strings.HasPrefix(why, "hawkbit.") {
 			why = why[i+2:]
 		}
 		d.Status, d.FinishedAt, d.Reason = model.SDFinished, &now, why
 	} else {
-		if err := s.st.CreateRuns(ctx, tx, id, keys, groups); err != nil {
+		if _, err := s.st.CreateRuns(ctx, tx, id, p.Keys, p.Groups, p.Ranks); err != nil {
 			return err
 		}
 		d.Status, d.StartedBy, d.StartedAt, d.Reason = model.SDRunning, &user, &now, note
@@ -815,6 +833,14 @@ func (s *Service) deliver(ctx context.Context, f model.Fleet, now int64) error {
 		return err
 	}
 	if len(ids) == 0 {
+		// A completed release whose orchestrator is taking systems again: they
+		// joined the channel after it had reached everyone -- a centre moved
+		// into prod. It is under way again while it does, as it is for the
+		// devices that stand alone and join late.
+		if rel.Status == model.ReleaseCompleted && !s.systemsDone(ctx, rel) {
+			s.log.Info("fleet release reopened: systems joined after it completed", "fleet", f.Name, "set", ds.Label())
+			return s.st.ReopenRelease(ctx, rel.ID)
+		}
 		// done: the devices that stand alone on it (a fleet of systems only
 		// has none), and the orchestrator finished with the systems
 		standalone := p.OnRelease == p.Members && (p.Members > 0 || rel.ManifestID != nil)

@@ -338,15 +338,14 @@ func (s *Service) DeleteSystemDeployment(ctx context.Context, user string, id in
 
 // SystemDeploymentCommand is start, pause, resume or abort.
 func (s *Service) SystemDeploymentCommand(ctx context.Context, user string, id int64, cmd, reason string) error {
-	var d model.SystemDeployment
-	var keys, groups []string
+	var p picked
 	var note string
 	if cmd == "start" {
-		var err error
-		if d, err = s.st.SystemDeployment(ctx, s.st.DB(), id); err != nil {
+		d, err := s.st.SystemDeployment(ctx, s.st.DB(), id)
+		if err != nil {
 			return err
 		}
-		if keys, groups, note, err = s.scope(ctx, d); err != nil {
+		if p, note, err = s.scope(ctx, d); err != nil {
 			return err
 		}
 	}
@@ -372,7 +371,7 @@ func (s *Service) SystemDeploymentCommand(ctx context.Context, user string, id i
 					return httpx.Validation(fmt.Sprintf("%s: %s", c.ComponentType, err.Error()))
 				}
 			}
-			if err := s.st.CreateRuns(ctx, tx, id, keys, groups); err != nil {
+			if _, err := s.st.CreateRuns(ctx, tx, id, p.Keys, p.Groups, p.Ranks); err != nil {
 				return err
 			}
 			d.Status, d.StartedBy, d.StartedAt, d.Reason = model.SDRunning, &user, &now, note
@@ -402,17 +401,26 @@ func (s *Service) SystemDeploymentCommand(ctx context.Context, user string, id i
 	})
 }
 
-// scope finds the systems a deployment takes: of its manifest's type, in its
-// channel and centres, or the ones it names -- with each one's centre, in the
-// order they are taken (the centres in turn, when it goes one at a time).
-func (s *Service) scope(ctx context.Context, d model.SystemDeployment) (keys, groups []string, note string, err error) {
-	m, err := s.st.Manifest(ctx, s.st.DB(), d.ManifestID)
-	if err != nil {
-		return nil, nil, "", err
-	}
+// picked is the systems a deployment takes, in the order it takes them,
+// with each one's centre and that centre's place in the order.
+type picked struct {
+	Keys    []string
+	Groups  []string
+	Ranks   []int32
+	LeftOut int // systems of the channel whose devices are not all in it (yet)
+}
+
+// pickSystems finds the systems a deployment takes: of its manifest's type,
+// in its channel and centres, or the ones it names. The centres go in the
+// order the deployment names them, then by name; inside a centre, by system.
+//
+// It is asked again at every tick, not only when the deployment starts: what
+// a channel holds changes under it (see adoptSystems).
+func (s *Service) pickSystems(ctx context.Context, d model.SystemDeployment, m model.Manifest) (picked, error) {
+	var p picked
 	all, err := s.Systems(ctx, m.SystemTypeID)
 	if err != nil {
-		return nil, nil, "", err
+		return p, err
 	}
 	have := map[string]SystemInstance{}
 	for _, in := range all {
@@ -425,31 +433,66 @@ func (s *Service) scope(ctx context.Context, d model.SystemDeployment) (keys, gr
 		}
 		return len(d.Groups) == 0 || slices.Contains(d.Groups, in.Group)
 	}
-	var picked []SystemInstance
-	leftOut := 0
+	var mine []SystemInstance
 	if d.Systems == nil {
 		for _, in := range all {
 			switch {
 			case inScope(in):
-				picked = append(picked, in)
+				mine = append(mine, in)
 			case d.FleetID != nil && in.Mixed && slices.Contains(in.Fleets, *d.FleetID) &&
 				(len(d.Groups) == 0 || slices.Contains(d.Groups, in.Group)):
-				leftOut++
+				p.LeftOut++
 			}
 		}
 	} else {
 		for _, k := range d.Systems {
 			in, ok := have[k]
 			if !ok {
-				return nil, nil, "", httpx.Validation(fmt.Sprintf("no device of %s says it is in system %q", m.SystemType, k))
+				return p, httpx.Validation(fmt.Sprintf("no device of %s says it is in system %q", m.SystemType, k))
 			}
 			if !inScope(in) {
-				return nil, nil, "", httpx.Validation(fmt.Sprintf("system %q is not in the deployment's channel and centres", k))
+				return p, httpx.Validation(fmt.Sprintf("system %q is not in the deployment's channel and centres", k))
 			}
-			picked = append(picked, in)
+			mine = append(mine, in)
 		}
 	}
-	if len(picked) == 0 {
+	// the centres the deployment names go in that order; any other by name,
+	// after them -- a deployment that names none takes them all, by name
+	rank := func(g string) int {
+		if i := slices.Index(d.Groups, g); i >= 0 {
+			return i
+		}
+		return len(d.Groups)
+	}
+	sort.SliceStable(mine, func(i, j int) bool {
+		if ri, rj := rank(mine[i].Group), rank(mine[j].Group); ri != rj {
+			return ri < rj
+		}
+		if mine[i].Group != mine[j].Group {
+			return mine[i].Group < mine[j].Group
+		}
+		return mine[i].Key < mine[j].Key
+	})
+	for _, in := range mine {
+		p.Keys = append(p.Keys, in.Key)
+		p.Groups = append(p.Groups, in.Group)
+		p.Ranks = append(p.Ranks, int32(rank(in.Group)))
+	}
+	return p, nil
+}
+
+// scope is pickSystems for a deployment about to start: it refuses one that
+// would take no system at all, and says what it had to leave out.
+func (s *Service) scope(ctx context.Context, d model.SystemDeployment) (picked, string, error) {
+	m, err := s.st.Manifest(ctx, s.st.DB(), d.ManifestID)
+	if err != nil {
+		return picked{}, "", err
+	}
+	p, err := s.pickSystems(ctx, d, m)
+	if err != nil {
+		return picked{}, "", err
+	}
+	if len(p.Keys) == 0 {
 		where := ""
 		if d.Fleet != nil {
 			where += " in " + *d.Fleet
@@ -457,21 +500,98 @@ func (s *Service) scope(ctx context.Context, d model.SystemDeployment) (keys, gr
 		if len(d.Groups) > 0 {
 			where += " in " + strings.Join(d.Groups, ", ")
 		}
-		return nil, nil, "", httpx.Validation("no system of type " + m.SystemType + where + " has any device yet")
+		return p, "", httpx.Validation("no system of type " + m.SystemType + where + " has any device yet")
 	}
-	sort.SliceStable(picked, func(i, j int) bool {
-		if picked[i].Group != picked[j].Group {
-			return picked[i].Group < picked[j].Group
+	note := ""
+	if p.LeftOut > 0 && d.Fleet != nil {
+		note = fmt.Sprintf("%d system(s) left out for now: their devices are not all in %s", p.LeftOut, *d.Fleet)
+	}
+	return p, note, nil
+}
+
+// adoptSystems lets a channel's orchestrator follow the channel: the systems
+// that joined it after the release started are taken with the same manifest,
+// and the ones that left are given up before they start.
+//
+// A release's SET keeps reaching new members for as long as it is the
+// channel's release -- deliver even reopens a completed one for devices that
+// register afterwards. Its MANIFEST did not: the systems were chosen once, in
+// orchestrate, so a centre moved into prod after prod's release had started
+// got nothing at all. Its standalone devices took prod's set; its systems were
+// left out of the orchestrator, and -- being system members, whom a channel's
+// delivery never touches -- out of everything else too. They waited for ever,
+// without a word in the console or the log.
+//
+// The same silence caught a centre that was only moving: tickCentres moves a
+// centre's devices a hundred at a time, so a large system can be split across
+// two channels for a moment, and a release starting in that moment left it
+// out for good. Asking again every tick heals that by itself.
+func (s *Service) adoptSystems(ctx context.Context) error {
+	fleets, err := s.st.Fleets(ctx)
+	if err != nil {
+		return err
+	}
+	now := httpx.Now()
+	for _, f := range fleets {
+		rel, err := s.st.CurrentRelease(ctx, s.st.DB(), f.ID)
+		if err != nil {
+			return err
 		}
-		return picked[i].Key < picked[j].Key
-	})
-	for _, in := range picked {
-		keys, groups = append(keys, in.Key), append(groups, in.Group)
+		if rel == nil || rel.SystemDeploymentID == nil || rel.Status == model.ReleaseHalted || f.Frozen(now) {
+			continue
+		}
+		if err := s.rescope(ctx, f, *rel.SystemDeploymentID, now); err != nil && ctx.Err() == nil {
+			s.log.Warn("orchestrator scope", "fleet", f.Name, "err", err)
+		}
 	}
-	if leftOut > 0 && d.Fleet != nil {
-		note = fmt.Sprintf("%d system(s) left out: their devices are not all in %s", leftOut, *d.Fleet)
+	return nil
+}
+
+func (s *Service) rescope(ctx context.Context, f model.Fleet, deployment, now int64) error {
+	d, err := s.st.SystemDeployment(ctx, s.st.DB(), deployment)
+	if err != nil {
+		return err
 	}
-	return keys, groups, note, nil
+	// A deployment stopped on purpose (paused, aborted) or by its own failures
+	// is not started again because a centre moved: someone decides that.
+	if d.Status != model.SDRunning && d.Status != model.SDFinished {
+		return nil
+	}
+	m, err := s.st.Manifest(ctx, s.st.DB(), d.ManifestID)
+	if err != nil {
+		return err
+	}
+	p, err := s.pickSystems(ctx, d, m)
+	if err != nil {
+		return err
+	}
+	added, err := s.st.CreateRuns(ctx, s.st.DB(), d.ID, p.Keys, p.Groups, p.Ranks)
+	if err != nil {
+		return err
+	}
+	dropped, err := s.st.DropPendingRuns(ctx, s.st.DB(), d.ID, p.Keys,
+		"given up: it left "+f.Name+" before the orchestrator reached it")
+	if err != nil {
+		return err
+	}
+	if err := s.st.ReRank(ctx, s.st.DB(), d.ID, p.Groups, p.Ranks); err != nil {
+		return err
+	}
+	if added > 0 {
+		s.log.Info("orchestrator took systems that joined the channel", "fleet", f.Name,
+			"deployment", d.Name, "systems", added)
+	}
+	if dropped > 0 {
+		s.log.Info("orchestrator gave up systems that left the channel", "fleet", f.Name,
+			"deployment", d.Name, "systems", dropped)
+	}
+	if added > 0 && d.Status == model.SDFinished {
+		// it had finished with the systems it knew: it is under way again
+		d.Status, d.FinishedAt = model.SDRunning, nil
+		d.Reason = fmt.Sprintf("%d system(s) joined %s after it had finished", added, f.Name)
+		return s.st.SetSystemDeploymentState(ctx, s.st.DB(), d)
+	}
+	return nil
 }
 
 func ifNote(n string) string {
@@ -514,6 +634,11 @@ func (s *Service) RollbackSystem(ctx context.Context, user string, deployment, r
 func (s *Service) tickSystems(ctx context.Context) error {
 	if err := s.refreshMembers(ctx, false); err != nil {
 		return err
+	}
+	// first what each channel's orchestrator should be taking by now, so a
+	// system that joined a moment ago is stepped in this same tick
+	if err := s.adoptSystems(ctx); err != nil && ctx.Err() == nil {
+		s.log.Warn("orchestrator scope", "err", err)
 	}
 	ds, err := s.st.SystemDeployments(ctx, []string{model.SDRunning})
 	if err != nil {

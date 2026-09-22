@@ -408,15 +408,27 @@ func (a *API) importManifest(w http.ResponseWriter, r *http.Request) {
 			httpx.WriteError(w, httpx.Validation(fmt.Sprintf("%s: there is no distribution set %q", comp, c.ArtifactName)))
 			return
 		}
-		m.Components = append(m.Components, model.ManifestComponent{ComponentType: comp, DSID: ds, Order: c.UpdateStrategy.Order})
+		// a component with no update_strategy goes in the first order, with the
+		// others that name none: Mender's own default
+		order := c.UpdateStrategy.Order
+		if order < 1 {
+			order = 1
+		}
+		m.Components = append(m.Components, model.ManifestComponent{ComponentType: comp, DSID: ds, Order: order})
 	}
 	sort.Slice(m.Components, func(i, j int) bool { return m.Components[i].Order < m.Components[j].Order })
+	// the same manifest again is the same manifest, as a topology is: names
+	// are unique, so importing twice would fail on the second
+	status := http.StatusCreated
+	if old, err := a.st.ManifestByName(r.Context(), a.st.DB(), m.Name); err == nil {
+		m.ID, status = old.ID, http.StatusOK
+	}
 	id, err := a.svc.SaveManifest(r.Context(), auth.User(r.Context()), m)
 	if err != nil {
 		httpx.WriteError(w, err)
 		return
 	}
-	a.sendManifest(w, r, id, http.StatusCreated)
+	a.sendManifest(w, r, id, status)
 }
 
 func (a *API) exportManifest(w http.ResponseWriter, r *http.Request) {

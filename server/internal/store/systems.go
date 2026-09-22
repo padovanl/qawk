@@ -275,6 +275,15 @@ func (s *Store) Manifest(ctx context.Context, q Q, id int64) (model.Manifest, er
 	return m, err
 }
 
+// ManifestByName finds a manifest by its name.
+func (s *Store) ManifestByName(ctx context.Context, q Q, name string) (model.Manifest, error) {
+	var id int64
+	if err := q.QueryRow(ctx, `SELECT id FROM manifests WHERE tenant = $1 AND name = $2`, s.tenant, name).Scan(&id); err != nil {
+		return model.Manifest{}, notFound(err, "Manifest", name)
+	}
+	return s.Manifest(ctx, q, id)
+}
+
 func (s *Store) SaveManifest(ctx context.Context, tx pgx.Tx, user string, now int64, m model.Manifest) (int64, error) {
 	id := m.ID
 	if id == 0 {
@@ -410,19 +419,29 @@ func (s *Store) DeleteSystemDeployment(ctx context.Context, tx pgx.Tx, id int64)
 // ------------------------------------------------------------ runs
 
 const runCols = `r.id, r.deployment_id, r.system_key, r.status, r.current_order, r.reason, r.started_at, r.stage_at,
-	r.rollback_at, r.finished_at, r.group_key`
+	r.rollback_at, r.finished_at, r.group_key, r.group_rank`
+
+// runOrder is the order the engine takes the runs in: the centres as the
+// deployment decided them, then by name, and inside a centre by system.
+const runOrder = ` ORDER BY r.group_rank, r.group_key, r.system_key`
+
+func scanRun(r pgx.Row) (model.SystemRun, error) {
+	var n model.SystemRun
+	err := r.Scan(&n.ID, &n.DeploymentID, &n.SystemKey, &n.Status, &n.CurrentOrder, &n.Reason, &n.StartedAt,
+		&n.StageAt, &n.RollbackAt, &n.FinishedAt, &n.Group, &n.GroupRank)
+	return n, err
+}
 
 func (s *Store) Runs(ctx context.Context, q Q, deployment int64) ([]model.SystemRun, error) {
-	rows, err := q.Query(ctx, "SELECT "+runCols+" FROM system_runs r WHERE r.deployment_id = $1 ORDER BY r.group_key, r.system_key", deployment)
+	rows, err := q.Query(ctx, "SELECT "+runCols+" FROM system_runs r WHERE r.deployment_id = $1"+runOrder, deployment)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []model.SystemRun{}
 	for rows.Next() {
-		var r model.SystemRun
-		if err := rows.Scan(&r.ID, &r.DeploymentID, &r.SystemKey, &r.Status, &r.CurrentOrder, &r.Reason, &r.StartedAt,
-			&r.StageAt, &r.RollbackAt, &r.FinishedAt, &r.Group); err != nil {
+		r, err := scanRun(rows)
+		if err != nil {
 			return nil, err
 		}
 		out = append(out, r)
@@ -431,18 +450,43 @@ func (s *Store) Runs(ctx context.Context, q Q, deployment int64) ([]model.System
 }
 
 func (s *Store) Run(ctx context.Context, q Q, deployment, id int64) (model.SystemRun, error) {
-	var r model.SystemRun
-	err := q.QueryRow(ctx, "SELECT "+runCols+" FROM system_runs r WHERE r.deployment_id = $1 AND r.id = $2", deployment, id).
-		Scan(&r.ID, &r.DeploymentID, &r.SystemKey, &r.Status, &r.CurrentOrder, &r.Reason, &r.StartedAt, &r.StageAt,
-			&r.RollbackAt, &r.FinishedAt, &r.Group)
+	r, err := scanRun(q.QueryRow(ctx, "SELECT "+runCols+" FROM system_runs r WHERE r.deployment_id = $1 AND r.id = $2",
+		deployment, id))
 	return r, notFound(err, "SystemRun", id)
 }
 
-// CreateRuns records the systems a deployment takes, each with its centre.
-func (s *Store) CreateRuns(ctx context.Context, tx pgx.Tx, deployment int64, keys, groups []string) error {
-	_, err := tx.Exec(ctx, `INSERT INTO system_runs (deployment_id, system_key, group_key)
-		SELECT $1, u.k, u.g FROM unnest($2::text[], $3::text[]) AS u(k, g) ON CONFLICT DO NOTHING`,
-		deployment, keys, groups)
+// CreateRuns records the systems a deployment takes, each with its centre and
+// that centre's place in the order. A system the deployment already has is
+// left as it is -- it may have run, failed or been skipped already -- so the
+// orchestrator can ask again for a channel whose centres change under it.
+// It answers how many systems it had never seen before.
+func (s *Store) CreateRuns(ctx context.Context, q Q, deployment int64, keys, groups []string, ranks []int32) (int64, error) {
+	tag, err := q.Exec(ctx, `INSERT INTO system_runs (deployment_id, system_key, group_key, group_rank)
+		SELECT $1, u.k, u.g, u.r FROM unnest($2::text[], $3::text[], $4::int[]) AS u(k, g, r)
+		ON CONFLICT (deployment_id, system_key) DO NOTHING`, deployment, keys, groups, ranks)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// DropPendingRuns gives up the systems a deployment has not started that are
+// no longer its own -- a centre moved out of the channel. It answers how many.
+func (s *Store) DropPendingRuns(ctx context.Context, q Q, deployment int64, keep []string, why string) (int64, error) {
+	tag, err := q.Exec(ctx, `UPDATE system_runs SET status = 'skipped', reason = $3
+		WHERE deployment_id = $1 AND status = 'pending' AND NOT (system_key = ANY($2::text[]))`,
+		deployment, keep, why)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
+// ReRank moves the runs a deployment has not started into a new centre order.
+func (s *Store) ReRank(ctx context.Context, q Q, deployment int64, groups []string, ranks []int32) error {
+	_, err := q.Exec(ctx, `UPDATE system_runs r SET group_rank = u.r
+		FROM unnest($2::text[], $3::int[]) AS u(g, r)
+		WHERE r.deployment_id = $1 AND r.group_key = u.g AND r.group_rank <> u.r`, deployment, groups, ranks)
 	return err
 }
 
