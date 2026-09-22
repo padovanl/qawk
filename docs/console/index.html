@@ -235,6 +235,88 @@ reason. No release reaches it until you lift it. You can set a start and an end,
 so "no updates during league nights" can be arranged in advance. The reason is
 shown to anyone who tries to release into it, so nobody has to ask why.</p>
 
+<h2 id="practise">A fleet to practise on</h2>
+
+<p>You should not learn what the <b>halt</b> button does on the night a release
+goes wrong. <code>qawk-sim</code> gives you as many devices as you like, in
+whatever shape you like, that behave like real ones — and fail when you tell them
+to. Nothing in this section touches hardware.</p>
+
+<p>If you started the demo, you already have about 270 of them. To point some at a
+server of your own:</p>
+
+<pre><code># 40 devices in a channel called lab
+demo/simulate.sh --url http://localhost:8080 --token &lt;gateway token&gt; --fleet lab:40
+
+demo/simulate.sh --list     # what is running
+demo/simulate.sh --stop     # stop them all</code></pre>
+
+<p>Against the demo you can leave <code>--token</code> out — the script reads it
+from <code>demo/.gateway-token</code>.</p>
+
+<h3>Five experiments worth doing</h3>
+
+<table>
+<thead><tr><th>To see…</th><th>Do this</th><th>Then watch</th></tr></thead>
+<tbody>
+
+<tr><td><b>A release filling a channel</b></td>
+<td><code>--fleet dev:20 --fleet beta:40</code>, then release a set into <code>dev</code>.</td>
+<td><b>Fleets</b> — the bar fills, the counts move. <b>In progress</b> — the individual devices.</td></tr>
+
+<tr><td><b>A release halting on failures</b></td>
+<td>Release a set whose module name contains <code>broken</code>. The simulated devices fail anything so named.</td>
+<td>The channel goes <b>halted</b> within a minute, saying how many failed against the threshold. Then press <b>resume</b> and watch it not halt again for the same devices.</td></tr>
+
+<tr><td><b>A fleet that is not perfect</b></td>
+<td><code>demo/simulate.sh --fleet prod:200 -- -fail-rate 0.1</code> — one deployment in ten fails at random.</td>
+<td>What a real rollout looks like, and whether your error threshold is set somewhere sane.</td></tr>
+
+<tr><td><b>Waves</b></td>
+<td>Set the channel's <b>wave percent</b> to 25 with 200 devices, then release.</td>
+<td>Four waves instead of one flood. Set <code>-install-min 30s</code> to make each wave last long enough to see.</td></tr>
+
+<tr><td><b>A whole system rolling back</b></td>
+<td><code>--systems 16</code>, then in the extra arguments:<br><code>-- -fail-where device=device-07,device_type=device3,set=2.0</code></td>
+<td>Deploy manifest <code>device-system-2.0</code> in <b>Orchestrator</b>. Fifteen systems succeed; <code>device-07</code> fails at one component and <b>the whole of it</b> goes back to what it ran before.</td></tr>
+
+</tbody>
+</table>
+
+<h3>A fleet shaped like yours</h3>
+
+<p>Simulated devices report the same attributes real ones do, so channels rules,
+centres and system types pick them up exactly as they would the real thing:</p>
+
+<pre><code># three channels and a name to tell this run from others
+demo/simulate.sh --name shop --url http://localhost:8080 --token &lt;token&gt; \
+  --fleet dev:20 --fleet beta:40 --fleet prod:500
+
+# 16 systems -- a device1 with two device2 and a device3 -- across four centres
+demo/simulate.sh --name centres --url http://localhost:8080 --token &lt;token&gt; --systems 16</code></pre>
+
+<p>Each device is named <code>&lt;name&gt;-&lt;group&gt;-&lt;n&gt;</code>
+(<code>shop-prod-017</code>), so a run is easy to find and easy to stop:
+<code>demo/simulate.sh --stop shop</code>. Watch what they are doing with
+<code>docker logs -f qawk-sim-shop</code>.</p>
+
+<div class="note">
+<p><b>They download nothing.</b> A simulated device waits a random time and reports
+<code>finished</code> — so you can run five hundred of them on a laptop. It does
+answer a deployment outside its maintenance window the way SWUpdate does, and a
+download-only one as <code>downloaded</code>, so those behaviours are real.</p>
+</div>
+
+<div class="tip">
+<p><b>Do it on a scratch server.</b> Simulated devices register themselves and
+create data. Point them at the demo, or at a server you are happy to throw away —
+never at the one updating real machines.</p>
+</div>
+
+<p>Everything after <code>--</code> goes to <code>qawk-sim</code> unchanged. Full
+list: <code>docker run --rm --entrypoint qawk-sim qawk:local -help</code>, and
+<a href="../devices/#simulate">Connecting devices</a>.</p>
+
 <h2 id="yours">Making it yours</h2>
 
 <ul>

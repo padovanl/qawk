@@ -31,6 +31,7 @@
       { t: 'Ship an update, step by step', h: 'console/#ship' },
       { t: 'Reading what you see', h: 'console/#reading' },
       { t: 'When something goes wrong', h: 'console/#wrong' },
+      { t: 'A fleet to practise on', h: 'console/#practise' },
       { t: 'Making it yours', h: 'console/#yours' }
     ] },
     { t: 'Channels and releases', n: 4, items: [

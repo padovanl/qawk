@@ -63,7 +63,13 @@ how many of them are already there. Tick the centres and press <b>move</b>.</p>
 curl -u admin:$PW -X PUT -H 'Content-Type: application/json' \
   -d '{"centres": ["c03", "c04"], "fleetId": '$PROD'}' $Q/qawk/v1/centres</code></pre>
 
-<p><code>"fleetId": null</code> takes them out of any channel.</p>
+<div class="warn-box">
+<p><b><code>"fleetId": null</code> does not eject anybody.</b> It means "this centre
+is no longer in a channel", and its devices <b>stay where they are</b> — they are
+simply no longer pulled anywhere. To move a centre's devices somewhere else, put
+the centre in <i>that</i> channel; to leave them unmanaged, set it to
+<code>null</code> and move them by hand afterwards.</p>
+</div>
 
 <h3>What happens next</h3>
 
