@@ -190,6 +190,27 @@
     return '<span class="pill ' + m.toLowerCase() + '">' + m + '</span>';
   }
 
+  // An endpoint's path parameters: the API's common ones that its path really
+  // uses, then its own, in the order the path names them.
+  function pathParams(ep, api) {
+    var have = (api.pp || []).concat(ep.pp || []);
+    var out = [];
+    var seen = {};
+    var m = ep.p.match(/\{(\w+)\}/g) || [];
+    m.forEach(function (slot) {
+      var name = slot.slice(1, -1);
+      if (seen[name]) return;
+      seen[name] = true;
+      for (var i = 0; i < have.length; i++) {
+        if (have[i][0] === name) { out.push(have[i]); return; }
+      }
+      out.push([name, 'string', 1, '']);
+    });
+    // a documented parameter the path does not name is still worth showing
+    (ep.pp || []).forEach(function (p) { if (!seen[p[0]]) out.push(p); });
+    return out;
+  }
+
   function paramBlock(title, rows) {
     if (!rows || !rows.length) return '';
     var h = '<h3 id="' + title.toLowerCase().replace(/\W+/g, '-') + '">' + title + '</h3><div class="params">';
@@ -224,7 +245,9 @@
 
     var req = el('div');
     var body = '';
-    body += paramBlock('Path parameters', ep.pp);
+    // the parameters every path of this API carries (the tenant and the
+    // device, on the DDI) are documented once, on the API, and shown on each
+    body += paramBlock('Path parameters', pathParams(ep, api));
     body += paramBlock('Query parameters', ep.q);
     body += paramBlock('Body', ep.bf);
     if (body) { req.innerHTML = '<h2 id="request">Request</h2>' + body; left.appendChild(req); }

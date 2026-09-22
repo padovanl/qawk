@@ -1,0 +1,95 @@
+# Qawk CI: the checks a pull request has to pass.
+#
+# The end-to-end suites in server/test/ are not here: they want a scratch
+# server they may fill with data, and they take minutes. Run them locally --
+# CONTRIBUTING.md says how.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    name: Server (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: server/go.sum
+
+      - name: gofmt
+        working-directory: server
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "these files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: Build
+        working-directory: server
+        run: go build ./...
+
+      - name: Vet
+        working-directory: server
+        run: go vet ./...
+
+      - name: Test
+        working-directory: server
+        run: go test ./...
+
+      # A migration edited in place has already run on somebody's database,
+      # where it will never run again -- so the change silently does not exist
+      # there. New schema goes in a new file.
+      - name: No migration edited in place
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          changed=$(git diff --diff-filter=M --name-only \
+            "origin/${{ github.base_ref }}"...HEAD -- 'server/internal/db/migrations/*.sql' || true)
+          if [ -n "$changed" ]; then
+            echo "an existing migration was modified:"; echo "$changed"
+            echo "add a new migration instead"; exit 1
+          fi
+
+  console:
+    name: Console (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: The module tree loads
+        run: node console/test/smoke.mjs
+      - name: Every endpoint called is in the compatibility list
+        run: node console/test/compat.mjs
+
+  docs:
+    name: Documentation site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: The API spec parses, and every sample generates
+        run: node docs/check.mjs
+
+      - name: No broken internal links
+        run: python3 docs/check-links.py
+
+  images:
+    name: Images build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t qawk:ci server/
+      - run: docker build -t qawk-console:ci console/

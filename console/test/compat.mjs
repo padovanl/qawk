@@ -41,7 +41,10 @@ async function sources(dir) {
 /* A template literal may hold quotes inside its ${...}, so it cannot be read
    with the same rule as a quoted string. And a path built by concatenation --
    del('/targets/' + id) -- ends at the slash, which stands for a parameter. */
-const CALL = /\b(get|post|put|del|upload)\(\s*(?:`([^`]*)`|'([^']*)'|"([^"]*)")/g;
+/* Not preceded by a dot: `qawk.get('/fleets')` is a call to Qawk's own API,
+   which is not hawkBit's and is not in the compatibility list. \b would match
+   after the dot and file it under /rest/v1/fleets, which does not exist. */
+const CALL = /(?<![.\w$])(get|post|put|del|upload)\(\s*(?:`([^`]*)`|'([^']*)'|"([^"]*)")/g;
 const called = new Map();
 for (const f of await sources(JS)) {
   const src = await readFile(f, 'utf8');
@@ -76,11 +79,30 @@ const EXPANDS = {
 const UNNAMEABLE = new Set(['/rest/v1/{}', '/rest/v1/{}/{}']);
 
 const listed = new Map(Object.entries(NEEDED).map(([p, ms]) => [shape(p), new Set(ms)]));
+
+/* A call site may spell a parameter out -- get('/system/configs/pollingTime')
+   -- where the list names the shape it belongs to,
+   /rest/v1/system/configs/{keyName}. Try the path as written first, then with
+   each single segment stood in for, and take the listed shape that matches. */
+function find(path) {
+  const exact = listed.get(shape(path));
+  if (exact) return exact;
+  const parts = path.split('/');
+  for (let i = parts.length - 1; i > 0; i--) {
+    if (parts[i] === '{}' || parts[i] === '') continue;
+    const tried = parts.slice();
+    tried[i] = '{}';
+    const have = listed.get(tried.join('/'));
+    if (have) return have;
+  }
+  return undefined;
+}
+
 const unlisted = [];
 for (const [p, methods] of called) {
   if (UNNAMEABLE.has(p)) continue;
   for (const real of EXPANDS[p] || [p]) {
-    const have = listed.get(shape(real));
+    const have = find(real);
     if (!have) { unlisted.push(`${real} (${[...methods].join(',')})`); continue; }
     const gone = [...methods].filter(m => !have.has(m));
     if (gone.length) unlisted.push(`${real} — ${gone.join(',')} not listed`);

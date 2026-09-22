@@ -606,6 +606,11 @@ window.QAWK_API = {
       '&lt;key&gt;</code>) or its own <b>target token</b> (<code>Authorization: TargetToken ' +
       '&lt;key&gt;</code>). With gateway tokens enabled, a device that has never been seen registers ' +
       'itself at its first poll.',
+    // every path here begins with them, so they are documented once
+    pp: [
+      ['tenant', 'string', 1, 'The tenant. <code>DEFAULT</code> unless <code>QAWK_TENANT</code> says otherwise.'],
+      ['controllerId', 'string', 1, 'The device\'s id — what SWUpdate calls <code>id</code>.']
+    ],
     groups: [
       { t: 'Polling', eps: [
         { id: 'ddi-base', m: 'GET', p: '/{tenant}/controller/v1/{controllerId}', t: 'Poll',
@@ -615,8 +620,6 @@ window.QAWK_API = {
              '<code>_links</code>: <code>deploymentBase</code> for an update, ' +
              '<code>cancelAction</code> for one to stop, <code>configData</code> when Qawk wants the ' +
              'device to say what it is.',
-          pp: [['tenant', 'string', 1, 'The tenant. <code>DEFAULT</code> unless <code>QAWK_TENANT</code> says otherwise.'],
-               ['controllerId', 'string', 1, 'The device\'s id — what SWUpdate calls <code>id</code>.']],
           res: { 200: { d: 'What to do next.', ex: {
             config: { polling: { sleep: '00:05:00' } },
             _links: { deploymentBase: { href: 'https://qawk.example.com/DEFAULT/controller/v1/device-0001/deploymentBase/9120?c=1234567890' } } } } } },

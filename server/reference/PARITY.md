@@ -1,9 +1,17 @@
-# Parità con hawkBit 1.1.0 — tutte le operazioni
+# hawkBit 1.1.0 parity — every operation
 
-Generata dall'OpenAPI di hawkBit 1.1.0 (file accanto). Una riga per operazione:
-`[ ]` da fare, `[x]` fatta e coperta da test. L'ordine segue le aree del server.
+Generated from hawkBit 1.1.0's OpenAPI descriptions (the files beside this
+one). One line per operation, in the order of the server's own areas.
 
-## Direct Device Integration API (device)
+> **This file is a checklist kept by hand, and the boxes in it are not the
+> authoritative answer.** What a given server really implements is what that
+> server says: `GET /v3/api-docs/swagger-config` lists the groups, and
+> `GET /v3/api-docs/<group>` returns hawkBit's own description filtered to the
+> operations that are actually routed. Generate clients from that, not from
+> this. What "the same as hawkBit" means, and the five deliberate differences,
+> are in [../README.md](../README.md#hawkbit-parity).
+
+## Direct Device Integration API (devices)
 
 ### DDI Root Controller
 
@@ -24,7 +32,7 @@ Generata dall'OpenAPI di hawkBit 1.1.0 (file accanto). Una riga per operazione:
 - [ ] `GET    /{tenant}/controller/v1/{controllerId}/softwaremodules/{softwareModuleId}/artifacts/{fileName}` — Artifact download
 - [ ] `GET    /{tenant}/controller/v1/{controllerId}/softwaremodules/{softwareModuleId}/artifacts/{fileName}.MD5SUM` — MD5 checksum download
 
-## Management API (GUI e script)
+## Management API (the console, and scripts)
 
 ### Actions
 
