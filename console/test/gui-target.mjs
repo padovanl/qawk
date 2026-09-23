@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* What does the console show for one device, right now?
  *
  *     node console/test/gui-target.mjs <controllerId>

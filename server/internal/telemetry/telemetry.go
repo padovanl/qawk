@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package telemetry sends Qawk's metrics and traces to an OpenTelemetry
 // collector over OTLP/HTTP (a Qawk addition).
 //

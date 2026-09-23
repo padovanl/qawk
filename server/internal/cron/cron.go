@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package cron reads the schedules of hawkBit's maintenance windows: Quartz
 // cron expressions, as hawkBit takes them.
 //

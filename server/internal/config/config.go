@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package config reads Qawk's settings from the environment.
 //
 // Everything that differs between a laptop, the demo bench and a real server
@@ -84,6 +87,14 @@ type Config struct {
 	// still pointed at the old URL is told where to go.
 	RedirectHTTP string
 
+	// SourceURL is where the source of THIS build can be had. Qawk is AGPL,
+	// and section 13 says a modified version offered over a network must
+	// offer its users that version's source -- so a fork has to be able to
+	// point here at itself. It is shown on the console's About page and
+	// answered by /qawk/v1/info, which is what "prominently offer" means for
+	// a server with a web console and an API.
+	SourceURL string
+
 	LogLevel string
 }
 
@@ -120,6 +131,7 @@ func Load() (Config, error) {
 		DefaultPollingTime: env("QAWK_POLLING_TIME", "00:05:00"),
 		LogLevel:           env("QAWK_LOG_LEVEL", "info"),
 		MetricsToken:       env("QAWK_METRICS_TOKEN", ""),
+		SourceURL:          strings.TrimRight(strings.TrimSpace(env("QAWK_SOURCE_URL", "https://github.com/padovanl/qawk")), "/"),
 	}
 	for _, o := range strings.Split(env("QAWK_CORS_ORIGINS", ""), ",") {
 		if o = strings.TrimRight(strings.TrimSpace(o), "/"); o != "" {
@@ -157,6 +169,13 @@ func Load() (Config, error) {
 	}
 	if c.AdminPassword == "" {
 		return c, fmt.Errorf("QAWK_ADMIN_PASSWORD must not be empty")
+	}
+	// Unset falls back to the default, which is right -- you cannot blank it by
+	// forgetting. Set to whitespace is someone trying to blank it on purpose,
+	// and that would hide the offer the licence requires, so it is refused.
+	if c.SourceURL == "" {
+		return c, fmt.Errorf("QAWK_SOURCE_URL must not be blank: the AGPL requires this build " +
+			"to say where its source is. Point it at your own repository if you have changed Qawk")
 	}
 	n, err := strconv.Atoi(env("QAWK_DB_MAX_CONNS", "20"))
 	if err != nil || n < 2 {

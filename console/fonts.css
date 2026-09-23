@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+   Copyright (C) 2026 Luca Padovan */
+
 /* Self-hosted so the console needs nothing from the internet: a bowling
    centre's server may have no way out, and a page that waits on Google
    for its font renders in the fallback anyway. Latin subsets only. */

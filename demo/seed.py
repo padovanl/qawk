@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 """Sample data for the Qawk demo -- run by demo/start.sh; safe to run again.
 
   --stage base      the gateway token, the catalogue, the channels, the

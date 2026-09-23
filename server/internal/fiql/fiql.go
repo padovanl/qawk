@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package fiql turns hawkBit's query language (FIQL/RSQL, the "q" parameter)
 // into a SQL condition.
 //

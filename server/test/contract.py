@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 """Does Qawk answer the way hawkBit 1.1.0 answers?
 
     python3 server/test/contract.py [http://localhost:18080]

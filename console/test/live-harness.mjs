@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* Runs the console's real views against a real hawkBit, under node.
  *
  * Not a mock and not a second implementation: it imports the same modules the

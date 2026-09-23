@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 """Centres and their channels, and systems deployed by channel -- end to end.
 
     python3 server/test/centres.py [http://localhost:18080]

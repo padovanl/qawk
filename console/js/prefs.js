@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* What the console is allowed to interrupt you about.
  *
  * A LEAF MODULE ON PURPOSE: it imports nothing. This list is read by the

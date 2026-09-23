@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package auth is what a request knows about who made it: the user, for
 // createdBy and lastModifiedBy, and the permissions every route checks.
 //

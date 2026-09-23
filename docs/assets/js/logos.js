@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* The language logos on the code-sample tabs.
  *
  * Not the line icons the rest of the site draws: these are the real marks, in

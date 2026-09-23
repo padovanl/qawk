@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* The API reference: three columns, and the call in five languages.
  *
  * Everything here is generated from assets/api/spec.js. The code samples are

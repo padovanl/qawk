@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* Syntax highlighting and line numbers for the code in this documentation.
  *
  * Small on purpose: a reader is looking at a curl line, a bit of YAML or a

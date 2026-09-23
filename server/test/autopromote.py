@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 """Promotion by hand (the default) and by itself -- end to end.
 
     python3 server/test/autopromote.py [http://localhost:18080]

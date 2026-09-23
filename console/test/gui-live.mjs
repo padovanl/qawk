@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* Does the console SHOW what the server holds?
  *
  *     node console/test/gui-live.mjs

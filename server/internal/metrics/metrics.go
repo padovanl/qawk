@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package metrics is Qawk's /metrics, in Prometheus' text format (a Qawk
 // addition), with no dependency: a handful of counters kept as requests go
 // by, and gauges read from the database when Prometheus asks.

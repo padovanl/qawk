@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 import { S, fiql, get, qawk } from '../api.js';
 import { PHASE_WORDS, phasesOf } from '../badges.js';
 import { bars } from '../bars.js';

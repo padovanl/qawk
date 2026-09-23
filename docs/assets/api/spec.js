@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* The Qawk API, as data.
  *
  * Every endpoint the server really serves, with its parameters, its body and

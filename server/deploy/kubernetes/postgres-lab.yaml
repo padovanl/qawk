@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 # A PostgreSQL for the LAB: one instance, one volume, no backups, no failover.
 #
 # In production use a managed database (RDS, Cloud SQL, Azure Database) or an

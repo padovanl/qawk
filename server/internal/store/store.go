@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package store is Qawk's data access. Every SQL statement lives in this
 // package, next to the struct it fills; nothing above it writes SQL.
 package store

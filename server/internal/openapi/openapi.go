@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package openapi publishes the API description, where hawkBit publishes it
 // (/v3/api-docs/<group>), listing exactly what Qawk implements.
 package openapi

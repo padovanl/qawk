@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 import { del, distributionSets, fiql, get, post, waiting } from '../api.js';
 import { start } from '../auth.js';
 import { ACT_ICON, TARGET_PILL, pill } from '../badges.js';

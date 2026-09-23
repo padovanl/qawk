@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package reference holds hawkBit 1.1.0's own API descriptions, recorded from
 // a running server, and the samples of what it answered.
 //

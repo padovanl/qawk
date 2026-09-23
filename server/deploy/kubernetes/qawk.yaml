@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 # Qawk on Kubernetes: several instances, one database, shared artifacts.
 #
 #   kubectl create namespace qawk

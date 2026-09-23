@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 import { S, del, get, post, upload, waiting } from '../api.js';
 import { ask, closeDrawer, drawer, fail, modal, toast } from '../chrome.js';
 import { M_COLS, baseCell, cols, columnsDialog, fieldsFor, headsFor, metaCache } from '../columns.js';

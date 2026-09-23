@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* Smoke test for the console's JavaScript.  No browser, no dependencies:
  *
  *     node console/test/smoke.mjs

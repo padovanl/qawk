@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 import { $, h } from './dom.js';
 
 const pad = n => String(n).padStart(2, '0');

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 import { hasBatch, statesOf } from './batch.js';
 import { start } from './auth.js';
 import { serverInfo } from './server.js';

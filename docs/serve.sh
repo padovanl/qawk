@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 # The documentation site, on this machine.
 #
 #   docs/serve.sh              http://localhost:8099, and opens a browser

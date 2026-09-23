@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 import { sampleAttributes } from '../batch.js';
 import { S, distributionSets, enc, fiql, get, limited, post } from '../api.js';
 import { ask, fail, modal, toast } from '../chrome.js';

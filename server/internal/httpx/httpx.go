@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package httpx holds what every Qawk endpoint shares: JSON in and out, errors
 // in hawkBit's exact shape, paging, and the links a response carries.
 //

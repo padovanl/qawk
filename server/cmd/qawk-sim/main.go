@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // qawk-sim runs simulated devices that take updates -- as far as the server
 // can tell -- for demonstrations and for testing fleets and the release
 // pipeline with more devices than there are on the bench.

@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 """The release pipeline, end to end, with simulated devices.
 
     python3 server/test/pipeline.py [http://localhost:18080]

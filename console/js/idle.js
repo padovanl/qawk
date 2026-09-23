@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 import { S } from './api.js';
 import { signOut } from './auth.js';
 import { toast } from './chrome.js';

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package tenantcfg is the list of tenant configuration keys -- what
 // /rest/v1/system/configs exposes -- with hawkBit 1.1.0's defaults.
 //

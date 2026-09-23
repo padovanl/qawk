@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 #
 # Simulated devices for any Qawk server -- the demo's or your own. Each run is
 # a container of qawk-sim (in the server image): devices that register, poll,

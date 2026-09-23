@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* Imported for their side effects: each view registers itself in VIEWS,
    and these two install the background timers. */
 import './notices.js';

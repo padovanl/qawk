@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package service is what Qawk does, independent of how it is asked.
 //
 // Assigning a set, a device polling, a device reporting, a rollout moving on

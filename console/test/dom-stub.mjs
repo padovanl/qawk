@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* Enough of a browser to load the console under node.
  *
  * The point is not to simulate rendering -- it is to let node LINK every

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 import { enc, get } from '../api.js';
 import { ACTION_PILL, PHASE_WORDS, TARGET_PILL, pill, typePill } from '../badges.js';
 import { modal } from '../chrome.js';
@@ -32,6 +35,25 @@ const p = (...kids) => h('p.about-p', ...kids);
 const panel = (title, ...body) => h('div.panel', h('h3', title), h('div.body.stack', ...body));
 
 /* ---------------------------------------------------------------- server */
+// What this build is, and where its source is. Not decoration: it is the
+// offer the licence requires, and it has to name THIS build, not the project.
+function licencePanel() {
+  const i = serverInfo() || {};
+  const src = i.source;
+  const lic = i.licence || 'AGPL-3.0-or-later';
+  return panel('Licence and source',
+    h('dl.kv',
+      h('dt', 'licence'), h('dd', h('span.mono', lic)),
+      h('dt', 'source'), h('dd', src
+        ? h('a', { href: src, target: '_blank', rel: 'noopener noreferrer' }, src)
+        : h('span.faint', 'this server does not say (an older build)'))),
+    p('Qawk is free software. You may run it, read it and change it; if you ',
+      'change it and let other people use it over a network, they are entitled ',
+      'to the source of ', h('b', 'your'), ' version — which is what the link ',
+      'above is for. A server whose operator has changed Qawk should point it ',
+      'at their own repository, with ', h('code', 'QAWK_SOURCE_URL'), '.'));
+}
+
 async function serverTab(root) {
   root.replaceChildren(h('div.empty', h('span.spin'), ' asking the server…'));
   if (!serverInfo()) await whoIsServer();
@@ -70,6 +92,12 @@ async function serverTab(root) {
         'server to describe its own API and checks that every endpoint it calls ',
         'is really there, with the methods it uses. A release that renames ',
         'nothing we touch raises no alarm; one that removes something is named.')),
+
+    // The AGPL's section 13: a modified Qawk offered over a network has to
+    // offer its users that version's source. This is where those users are,
+    // so this is where the offer goes -- read from the server, so a fork that
+    // sets QAWK_SOURCE_URL points here at itself rather than at us.
+    licencePanel(),
 
     panel('What is on it',
       h('div.cards',

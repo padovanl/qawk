@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 # Qawk CI: the checks a pull request has to pass.
 #
 # The end-to-end suites in server/test/ are not here: they want a scratch

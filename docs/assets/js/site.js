@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* Qawk documentation: the chrome every page shares.
  *
  * A page is a plain HTML file holding its own content and nothing else. This
@@ -163,8 +166,11 @@
     h.appendChild(el('button', { class: 'icon-btn', id: 'menu-btn', 'aria-label': 'Menu' }, '☰'));
     h.appendChild(brand);
     var links = el('nav', { class: 'links' });
-    [['start/', 'Get started'], ['console/', 'Console'], ['orchestrator/', 'Orchestrator'],
-     ['api/', 'API']].forEach(function (l) {
+    // the five people who arrive here: someone trying it, someone running it,
+    // someone using it, someone whose machines move together, someone wiring
+    // it into their own tooling
+    [['start/', 'Get started'], ['install/', 'Install'], ['console/', 'Console'],
+     ['orchestrator/', 'Orchestrator'], ['api/', 'API']].forEach(function (l) {
       var a = el('a', { href: url(l[0]) }, l[1]);
       if (here === l[0]) a.className = 'on';
       links.appendChild(a);

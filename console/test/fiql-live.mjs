@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* Cross-checks the FIQL editor's opinion against a running hawkBit.
  *
  *     node console/test/fiql-live.mjs [url] [user] [password]

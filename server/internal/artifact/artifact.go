@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package artifact stores artifact bytes.
 //
 // A file is stored once, under its SHA-256, however many modules upload it:

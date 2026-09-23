@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 package users
 
 // USERS FROM A FILE (QAWK_USERS_FILE). A server starts with one user, the

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* Keeps the compatibility check honest.
  *
  *     node console/test/compat.mjs           # list only, no server

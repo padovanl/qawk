@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 import { S, del, enc, fiql, get, post, qawk, waiting } from '../api.js';
 import { serverInfo } from '../server.js';
 import { PHASE_WORDS, TARGET_PILL, pill } from '../badges.js';

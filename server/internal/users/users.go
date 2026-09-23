@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package users is who may use the Management API and Qawk's own, and what
 // each may do (a Qawk addition: hawkBit keeps its users in its configuration
 // file).

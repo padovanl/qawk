@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 import { h, live } from './dom.js';
 
 /* ------- progress bars: one look everywhere ---------------------------

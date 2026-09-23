@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 """Systems -- updated as a whole, after Mender Orchestrator -- end to end.
 
     python3 server/test/systems.py [http://localhost:18080]

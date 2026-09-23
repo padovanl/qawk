@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package qawkapi is /qawk/v1: what Qawk offers beyond hawkBit.
 //
 // Nothing here changes what hawkBit's API returns. A client written for
@@ -61,6 +64,10 @@ func (a *API) info(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"name": "Qawk", "version": a.version, "api": "v1", "hawkbit": "1.1.0",
 		"tenant": a.st.Tenant(), "features": Features,
+		// The licence and where this build's source is. Public, like the rest
+		// of this answer: the AGPL's offer is worth nothing if you have to be
+		// signed in to read it.
+		"licence": "AGPL-3.0-or-later", "source": a.cfg.SourceURL,
 	})
 }
 

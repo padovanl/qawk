@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* Tabler Icons 3.46.0 (tabler.io/icons) -- the outline icons this console uses,
  * their inner SVG: 24x24, stroked in currentColor.
  *

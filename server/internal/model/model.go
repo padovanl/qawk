@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package model holds the things Qawk manages, as plain structs.
 //
 // Nothing here knows about HTTP or SQL: the store fills these, the service

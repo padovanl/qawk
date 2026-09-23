@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package server puts Qawk together: the store, the artifact store, the
 // service, and the three HTTP surfaces on top of it -- the Management API
 // (/rest/v1), the device API (/{tenant}/controller/v1) and the API

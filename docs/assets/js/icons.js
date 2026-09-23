@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 /* Icons for the documentation, drawn inline.
  *
  * The same Tabler outlines the console uses, so a reader who knows the product

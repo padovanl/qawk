@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // qawk-load simulates a fleet of devices polling an update server, and says
 // how the server held up.
 //

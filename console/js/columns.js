@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 import { attributesOf, hasBatch, sampleAttributes, statesOf } from './batch.js';
 import { enc, get, limited } from './api.js';
 import { TARGET_PILL, explainPending, paintPhase, phaseFromState, phaseOf, pill, typePill } from './badges.js';

@@ -1,4 +1,8 @@
 #!/bin/bash
+
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
 #
 # The Qawk demo: the server, its console, sample data and simulated devices,
 # all on docker -- nothing else needed.

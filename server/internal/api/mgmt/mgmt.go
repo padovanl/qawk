@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Luca Padovan
+
 // Package mgmt is hawkBit's Management API (/rest/v1): what the console, our
 // scripts and hawkbit-simple-ui talk to.
 //
