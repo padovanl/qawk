@@ -19,7 +19,10 @@ let INFO = null;
 async function whoIsServer() {
   try {
     const i = await get('/qawk/v1/info', { abs: true });
-    INFO = { name: i.name || 'Qawk', version: i.version || '', qawk: true, features: i.features || [] };
+    INFO = { name: i.name || 'Qawk', version: i.version || '', qawk: true, features: i.features || [],
+      // the licence and where this build's source is: the About page shows
+      // them, which is the offer AGPL section 13 asks for
+      licence: i.licence || '', source: i.source || '' };
     // who am I, with what permissions: the menu hides what would be a 403
     if (INFO.features.includes('users')) {
       try { INFO.me = await get('/qawk/v1/me', { abs: true }); } catch (_) {}

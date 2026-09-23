@@ -87,5 +87,15 @@ for (const key of Object.keys(ALL)) {
   }
 }
 
+// A number in prose drifts the moment an endpoint is added, and a README that
+// undercounts its own API is the kind of small lie a reader notices.
+const claimed = readFileSync(join(here, '../README.md'), 'utf8')
+  .match(/\*\*(\d+) endpoints\*\*/);
+if (!claimed) {
+  fail('README.md', 'no longer states how many endpoints there are');
+} else if (Number(claimed[1]) !== n) {
+  fail('README.md', `says ${claimed[1]} endpoints; there are ${n}`);
+}
+
 console.log(`${n} endpoints, ${n * LANGS.length} generated samples, ${bad} problems`);
 process.exit(bad ? 1 : 0);

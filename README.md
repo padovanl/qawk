@@ -262,7 +262,7 @@ docker run --rm --network host --ulimit nofile=65536:65536 --entrypoint qawk-loa
 | 🏗️ [Installing the server](https://padovanl.github.io/qawk/install/) | Docker, compose, Kubernetes, TLS, backup |
 | 👥 [Users and audit](https://padovanl.github.io/qawk/users/) | Roles, tokens, what is recorded |
 | 📊 [Operations](https://padovanl.github.io/qawk/operations/) | Metrics, alerts, scaling, troubleshooting |
-| ⌨️ [API reference](https://padovanl.github.io/qawk/api/) | **90 endpoints**, each with the call in curl, Python, JavaScript, Go and PowerShell |
+| ⌨️ [API reference](https://padovanl.github.io/qawk/api/) | **91 endpoints**, each with the call in curl, Python, JavaScript, Go and PowerShell |
 | 🐝 [hawkBit compatibility](https://padovanl.github.io/qawk/hawkbit/) | What is implemented, what differs and why, how to migrate |
 
 To read the site locally, without publishing anything:

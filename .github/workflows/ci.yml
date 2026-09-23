@@ -74,6 +74,16 @@ jobs:
       - name: Every endpoint called is in the compatibility list
         run: node console/test/compat.mjs
 
+  project:
+    name: Licence headers and settings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Every source file we wrote carries an SPDX header
+        run: python3 .github/check-headers.py
+      - name: Every setting is documented, and no document invents one
+        run: python3 .github/check-config.py
+
   docs:
     name: Documentation site
     runs-on: ubuntu-latest
