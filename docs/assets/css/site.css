@@ -23,7 +23,7 @@
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --sidebar: 268px;
-  --right: 330px;
+  --right: 372px;
   --head: 52px;
 }
 
@@ -303,6 +303,46 @@ blockquote {
 .api-layout { display: grid; grid-template-columns: minmax(0,1fr) var(--right); gap: 30px; }
 @media (max-width: 1180px) { .api-layout { grid-template-columns: minmax(0,1fr); } }
 
+/* On a wide screen the two columns scroll on their own, the way the sidebar
+   already does. The right column holds the sample and the send panel, which
+   together are taller than a screen: sticky was enough when it was one code
+   block, and stopped being enough the moment there was a form under it. A
+   reader comparing a parameter with the sample should not have to scroll one
+   of them out of sight to reach the other.
+   Below that width there is one column, and the page scrolls as any page. */
+@media (min-width: 1181px) {
+  body.api-page { overflow: hidden; }
+  body.api-page .shell { height: 100vh; }
+  body.api-page main { height: calc(100vh - var(--head)); overflow: hidden; }
+  body.api-page .page.wide {
+    height: 100%; padding: 0; display: flex; flex-direction: column; min-height: 0;
+  }
+  /* the breadcrumbs stay put: they say where you are, and that does not
+     change as either column moves */
+  body.api-page #api-crumbs {
+    flex: none; margin: 0; padding: 18px 42px 12px;
+    border-bottom: 1px solid var(--line); background: var(--bg);
+  }
+  #api-main { flex: 1; min-height: 0; overflow-y: auto; padding: 26px 42px 80px; }
+  /* one endpoint: two scrollers, no outer one */
+  #api-main.split { overflow: hidden; padding: 0; }
+  #api-main.split .api-layout { height: 100%; gap: 0; }
+  #api-main.split .api-layout > * {
+    height: 100%; overflow-y: auto; overscroll-behavior: contain; min-width: 0;
+  }
+  #api-main.split .api-layout > :first-child { padding: 26px 30px 80px 42px; }
+  #api-main.split .rightcol {
+    position: static; padding: 26px 20px 80px 0; border-left: 1px solid var(--line);
+    padding-left: 22px;
+  }
+  /* a thin scrollbar, so a column that scrolls does not shout about it */
+  #api-main.split .api-layout > *::-webkit-scrollbar { width: 9px; }
+  #api-main.split .api-layout > *::-webkit-scrollbar-thumb {
+    background: var(--line-2); border-radius: 5px;
+  }
+  #api-main.split .api-layout > * { scrollbar-width: thin; }
+}
+
 .ep-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 18px; }
 .ep-url {
   display: flex; align-items: center; gap: 10px; background: var(--bg-2);
@@ -449,3 +489,82 @@ figure figcaption b { color: var(--fg-dim); }
   h1 { font-size: 27px; }
   .backdrop { position: fixed; inset: var(--head) 0 0 0; background: rgba(0,0,0,.5); z-index: 44; }
 }
+
+/* ------------------------------------------------- code, numbered and lit */
+
+/* Line numbers come from a counter on each line, not from a gutter column, so
+   they stay beside the right line when a long line wraps -- and they are not
+   in what the copy button copies, because ::before content never is. */
+pre.hl { counter-reset: l; padding: 12px 0; position: relative; }
+pre.hl code { display: block; }
+pre.hl .li {
+  display: block; position: relative; padding: 0 16px 0 52px; min-height: 1.6em;
+  white-space: pre-wrap; word-break: break-word;
+}
+pre.hl .li::before {
+  counter-increment: l; content: counter(l);
+  position: absolute; left: 0; width: 36px; text-align: right;
+  color: var(--fg-faint); opacity: .55; font-variant-numeric: tabular-nums;
+  user-select: none; -webkit-user-select: none; pointer-events: none;
+}
+pre.hl .li:hover::before { opacity: .9; }
+/* a single line is a command to run, not a listing to refer to */
+pre.hl.one { padding: 12px 0; }
+pre.hl.one .li { padding-left: 16px; }
+pre.hl.one .li::before { content: none; }
+
+/* The language, once, in the corner -- so a reader knows what they are
+   looking at without counting sigils. */
+pre.hl::after {
+  content: attr(data-lang); position: absolute; top: 6px; right: 10px;
+  font-size: 10px; letter-spacing: .6px; text-transform: uppercase;
+  color: var(--fg-faint); opacity: .5; pointer-events: none;
+}
+pre.hl[data-lang="text"]::after { content: none; }
+.pre-wrap:hover pre.hl::after { opacity: 0; }
+
+/* Tokens. Two families only -- what is data (strings, numbers) and what is
+   instruction (keywords, flags) -- plus comments receding and URLs standing
+   out. More colours than that is decoration. */
+.t-c { color: var(--fg-faint); font-style: italic; }
+.t-s { color: #a5d6a7; }
+.t-n { color: #ffab70; }
+.t-k { color: #79c0ff; font-weight: 500; }
+.t-f { color: #d2a8ff; }
+.t-v { color: #ffab70; }
+.t-p { color: #7ee0d6; }
+.t-u { color: var(--accent-2); text-decoration: underline; text-decoration-style: dotted; }
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .t-s { color: #0a7a3d; }
+  :root:not([data-theme="dark"]) .t-n { color: #9a4b00; }
+  :root:not([data-theme="dark"]) .t-k { color: #0550ae; }
+  :root:not([data-theme="dark"]) .t-f { color: #7b3fb8; }
+  :root:not([data-theme="dark"]) .t-v { color: #9a4b00; }
+  :root:not([data-theme="dark"]) .t-p { color: #0f6b64; }
+}
+:root[data-theme="light"] .t-s { color: #0a7a3d; }
+:root[data-theme="light"] .t-n { color: #9a4b00; }
+:root[data-theme="light"] .t-k { color: #0550ae; }
+:root[data-theme="light"] .t-f { color: #7b3fb8; }
+:root[data-theme="light"] .t-v { color: #9a4b00; }
+:root[data-theme="light"] .t-p { color: #0f6b64; }
+
+/* ------------------------------------------------------------ scrollbars */
+
+/* One scrollbar style everywhere, thin and quiet. The code blocks wrap rather
+   than scroll sideways, so the only bars left are the ones that mean
+   something: a column, and a response too long to show at once. */
+* { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line-2); border-radius: 6px;
+  border: 3px solid transparent; background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-clip: content-box; background-color: var(--fg-faint); }
+*::-webkit-scrollbar-corner { background: transparent; }
+
+/* No sideways bar under a sample: it wraps instead, which is what a reader
+   wants from a shell line they are about to copy anyway. */
+pre, .panel pre, .resp pre { overflow-x: hidden; }

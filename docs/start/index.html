@@ -8,6 +8,7 @@
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
 <script defer src="../assets/js/icons.js"></script>
+<script defer src="../assets/js/highlight.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
 <body>
@@ -55,7 +56,12 @@ sample data and starts simulated devices. When it settles, open
 an approval) and a temporary <code>expo</code>.</li>
 <li>About 270 simulated devices spread across those channels, and 16 simulated
 <b>systems</b> — a <code>device1</code> with two <code>device2</code> and a
-<code>device3</code> each — in four centres.</li>
+<code>device3</code> each.</li>
+<li><b>Four centres</b>, each holding both kinds of machine: <code>c01</code> and
+<code>c02</code> in <code>beta</code>, <code>c03</code> and <code>c04</code> in
+<code>prod</code>. Every device in them reports its <code>centerid</code> and
+follows its centre — which is how a real fleet is arranged. <code>dev</code> and
+<code>expo</code> have no centre and reach their channel by rule instead.</li>
 <li><code>dev</code> has already been given <code>app</code> 1.1.0, so something
 is moving the moment you open the page.</li>
 </ul>

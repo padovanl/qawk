@@ -8,6 +8,7 @@
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
 <script defer src="../assets/js/icons.js"></script>
+<script defer src="../assets/js/highlight.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
 <body>
@@ -232,6 +233,42 @@ docker logs -f qawk-sim-shop       # what they are doing, every 10 s</code></pre
 (<code>shop-prod-017</code>). It downloads nothing — it waits and reports
 <code>finished</code> — but it answers a deployment outside its maintenance window
 the way SWUpdate does, and a download-only one as <code>downloaded</code>.</p>
+
+<h3 id="simcentres">Putting simulated devices in centres</h3>
+
+<p>Add <code>:centers=</code> to a group and its devices are shared out among
+centres, reporting <code>centerid</code> exactly as a real one would. Anything
+after <code>--</code> goes straight to <code>qawk-sim</code>:</p>
+
+<pre><code>demo/simulate.sh --url http://localhost:8080 --token &lt;token&gt; -- \
+  -fleet beta:40:centers=1-2 \
+  -fleet prod:200:centers=3-4 \
+  -system device:16:device1=1,device2=2,device3=1:centers=4</code></pre>
+
+<table>
+<thead><tr><th>Form</th><th>Means</th></tr></thead>
+<tbody>
+<tr><td><code>centers=4</code></td><td>Shared out among <code>c01</code>…<code>c04</code>.</td></tr>
+<tr><td><code>centers=3-4</code></td><td>Only <code>c03</code> and <code>c04</code> — so one channel's machines sit in one set of sites and another channel's elsewhere.</td></tr>
+<tr><td><i>absent</i></td><td>No centre at all. The device reaches a channel by that channel's rule instead.</td></tr>
+</tbody>
+</table>
+
+<div class="tip">
+<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>The centres are shared on purpose.</b> A <code>-fleet</code> and a
+<code>-system</code> both asking for <code>centers=4</code> land in the
+<b>same</b> <code>c01</code>…<code>c04</code> — because a centre is a place, and
+a place holds the lane computers with their terminals <i>and</i> the machines
+that stand alone. Put the centre in a channel and all of it follows, which is
+the thing worth seeing.</p>
+</div>
+
+<p>This is what the demo does: <code>beta</code>'s devices in <code>c01</code>
+and <code>c02</code>, <code>prod</code>'s in <code>c03</code> and
+<code>c04</code>, and the systems spread across all four — so every centre holds
+both kinds, 28 machines each. <code>dev</code> (the lab) and <code>expo</code>
+(a trade show) have no centre, which is what a device reaching a channel by rule
+looks like beside one reaching it by place.</p>
 
 <h3>Making things fail on purpose</h3>
 

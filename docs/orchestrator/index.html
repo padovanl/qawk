@@ -8,6 +8,7 @@
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
 <script defer src="../assets/js/icons.js"></script>
+<script defer src="../assets/js/highlight.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
 <body>
@@ -132,8 +133,10 @@ nothing moves until you start it.</p>
 <figure>
   <img src="../assets/img/ui-orchestrator.png"
        alt="The Orchestrator screen: deployments, system types and manifests, each in its own table.">
-  <figcaption>The <b>Orchestrator</b> screen holds all three pieces: deployments at
-  the top, the system types below, and the manifests under those.</figcaption>
+  <figcaption>The <b>Orchestrator</b> screen holds all three pieces: the deployments
+  at the top — this one 7 of 8 updated, 1 rolled back — the system types below with
+  their components, and the manifests under those with each component's set and
+  order.</figcaption>
 </figure>
 
 <pre><code>curl -u admin:$PW -X POST -H 'Content-Type: application/json' -d '{
@@ -222,10 +225,11 @@ the old version while the rest of the fleet is on the new one.</p>
 <figure>
   <img src="../assets/img/ui-rolled-back.png"
        alt="The Orchestrator screen with a deployment drawer open. Three systems succeeded; device-07 shows a red 'rolled back' pill with the reason, and a 'take again' button.">
-  <figcaption><b>Orchestrator</b> → click the deployment. Every system, its state, and
-  each component's devices. <code>device-07</code> rolled back and says why;
-  the deployment itself is <b>failed</b>, because more systems failed than it
-  allowed.</figcaption>
+  <figcaption><b>Orchestrator</b> → click the deployment. Every system, its state and
+  each component's devices. Seven are <b>succeeded</b>; <code>device-07</code> is
+  <b>rolled back</b> and says why. The deployment itself finished — one failure was
+  within what it allowed. Had it been more, the deployment would read
+  <b>failed</b> and no further system would have been started.</figcaption>
 </figure>
 
 <h3>1. Read what it says before you touch anything</h3>

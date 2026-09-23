@@ -48,7 +48,8 @@ services:
     <<: *sim
     command: ["-url", "http://server:8080", "-token", "${GATEWAY_TOKEN:-demo-gateway-token}", "-prefix", "demo",
               "-interval", "30s", "-install-min", "10s", "-install-max", "60s",
-              "-fleet", "dev:20", "-fleet", "beta:40", "-fleet", "prod:${PROD_DEVICES:-200}", "-fleet", "expo:8"]
+              "-fleet", "dev:20", "-fleet", "beta:40:centers=1-2",
+              "-fleet", "prod:${PROD_DEVICES:-200}:centers=3-4", "-fleet", "expo:8"]
 
   systems:
     <<: *sim

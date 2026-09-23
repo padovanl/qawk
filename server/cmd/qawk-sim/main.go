@@ -3,7 +3,12 @@
 // pipeline with more devices than there are on the bench.
 //
 //	qawk-sim -url http://localhost:8080 -token <gateway token> \
-//	         -fleet dev:20 -fleet beta:40 -fleet prod:120 -fleet expo:8
+//	         -fleet dev:20 -fleet beta:40 -fleet prod:120:centers=4 -fleet expo:8
+//
+// With :centers=N a fleet's devices are shared out among N centres and report
+// centerid, as the systems do -- and they land in the SAME centres, because a
+// centre is a place that holds both kinds of machine. Put the centre in a
+// channel and all of it follows.
 //
 // Each device registers through the device API like a real one, with the
 // gateway token, and reports attributes: device_type=neo-sim, sim=true and
@@ -52,9 +57,37 @@ import (
 	"time"
 )
 
+// fleetSpec is a group of devices that stand alone: name:count, optionally
+// :centers=<n> to share them out among that many centres, reported as
+// centerid -- the same key the systems use.
+//
+// A real device is in a centre whether or not it is part of a system: a
+// bowling centre has lane computers with terminals under them AND machines
+// that stand alone, and both belong to the place. Without this, a simulated
+// fleet reached its channel only through a ring rule, and a demonstration of
+// centres could only ever show half the fleet moving.
 type fleetSpec struct {
-	name string
-	n    int
+	name     string
+	n        int
+	from, to int // the centres, 1-based and inclusive; 0: none
+}
+
+// parseCentres reads centers=N (c01..cN) or centers=A-B (cA..cB). The range
+// form is what lets one channel's devices sit in one set of centres and
+// another channel's in a different set, which is the usual arrangement: beta
+// is a couple of pilot sites, prod is everywhere else.
+func parseCentres(val string) (from, to int, err error) {
+	a, b, ranged := strings.Cut(val, "-")
+	if from, err = strconv.Atoi(a); err != nil || from < 1 {
+		return 0, 0, fmt.Errorf("centers=%q is not a count or a range such as 3-4", val)
+	}
+	if !ranged {
+		return 1, from, nil
+	}
+	if to, err = strconv.Atoi(b); err != nil || to < from {
+		return 0, 0, fmt.Errorf("centers=%q is not a range such as 3-4", val)
+	}
+	return from, to, nil
 }
 
 type specs []fleetSpec
@@ -62,12 +95,31 @@ type specs []fleetSpec
 func (s *specs) String() string { return fmt.Sprint(*s) }
 
 func (s *specs) Set(v string) error {
-	name, count, ok := strings.Cut(v, ":")
-	n, err := strconv.Atoi(count)
-	if !ok || err != nil || n < 1 || name == "" {
-		return fmt.Errorf("-fleet takes name:count, such as beta:40")
+	const usage = "-fleet takes name:count[:centers=N], such as beta:40 or prod:200:centers=4"
+	parts := strings.Split(v, ":")
+	if len(parts) < 2 || len(parts) > 3 {
+		return fmt.Errorf("%s", usage)
 	}
-	*s = append(*s, fleetSpec{name, n})
+	name := parts[0]
+	n, err := strconv.Atoi(parts[1])
+	if err != nil || n < 1 || name == "" {
+		return fmt.Errorf("%s", usage)
+	}
+	f := fleetSpec{name: name, n: n}
+	if len(parts) == 3 {
+		key, val, ok := strings.Cut(parts[2], "=")
+		if !ok || key != "centers" {
+			return fmt.Errorf("-fleet: %q is not centers=N or centers=A-B", parts[2])
+		}
+		if f.from, f.to, err = parseCentres(val); err != nil {
+			return fmt.Errorf("-fleet: %w", err)
+		}
+		if f.to-f.from+1 > n {
+			return fmt.Errorf("-fleet %s: %d centres for %d devices leaves some empty",
+				name, f.to-f.from+1, n)
+		}
+	}
+	*s = append(*s, f)
 	return nil
 }
 
@@ -76,11 +128,11 @@ func (s *specs) Set(v string) error {
 // the systems into that channel) and :centers=<n> (the systems are shared out
 // among n centres, reported as centerid).
 type sysSpec struct {
-	name    string
-	count   int
-	comps   [][2]string // component, how many
-	ring    string
-	centers int
+	name     string
+	count    int
+	comps    [][2]string // component, how many
+	ring     string
+	from, to int // the centres, 1-based and inclusive; 0: none
 }
 
 type sysSpecs []sysSpec
@@ -110,8 +162,8 @@ func (s *sysSpecs) Set(v string) error {
 		case "ring":
 			sp.ring = val
 		case "centers":
-			if sp.centers, err = strconv.Atoi(val); err != nil || sp.centers < 1 {
-				return fmt.Errorf("-system: centers=%q is not a count", val)
+			if sp.from, sp.to, err = parseCentres(val); err != nil {
+				return fmt.Errorf("-system: %w", err)
 			}
 		default:
 			return fmt.Errorf("-system: %q is neither ring= nor centers=", o)
@@ -333,7 +385,7 @@ func main() {
 	url := flag.String("url", "http://localhost:8080", "server")
 	tenant := flag.String("tenant", "DEFAULT", "tenant")
 	token := flag.String("token", os.Getenv("QAWK_GATEWAY_TOKEN"), "gateway token")
-	flag.Var(&fleets, "fleet", "name:count -- that many devices with ring=name (repeatable)")
+	flag.Var(&fleets, "fleet", "name:count[:centers=N] -- that many devices with ring=name, shared out among N centres (repeatable)")
 	flag.Var(&systems, "system", "name:count:component=n,...[:ring=R][:centers=N] -- that many systems of those components, "+
 		"in channel R, shared out among N centres (repeatable)")
 	flag.Func("fail-where", "key=value,... -- devices with those attributes fail everything (repeatable)", func(v string) error {
@@ -370,22 +422,38 @@ func main() {
 		defer cancel()
 	}
 
+	// Centres are shared, not handed out: every spec asking for N of them uses
+	// c01..cN. That is the point of a centre -- one place holds the lane
+	// computers with their terminals AND the machines that stand alone, and
+	// they all follow it into whatever channel it is in.
+	centreOf := func(from, to, i, total int) string {
+		if from < 1 {
+			return ""
+		}
+		n := to - from + 1
+		return fmt.Sprintf("%s%02d", *centrePrefix, from+(i-1)*n/total)
+	}
+
 	var devices []*device
 	for _, f := range fleets {
 		for i := 1; i <= f.n; i++ {
-			devices = append(devices, &device{id: fmt.Sprintf("%s-%s-%03d", *prefix, f.name, i), ring: f.name})
+			d := &device{id: fmt.Sprintf("%s-%s-%03d", *prefix, f.name, i), ring: f.name}
+			if c := centreOf(f.from, f.to, i, f.n); c != "" {
+				d.attrs = map[string]string{"centerid": c}
+			}
+			devices = append(devices, d)
 		}
 	}
-	// two -system of the same name go on numbering where the first stopped,
-	// and centres are numbered across all of them: keys and centres stay unique
-	next, centre := map[string]int{}, 0
+	// two -system of the same name go on numbering where the first stopped, so
+	// their keys stay unique
+	next := map[string]int{}
 	for _, sp := range systems {
 		first := next[sp.name]
 		for c := 1; c <= sp.count; c++ {
 			key := fmt.Sprintf("%s-%02d", sp.name, first+c)
 			attrs := map[string]string{sp.name: key}
-			if sp.centers > 0 {
-				attrs["centerid"] = fmt.Sprintf("%s%02d", *centrePrefix, centre+1+(c-1)*sp.centers/sp.count)
+			if c := centreOf(sp.from, sp.to, c, sp.count); c != "" {
+				attrs["centerid"] = c
 			}
 			for _, comp := range sp.comps {
 				n, _ := strconv.Atoi(comp[1])
@@ -415,7 +483,6 @@ func main() {
 			}
 		}
 		next[sp.name] = first + sp.count
-		centre += sp.centers
 	}
 	total := len(devices)
 	s := &sim{

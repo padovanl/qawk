@@ -8,6 +8,7 @@
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
 <script defer src="../assets/js/icons.js"></script>
+<script defer src="../assets/js/highlight.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
 <body>
@@ -35,8 +36,10 @@ below is missing for you, that is why.</p>
 <figure>
   <img src="../assets/img/ui-dashboard.png"
        alt="The Qawk console dashboard: cards showing devices by status, channels and what is updating right now.">
-  <figcaption>The <b>Dashboard</b>. The cards are yours — drag them, resize them,
-  add and remove them from the tray. It is saved per account.</figcaption>
+  <figcaption>The <b>Dashboard</b>: 140 devices, 43 of them updating, one in error,
+  the four channels and what is running in each. The cards are yours — drag them,
+  resize them, add and remove them from the tray — and it is saved per
+  account.</figcaption>
 </figure>
 
 <h3>The screens you will use</h3>
@@ -129,10 +132,11 @@ so, and the next gate will not open.</li>
 <figure>
   <img src="../assets/img/ui-fleets.png"
        alt="The Fleets screen showing the dev, beta and prod pipeline as cards, each with its release, progress bar and buttons.">
-  <figcaption><b>Fleets</b> is where you spend your time. Each channel shows its
-  release, how far it has got, and — when the channel has systems — a second bar
-  for the orchestrator. The arrows between the cards are the pipeline;
-  <b>promote</b> is the gate.</figcaption>
+  <figcaption><b>Fleets</b> is where you spend your time. Here <code>dev</code> has
+  finished (20 of 20), <code>beta</code> is part way through its first wave of 25%,
+  and <code>prod</code> is <b>awaiting approval</b> — so the release sits in the
+  queue at the top of the screen until somebody other than the person who asked
+  presses <b>approve</b>. The arrows between the cards are the pipeline.</figcaption>
 </figure>
 
 <h3>The other way: straight at some devices</h3>
@@ -153,8 +157,11 @@ install only inside these hours).</p>
 <figure>
   <img src="../assets/img/ui-inprogress.png"
        alt="The In progress screen listing devices currently updating, with download progress bars.">
-  <figcaption><b>In progress</b> — everything happening right now, with how far
-  each download has got. The place to watch after you press go.</figcaption>
+  <figcaption><b>In progress</b> — everything under way at once: a set assigned by
+  hand to 40 machines, and an orchestrator deployment 7 systems of 8 through, with
+  one rolling back. Real devices also show how far each download has got; the
+  simulated ones here download nothing, which is why that column reads
+  zero.</figcaption>
 </figure>
 
 <h2 id="reading">Reading what you see</h2>
@@ -240,9 +247,9 @@ is not.</p>
 <figure>
   <img src="../assets/img/ui-rolled-back.png"
        alt="A system deployment drawer: three systems succeeded, one shows 'rolled back' in red with its reason and a 'take again' button.">
-  <figcaption>One system of four failed and went back on its own. The reason says
-  which order failed and how many devices went back. <b>take again</b> is the way
-  forward once you know why.</figcaption>
+  <figcaption>Seven systems updated; <code>device-07</code> failed and went back on
+  its own. Its reason says which order failed and how many devices went back, and
+  <b>take again</b> is the way forward once you know why.</figcaption>
 </figure>
 
 <h3>A system rolled back</h3>
@@ -280,6 +287,9 @@ server of your own:</p>
 <pre><code># 40 devices in a channel called lab
 demo/simulate.sh --url http://localhost:8080 --token &lt;gateway token&gt; --fleet lab:40
 
+# the same, spread over two centres -- so you can move a place, not a list
+demo/simulate.sh --url http://localhost:8080 --token &lt;gateway token&gt; -- -fleet lab:40:centers=1-2
+
 demo/simulate.sh --list     # what is running
 demo/simulate.sh --stop     # stop them all</code></pre>
 
@@ -307,6 +317,10 @@ from <code>demo/.gateway-token</code>.</p>
 <tr><td><b>Waves</b></td>
 <td>Set the channel's <b>wave percent</b> to 25 with 200 devices, then release.</td>
 <td>Four waves instead of one flood. Set <code>-install-min 30s</code> to make each wave last long enough to see.</td></tr>
+
+<tr><td><b>A centre moving between channels</b></td>
+<td><code>-- -fleet lab:40:centers=1-2</code>, then <b>Centres</b> → tick <code>c01</code> → <b>move</b>.</td>
+<td>Its devices follow within a minute and take the new channel's release. Watch <b>on channel</b> catch up with <b>devices</b>.</td></tr>
 
 <tr><td><b>A whole system rolling back</b></td>
 <td><code>--systems 16</code>, then in the extra arguments:<br><code>-- -fail-where device=device-07,device_type=device3,set=2.0</code></td>

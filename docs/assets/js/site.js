@@ -192,12 +192,13 @@
 
   // --------------------------------------------------------------- sidebar
 
-  function sidebar() {
+  // ownTree: this page draws its own sidebar tree and marks its own place in
+  // it (the API reference, which routes on the hash). The section links here
+  // must then not also light up: two highlighted entries read as "you are in
+  // two places". It is passed in rather than looked up, because by the time
+  // this runs the page's content has been lifted out of the document.
+  function sidebar(ownTree) {
     var a = el('aside', { class: 'side' });
-    // The API reference routes on the hash and marks its own tree, so the
-    // section links here must not also light up: two highlighted entries read
-    // as "you are in two places".
-    var ownTree = !!document.querySelector('#api-main');
     NAV.forEach(function (sec) {
       var g = el('div', { class: 'grp' });
       var b = el('button', { type: 'button' },
@@ -384,17 +385,18 @@
 
     var page = document.querySelector('.page-content');
     if (!page) return;
+    var ownTree = !!page.querySelector('#api-crumbs');
     page.remove();
 
     header();
-    sidebar();
+    sidebar(ownTree);
 
     var shell = el('div', { class: 'shell' });
     var main = el('main');
     var wrap = el('div', { class: page.classList.contains('wide') ? 'page wide' : 'page' });
     // a page that draws its own breadcrumbs (the API reference, which routes
     // on the hash) keeps them
-    if (here && !page.querySelector('#api-crumbs')) wrap.appendChild(crumbs(page));
+    if (here && !ownTree) wrap.appendChild(crumbs(page));
     while (page.firstChild) wrap.appendChild(page.firstChild);
     main.appendChild(wrap);
     shell.appendChild(main);
@@ -403,7 +405,10 @@
     anchors(wrap);
     copyButtons(wrap);
     if (!wrap.classList.contains('wide')) toc(wrap, main);
-    pager(wrap);
+    // Previous/next belongs to pages that are read in order. The API
+    // reference is looked things up in, and its columns scroll on their own,
+    // so a pager would sit below them taking a strip of screen for ever.
+    if (!ownTree) pager(wrap);
     search();
 
     document.title = (wrap.querySelector('h1') ?

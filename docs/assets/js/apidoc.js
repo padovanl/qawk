@@ -12,6 +12,8 @@
   var el = D.el, url = D.url;
 
   var LANGS = ['curl', 'python', 'javascript', 'go', 'powershell'];
+  var HLLANG = { curl: 'shell', python: 'python', javascript: 'javascript',
+    go: 'go', powershell: 'powershell' };
   var lang = 'curl';
   try { lang = localStorage.getItem('qawk-docs-lang') || 'curl'; } catch (e) {}
   if (LANGS.indexOf(lang) < 0) lang = 'curl';
@@ -72,7 +74,10 @@
     if (p) {
       L.push("-H 'Content-Type: " + p.ctype + "'");
       if (p.raw) L.push('--data-binary @' + (ep.id.indexOf('mf-') === 0 ? 'manifest' : 'topology') + '.yaml');
-      else L.push("-d '" + json(p.json).replace(/\n\s*/g, ' ') + "'");
+      // The body stays laid out rather than squashed onto one line: a literal
+      // newline inside single quotes is fine in a shell, and a collapsed
+      // object wraps into mush in a column this narrow.
+      else L.push("-d '" + json(p.json).split('\n').join('\n  ') + "'");
     } else if (ep.m !== 'HEAD') {
       L.push("-H 'Accept: application/json'");
     }
@@ -324,6 +329,7 @@
           x.r.status + '</span> <span>' + esc(x.r.statusText || '') + '</span>' +
           '<span class="ms">' + ms + ' ms</span></div>' +
           '<pre><code>' + esc(pretty || '(no body)') + '</code></pre>';
+        if (window.QawkHL) window.QawkHL.paint(out.querySelector('pre'), 'json');
       }).catch(function (e) {
         // A browser refuses to hand this page an answer from another origin
         // unless that server says it may. That is not a bug in either of them.
@@ -438,6 +444,7 @@
         var r = ep.res[c];
         pane.innerHTML = '<p>' + r.d + '</p>' +
           (r.ex ? '<pre><code>' + esc(json(r.ex)) + '</code></pre>' : '');
+        if (r.ex && window.QawkHL) window.QawkHL.paint(pane.querySelector('pre'), 'json');
       }
       showCode(codes[0]);
       rw.appendChild(tabs); rw.appendChild(pane);
@@ -456,6 +463,8 @@
       codeBox.innerHTML = '';
       var wrap = el('div', { class: 'pre-wrap' });
       wrap.innerHTML = '<pre><code>' + esc(text) + '</code></pre>';
+      // the language is known here; only the guides have to guess
+      if (window.QawkHL) window.QawkHL.paint(wrap.querySelector('pre'), HLLANG[lang]);
       var cb = el('button', { class: 'copy always', type: 'button' }, ic('copy', 12) + 'copy');
       wrap.appendChild(cb);
       codeBox.appendChild(wrap);
@@ -496,6 +505,10 @@
     var lay = el('div', { class: 'api-layout' });
     lay.appendChild(left); lay.appendChild(right);
     main.appendChild(lay);
+    // the bodies and examples in the left column, whose language is plain
+    if (window.QawkHL) window.QawkHL.paintAll(left);
+    // two scrollers, not one: see .api-layout in site.css
+    main.className = 'split';
   }
 
   function drawIndex(api, main) {
@@ -595,6 +608,7 @@
       'curl -s \'https://qawk.example.com/v3/api-docs/Management%20API\' &gt; management.json\n' +
       'openapi-generator-cli generate -i management.json -g python -o ./client</code></pre>';
     main.appendChild(h);
+    if (window.QawkHL) window.QawkHL.paintAll(main);
   }
 
   // --------------------------------------------------------------- router
@@ -602,6 +616,7 @@
   function route() {
     var main = document.getElementById('api-main');
     main.innerHTML = '';
+    main.className = '';   // one scroller, unless drawEndpoint says otherwise
     var h = location.hash.replace(/^#\/?/, '');
     var crumb = document.getElementById('api-crumbs');
     var parts = h.split('/').filter(Boolean);
@@ -625,7 +640,11 @@
       main.innerHTML = '<h1>Not here</h1><p>No such endpoint. <a href="#/">Start from the top.</a></p>';
     }
     markSide();
+    // Each column is its own scroller here, so moving to another endpoint has
+    // to put them back to the top: scrolling the window would do nothing.
     window.scrollTo(0, 0);
+    main.scrollTop = 0;
+    main.querySelectorAll('.api-layout > *').forEach(function (c) { c.scrollTop = 0; });
     document.title = (parts.length ? (ALL[parts[0] + '/' + parts[1]] ?
       ALL[parts[0] + '/' + parts[1]].t : SPEC[parts[0]] ? SPEC[parts[0]].title : 'API') + ' · ' : '') +
       'Qawk API reference';
@@ -672,6 +691,7 @@
 
   function boot() {
     if (!document.getElementById('api-main')) return;
+    document.body.classList.add('api-page');
     apiSidebar();
     window.addEventListener('hashchange', route);
     route();

@@ -94,7 +94,11 @@ data and starts simulated devices:
   fail anything named *broken*, on purpose), `os`, `device2-fw`, `device3-fw`;
 - 🚦 channels `dev` → `beta` → `prod` (prod needs approval) and a temporary `expo`;
 - 📟 about **270 simulated devices** and **16 simulated systems** — a `device1`
-  with two `device2` and a `device3` — across four centres;
+  with two `device2` and a `device3`;
+- 🏢 **four centres**, each holding both kinds of machine: `c01`/`c02` in `beta`,
+  `c03`/`c04` in `prod`. Every device in them reports its `centerid` and follows
+  its centre, the way a real fleet is arranged — `dev` and `expo` have none and
+  reach their channel by rule instead;
 - ▶️ `dev` already has `app` 1.1.0, so something is moving when you open the page.
 
 👉 Open **http://localhost:8090**, sign in as `admin` / `changeme`.
