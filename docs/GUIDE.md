@@ -687,7 +687,18 @@ Details in [server/README.md](../server/README.md#metrics-prometheus).
 
 `demo/start.sh` gives you the channels, a catalogue, 270 devices and 16
 systems. For more, or for your own server, `demo/simulate.sh` (see the
-[README](../README.md#simulated-devices-and-load)). A few recipes:
+[README](../README.md#simulated-devices-and-load)).
+
+A simulated device is not a container and has no application inside it: one
+`qawk-sim` process runs all of them as separate clients of the real device API.
+It **simulates only the installation and the rollback** — it never downloads the
+artifact, it waits instead of installing, and a device told to fail reports that
+it rolled back without anything having been installed. Registration, attributes,
+polling, the deployment it is offered and every feedback message are real, which
+is what everything below actually depends on. There is no `hello` app to log
+into; for that, flash a board and point suricatta at the same server.
+
+A few recipes:
 
 | to see | do |
 |---|---|

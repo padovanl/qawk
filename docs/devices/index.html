@@ -235,9 +235,46 @@ demo/simulate.sh --stop shop       # stop one run; --stop alone stops them all
 docker logs -f qawk-sim-shop       # what they are doing, every 10 s</code></pre>
 
 <p>A simulated device's controller id is <code>&lt;name&gt;-&lt;group&gt;-&lt;n&gt;</code>
-(<code>shop-prod-017</code>). It downloads nothing — it waits and reports
-<code>finished</code> — but it answers a deployment outside its maintenance window
-the way SWUpdate does, and a download-only one as <code>downloaded</code>.</p>
+(<code>shop-prod-017</code>). It answers a deployment outside its maintenance
+window the way SWUpdate does, and a download-only one as
+<code>downloaded</code>.</p>
+
+<h3 id="simwhat">What a simulated device is, and what it is not</h3>
+
+<p>A simulated device is <b>not</b> a container of its own, and there is no
+operating system, no filesystem and no application inside it. One
+<code>qawk-sim</code> process — <i>one</i> container, however many devices you
+asked for — runs each device as a separate HTTP client with its own controller
+id, its own attributes, its own token and its own polling clock. Five hundred
+devices are five hundred conversations from one container.</p>
+
+<p>What is real is everything the server can see:</p>
+
+<table>
+<thead><tr><th>Real</th><th>Pretended</th></tr></thead>
+<tbody>
+<tr><td>Registration, the gateway or target token, and every poll of the device API over the network.</td><td>—</td></tr>
+<tr><td>The attributes it reports — <code>device_type</code>, <code>centerid</code>, the system key — which is what channel rules, centres and system types match on.</td><td>—</td></tr>
+<tr><td>The deployment it is offered, the order the orchestrator offers it in, and every feedback message: <code>proceeding</code>, <code>closed/success</code>, <code>closed/failure</code>.</td><td>—</td></tr>
+<tr><td>—</td><td><b>The download.</b> It never fetches the artifact; it does not even open the download URL. The bytes you uploaded are served to real devices, never to these.</td></tr>
+<tr><td>—</td><td><b>The installation.</b> It sleeps between <code>-install-min</code> and <code>-install-max</code> and then reports success.</td></tr>
+<tr><td>—</td><td><b>The failure and the rollback.</b> A device told to fail sleeps the same while and then answers <code>closed/failure</code> with <i>“rolled back to the previous version”</i>. Nothing was installed, so nothing was undone — the message is the whole of it.</td></tr>
+</tbody>
+</table>
+
+<div class="note">
+<div class="adm-head"><span class="ico-slot" data-ico="info-fill" data-size="17"></span>There is no application to log into</div>
+<p>A simulated device has no shell, no IP of its own and no <code>hello</code>
+app: it simulates <b>installing and rolling back</b>, and nothing else. That is
+enough to exercise every part of Qawk — channels, waves, gates, error
+thresholds, centres, the orchestrator's component order and a whole system
+rolling back — because all of those are decided by the server from what a device
+reports, and a simulated device reports exactly what a real one does.</p>
+<p>What it cannot tell you is whether <i>your</i> image boots and your
+application runs. For that you need the real thing: flash a board, point
+SWUpdate's suricatta at Qawk (<a href="#swupdate">above</a>) and watch the same
+release land on it. Qawk cannot tell the two apart — which is the point.</p>
+</div>
 
 <h3 id="simcentres">Putting simulated devices in centres</h3>
 

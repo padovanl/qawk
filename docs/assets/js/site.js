@@ -224,6 +224,13 @@
         var link = el('a', { href: url(it.h) }, it.t);
         if (here && it.h.split('#')[0] === here) {
           mine = true;
+          // The first entry of a section is the page itself, with no
+          // fragment. Clicking it while already on that page fetches the same
+          // document again -- a visible flash -- while every other entry is an
+          // anchor and moves without one. Scroll instead.
+          if (!ownTree && it.h.indexOf('#') < 0) {
+            link.setAttribute('data-top', '');
+          }
           // remember which anchor this entry stands for; which one is lit is
           // decided afterwards, by syncActive
           if (!ownTree) link.setAttribute('data-frag', it.h.split('#')[1] || '');
@@ -530,6 +537,23 @@
       // lit again -- but do not scroll the sidebar a second time
       window.addEventListener('load', function () { if (!byHash()) follow(); });
       window.addEventListener('hashchange', function () { if (!byHash()) follow(); });
+
+      // The first entry of a section is the page itself. Clicking it while
+      // already on that page fetched the same document again -- a visible
+      // flash -- where every other entry is an anchor and moves without one.
+      // It lights itself straight away rather than waiting for the scroll to
+      // arrive, and holds, because a guess made from the position before a
+      // smooth scroll has started is a guess about where you just were.
+      aside.addEventListener('click', function (e) {
+        var a = e.target.closest && e.target.closest('a[data-top]');
+        if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+        e.preventDefault();
+        if (location.hash) history.pushState('', '', location.pathname);
+        aside.querySelectorAll('a[data-frag]').forEach(function (x) { x.className = ''; });
+        a.className = 'on';
+        held = Date.now() + 900;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
 
       var pending = false;
       window.addEventListener('scroll', function () {

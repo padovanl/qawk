@@ -227,6 +227,15 @@ demo/simulate.sh --list      # what is running
 demo/simulate.sh --stop      # stop it all
 ```
 
+They are not containers and there is no application inside them: one `qawk-sim`
+process runs every device as its own client of the real device API. They
+**simulate only the installation and the rollback** — no artifact is ever
+downloaded, the install is a wait, and a failing device reports a rollback that
+never had anything to undo. Registration, attributes, polling, the deployment
+offered and every feedback message are real, which is all the server ever sees.
+📖 [What is real and what is
+pretended](https://padovanl.github.io/qawk/devices/#simwhat)
+
 💥 **Make things fail on purpose** — because you cannot trust a safety mechanism
 you have never seen fire:
 

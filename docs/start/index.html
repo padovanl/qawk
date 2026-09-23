@@ -246,7 +246,13 @@ and it is the part hawkBit has no answer for.</li>
 the attributes a real device would, polls, takes what it is given, waits a random
 while and says how it went. It is not a mock inside the server — it speaks the real
 device API over the real network, so what you are watching is the real thing with
-the hardware replaced.</p>
+the hardware replaced. All three hundred of them live in one container: there is
+no operating system and no application inside a simulated device, and it
+<b>simulates only the installation and the rollback</b> — it never downloads the
+artifact, it sleeps instead of installing, and a failed one simply says it rolled
+back. Everything the server decides is real;
+<a href="../devices/#simwhat">what is real and what is pretended</a> is set out
+in full under Connecting devices.</p>
 
 <p>You can point it at any Qawk server, not only the demo's:</p>
 
