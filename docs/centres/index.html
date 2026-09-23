@@ -8,6 +8,7 @@
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
 <script defer src="../assets/js/icons.js"></script>
+<script defer src="../assets/js/logos.js"></script>
 <script defer src="../assets/js/highlight.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
@@ -76,7 +77,8 @@ curl -u admin:$PW -X PUT -H 'Content-Type: application/json' \
   -d '{"centres": ["c03", "c04"], "fleetId": '$PROD'}' $Q/qawk/v1/centres</code></pre>
 
 <div class="warn-box">
-<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b><code>"fleetId": null</code> does not eject anybody.</b> It means "this centre
+<div class="adm-head"><span class="ico-slot" data-ico="alert-fill" data-size="17"></span>Careful</div>
+<p><b><code>"fleetId": null</code> does not eject anybody.</b> It means "this centre
 is no longer in a channel", and its devices <b>stay where they are</b> — they are
 simply no longer pulled anywhere. To move a centre's devices somewhere else, put
 the centre in <i>that</i> channel; to leave them unmanaged, set it to
@@ -101,7 +103,8 @@ set, in that channel's waves;</li>
 </ul>
 
 <div class="tip">
-<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>A centre that arrives late is still taken.</b> If the channel's release had
+<div class="adm-head"><span class="ico-slot" data-ico="bulb-fill" data-size="17"></span>Good to know</div>
+<p><b>A centre that arrives late is still taken.</b> If the channel's release had
 already finished before you moved the centre in, the orchestrator picks up the new
 systems and the release reopens while it works through them. You do not have to
 re-release for a centre that joined afterwards, and you do not have to remember

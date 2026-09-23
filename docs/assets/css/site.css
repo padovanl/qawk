@@ -23,7 +23,7 @@
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --sidebar: 268px;
-  --right: 372px;
+  --right: 440px;
   --head: 52px;
 }
 
@@ -212,15 +212,25 @@ blockquote {
   color: var(--fg-dim);
 }
 
+/* An admonition says what kind of thing it is before it says the thing. The
+   mark is solid rather than outlined: at 17px an outline is a smudge. */
 .note, .warn-box, .tip {
-  border: 1px solid var(--line); border-left: 3px solid var(--info);
-  background: var(--bg-2); border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 0 0 18px;
-  font-size: 14px;
+  --adm: var(--info);
+  border: 1px solid var(--line); border-left: 3px solid var(--adm);
+  background: var(--bg-2); border-radius: 0 9px 9px 0; padding: 13px 18px 14px;
+  margin: 0 0 20px; font-size: 14px;
 }
+.warn-box { --adm: var(--warn); }
+.tip { --adm: var(--ok); }
 .note > :last-child, .warn-box > :last-child, .tip > :last-child { margin-bottom: 0; }
 .note b, .warn-box b, .tip b { color: var(--fg); }
-.warn-box { border-left-color: var(--warn); }
-.tip { border-left-color: var(--ok); }
+
+.adm-head {
+  display: flex; align-items: center; gap: 8px; margin: 0 0 7px;
+  color: var(--adm); font-size: 11px; font-weight: 700;
+  letter-spacing: .8px; text-transform: uppercase;
+}
+.adm-head .ico { color: var(--adm); flex: none; }
 
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(236px, 1fr)); gap: 14px; margin: 0 0 22px; }
 .card {
@@ -264,9 +274,16 @@ blockquote {
 .pager { display: flex; gap: 14px; margin-top: 52px; border-top: 1px solid var(--line); padding-top: 22px; }
 .pager a {
   flex: 1; border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; color: var(--fg);
+  display: flex; align-items: center; gap: 12px; min-width: 0;
+  transition: border-color .14s, background .14s;
 }
-.pager a:hover { border-color: var(--accent); text-decoration: none; }
-.pager a.next { text-align: right; }
+.pager a:hover { border-color: var(--accent); background: var(--bg-2); text-decoration: none; }
+.pager a .ico { color: var(--fg-faint); flex: none; transition: color .14s, transform .14s; }
+.pager a:hover .ico { color: var(--accent-2); }
+.pager a.prev:hover .ico { transform: translateX(-3px); }
+.pager a.next:hover .ico { transform: translateX(3px); }
+.pager a span { min-width: 0; }
+.pager a.next { text-align: right; justify-content: flex-end; }
 .pager small { display: block; color: var(--fg-faint); font-size: 11.5px; text-transform: uppercase; letter-spacing: .6px; }
 .pager b { font-weight: 500; }
 
@@ -380,15 +397,27 @@ blockquote {
 }
 .panel > .pb { padding: 12px 14px; }
 .panel pre { background: var(--bg); margin: 0; font-size: 12px; border-radius: 7px; }
-.lang-tabs { display: flex; gap: 2px; flex-wrap: nowrap; padding: 10px 10px 0; }
+/* The real logo above its name, the way an API reference does it: the mark is
+   what is recognised, the word is what confirms it. */
+.lang-tabs { display: flex; gap: 4px; flex-wrap: nowrap; padding: 12px 10px 4px; }
 .lang-tabs button {
-  background: none; border: 1px solid transparent; border-radius: 6px; padding: 4px 6px;
-  font-size: 10.5px; cursor: pointer; color: var(--fg-faint); font-family: var(--mono);
-  text-transform: uppercase; letter-spacing: .3px; font-weight: 600;
-  display: inline-flex; align-items: center; flex: 1 1 auto; justify-content: center;
+  background: none; border: 1px solid transparent; border-radius: 8px;
+  padding: 8px 4px 6px; cursor: pointer; color: var(--fg-faint);
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  flex: 1 1 0; min-width: 0;
+  font-size: 8.8px; letter-spacing: 0; font-weight: 600; text-transform: uppercase;
+  transition: background .12s, border-color .12s, color .12s;
 }
-.lang-tabs button:hover { color: var(--fg); }
-.lang-tabs button.on { color: var(--accent-2); border-color: var(--accent); background: var(--accent-soft); }
+.lang-tabs button span {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lang-tabs button .logo { opacity: .55; transition: opacity .12s; }
+.lang-tabs button:hover { color: var(--fg); background: var(--bg-3); }
+.lang-tabs button:hover .logo { opacity: .9; }
+.lang-tabs button.on {
+  color: var(--fg); border-color: var(--accent); background: var(--accent-soft);
+}
+.lang-tabs button.on .logo { opacity: 1; }
 
 .ep-list { margin: 0 0 22px; }
 .ep-list a {
@@ -405,9 +434,7 @@ blockquote {
 .ico { vertical-align: -.18em; flex: none; }
 h2 > .ico, h3 > .ico { margin-right: 9px; color: var(--accent); vertical-align: -.1em; }
 .card .ico { color: var(--accent); }
-.note > .ico, .tip > .ico, .warn-box > .ico { color: var(--info); margin-right: 8px; }
-.tip > .ico { color: var(--ok); }
-.warn-box > .ico { color: var(--warn); }
+
 .panel > .ph .ico { color: var(--fg-faint); }
 .lang-tabs button .ico, .copy .ico, .btn-send .ico { margin-right: 5px; }
 td .ico, li > .ico { color: var(--accent); margin-right: 6px; }

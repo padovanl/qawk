@@ -8,6 +8,7 @@
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
 <script defer src="../assets/js/icons.js"></script>
+<script defer src="../assets/js/logos.js"></script>
 <script defer src="../assets/js/highlight.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
@@ -70,7 +71,8 @@ every instance — take one, or <code>max</code>.</p>
 </table>
 
 <div class="note">
-<p><span class="ico-slot" data-ico="info" data-size="16"></span><b>A halted release is the one alert not to route to a dashboard nobody reads.</b>
+<div class="adm-head"><span class="ico-slot" data-ico="info-fill" data-size="17"></span>Note</div>
+<p><b>A halted release is the one alert not to route to a dashboard nobody reads.</b>
 Halting is Qawk deciding it should not carry on without a human. If nobody is told,
 the fleet simply stops updating, quietly, for as long as it takes someone to
 notice.</p>
@@ -126,7 +128,8 @@ the asynchronous poll commit, every poll waited for its own fsync, and on a busy
 disk ten thousand devices meant twenty-second stalls.</p>
 
 <div class="warn-box">
-<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b>These are polls, not downloads.</b> Ten thousand devices each pulling a
+<div class="adm-head"><span class="ico-slot" data-ico="alert-fill" data-size="17"></span>Careful</div>
+<p><b>These are polls, not downloads.</b> Ten thousand devices each pulling a
 200&nbsp;MB artifact is a bandwidth and storage problem, not a request-rate one,
 and it is bounded by your disk and your network. Use waves
 (<code>wavePercent</code>) to spread it, which is what they are for.</p>

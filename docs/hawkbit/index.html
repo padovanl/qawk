@@ -8,6 +8,7 @@
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
 <script defer src="../assets/js/icons.js"></script>
+<script defer src="../assets/js/logos.js"></script>
 <script defer src="../assets/js/highlight.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
@@ -38,7 +39,8 @@ distribution sets and their types; rollouts with groups, thresholds and the
 approval flow; target filters with auto-assignment; and tenant configuration.</p>
 
 <div class="tip">
-<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>The authoritative list is the server's own.</b> Qawk serves hawkBit's OpenAPI
+<div class="adm-head"><span class="ico-slot" data-ico="bulb-fill" data-size="17"></span>Good to know</div>
+<p><b>The authoritative list is the server's own.</b> Qawk serves hawkBit's OpenAPI
 document where hawkBit serves it, filtered to the operations it really implements —
 so a generated client cannot be built against something that is not there:</p>
 <pre><code>curl -s 'https://qawk.example.com/v3/api-docs/swagger-config'
@@ -103,7 +105,8 @@ the installed set does not change. When the window opens, the device is told
 <code>forced</code> and installs.</p>
 
 <div class="note">
-<p><span class="ico-slot" data-ico="info" data-size="16"></span>Inside a window — and for every action with no window at all — the behaviour is
+<div class="adm-head"><span class="ico-slot" data-ico="info-fill" data-size="17"></span>Note</div>
+<p>Inside a window — and for every action with no window at all — the behaviour is
 hawkBit's exactly. The difference applies only where hawkBit's behaviour would
 record something untrue.</p>
 </div>
@@ -141,7 +144,8 @@ machines that must move together.</li>
 </ol>
 
 <div class="warn-box">
-<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b>History does not come across.</b> Actions, rollouts and their status entries
+<div class="adm-head"><span class="ico-slot" data-ico="alert-fill" data-size="17"></span>Careful</div>
+<p><b>History does not come across.</b> Actions, rollouts and their status entries
 stay in hawkBit. If you need them, keep the old server readable for as long as your
 retention requires. Qawk starts with the devices' <i>current</i> state, not their
 past.</p>

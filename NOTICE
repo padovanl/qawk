@@ -58,6 +58,14 @@ THIRD-PARTY COMPONENTS
 
 TRADEMARKS
 
+The documentation site draws the marks of the languages its code samples are
+written in -- cURL, Python, JavaScript, Go and PowerShell -- on the tabs that
+choose between them.  Each is an approximation built from paths and letterforms
+in docs/assets/js/logos.js; none is a rights holder's own file.  They are used
+nominatively, to say which language a sample is in, and imply no endorsement by
+or affiliation with the Python Software Foundation, the Go authors, Microsoft
+Corporation or the curl project.
+
 hawkBit is a trademark of the Eclipse Foundation.  Qawk is an independent
 implementation of the published hawkBit protocols and is not affiliated with,
 endorsed by, or a product of the Eclipse Foundation.

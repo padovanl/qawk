@@ -42,6 +42,22 @@
     send: '<path d="M10 14l11-11M21 3l-6.5 18a.55.55 0 0 1-1 0L10 14l-7-3.5a.55.55 0 0 1 0-1z"/>',
     book: '<path d="M3 19a9 9 0 0 1 9 0a9 9 0 0 1 9 0"/><path d="M3 6a9 9 0 0 1 9 0a9 9 0 0 1 9 0v13a9 9 0 0 0-9 0a9 9 0 0 0-9 0z"/>',
     search: '<circle cx="10" cy="10" r="7"/><path d="M21 21l-6-6"/>',
+    'arrow-left': '<path d="M19 12H5M11 18l-6-6 6-6"/>',
+    'arrow-right': '<path d="M5 12h14M13 6l6 6-6 6"/>',
+
+    // Filled marks for the admonition headers. A 1.8px outline is unreadable
+    // at 16px; a solid shape with the symbol knocked out of it is not.
+    'info-fill': '<circle cx="12" cy="12" r="10" fill="currentColor" stroke="none"/>' +
+      '<path d="M12 7.2v.02M11.1 11h1.2v5.4h1.1" stroke="var(--bg-2)" stroke-width="2" ' +
+      'stroke-linecap="round" stroke-linejoin="round"/>' +
+      '<circle cx="12" cy="7.4" r="1.15" fill="var(--bg-2)" stroke="none"/>',
+    'alert-fill': '<path d="M10.3 3.2 1.9 17.3A2 2 0 0 0 3.6 20.3h16.8a2 2 0 0 0 1.7-3L13.7 3.2a2 2 0 0 0-3.4 0z" ' +
+      'fill="currentColor" stroke="none"/>' +
+      '<path d="M12 9v4.6" stroke="var(--bg-2)" stroke-width="2.1" stroke-linecap="round"/>' +
+      '<circle cx="12" cy="17" r="1.2" fill="var(--bg-2)" stroke="none"/>',
+    'bulb-fill': '<path d="M12 2.5a6.5 6.5 0 0 0-3.9 11.7c.6.5.9 1.1.9 1.8v.5h6v-.5c0-.7.3-1.3.9-1.8A6.5 6.5 0 0 0 12 2.5z" ' +
+      'fill="currentColor" stroke="none"/>' +
+      '<path d="M9.5 19h5M10.2 21.3h3.6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
     // languages, for the code sample tabs
     curl: '<path d="M5 7l5 5-5 5M13 17h6"/>',
     python: '<path d="M12 3c-3 0-4 1-4 3v2h4v1H6.5C5 9 4 10 4 12s1 3 2.5 3H8v-2c0-2 1-3 3-3h3c1.5 0 2-1 2-2V6c0-2-1-3-4-3"/><path d="M12 21c3 0 4-1 4-3v-2h-4v-1h5.5C19 15 20 14 20 12s-1-3-2.5-3H16v2c0 2-1 3-3 3h-3c-1.5 0-2 1-2 2v2c0 2 1 3 4 3"/><path d="M10 6.5v.01M14 17.5v.01"/>',

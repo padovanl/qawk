@@ -57,6 +57,11 @@ for (const key of Object.keys(ALL)) {
   for (const [code, r] of Object.entries(ep.res || {})) {
     if (!/^\d{3}$/.test(code)) fail(key, 'odd status code', code);
     if (!r.d) fail(key, code, 'has no description');
+    // "The type." tells a reader nothing. A response description says what
+    // comes back and what is worth knowing about it.
+    else if (r.d.replace(/<[^>]+>/g, '').split(/\s+/).filter(Boolean).length < 7) {
+      fail(key, code, 'description is too thin to be worth reading: ' + JSON.stringify(r.d));
+    }
   }
   // every {slot} in the path must be described, and must have an example
   // value, or a generated sample would be handed to a reader with a

@@ -8,6 +8,7 @@
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
 <script defer src="../assets/js/icons.js"></script>
+<script defer src="../assets/js/logos.js"></script>
 <script defer src="../assets/js/highlight.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
@@ -70,7 +71,8 @@ is moving the moment you open the page.</li>
 demo/start.sh down     # stop and remove everything</code></pre>
 
 <div class="note">
-<p><span class="ico-slot" data-ico="info" data-size="16"></span><b>Everything is configurable.</b> <code>QAWK_ADMIN_PASSWORD</code>,
+<div class="adm-head"><span class="ico-slot" data-ico="info-fill" data-size="17"></span>Note</div>
+<p><b>Everything is configurable.</b> <code>QAWK_ADMIN_PASSWORD</code>,
 <code>QAWK_PORT</code>, <code>CONSOLE_PORT</code>, <code>PROD_DEVICES</code>,
 <code>SYSTEMS</code>, <code>USERS_FILE</code>. The same thing with docker compose
 is in <code>demo/compose.yml</code>.</p>
@@ -112,7 +114,8 @@ built-in roles and hawkBit's default types — there is no migration step to run
 no schema to load.</p>
 
 <div class="warn-box">
-<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b>Set <code>QAWK_ADMIN_PASSWORD</code>.</b> Without it the administrator's
+<div class="adm-head"><span class="ico-slot" data-ico="alert-fill" data-size="17"></span>Careful</div>
+<p><b>Set <code>QAWK_ADMIN_PASSWORD</code>.</b> Without it the administrator's
 password is <code>admin</code>. That administrator is never stored in the
 database: it always works, which is how a new server is set up and how a lost
 password is fixed — and why the password must not be the default on anything

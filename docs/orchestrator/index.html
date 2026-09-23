@@ -8,6 +8,7 @@
 <link rel="icon" href="../assets/img/qawk-logo.svg">
 <link rel="stylesheet" href="../assets/css/site.css">
 <script defer src="../assets/js/icons.js"></script>
+<script defer src="../assets/js/logos.js"></script>
 <script defer src="../assets/js/highlight.js"></script>
 <script defer src="../assets/js/site.js"></script>
 </head>
@@ -37,7 +38,8 @@ system. Qawk does the same thing <b>on the server</b>, over devices that stay
 ordinary hawkBit targets.</p>
 
 <div class="tip">
-<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>Nothing changes on the devices.</b> They keep speaking plain hawkBit DDI,
+<div class="adm-head"><span class="ico-slot" data-ico="bulb-fill" data-size="17"></span>Good to know</div>
+<p><b>Nothing changes on the devices.</b> They keep speaking plain hawkBit DDI,
 they keep being ordinary targets, and they do not know they are part of a system.
 All the ordering, the waiting and the rolling back happens server-side. That means
 you can put existing devices into a system without touching their software.</p>
@@ -94,7 +96,8 @@ left out, the centre setting is used.</p>
 ]}</code></pre>
 
 <div class="warn-box">
-<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b><code>mixed</code> matters.</b> It means the system's devices are not all in
+<div class="adm-head"><span class="ico-slot" data-ico="alert-fill" data-size="17"></span>Careful</div>
+<p><b><code>mixed</code> matters.</b> It means the system's devices are not all in
 the same channel. The orchestrator <b>leaves such a system alone</b> — it will not
 push prod's manifest into a system half of which is still in beta. This is usually
 momentary, while a centre is being moved, and it resolves itself; if a system stays
@@ -209,7 +212,8 @@ lane is misbehaving:</p>
   $Q/qawk/v1/systemdeployments/51/runs/700/rollback</code></pre>
 
 <div class="note">
-<p><span class="ico-slot" data-ico="info" data-size="16"></span><b>A device that ran nothing before is left as it is.</b> There is nothing to go
+<div class="adm-head"><span class="ico-slot" data-ico="info-fill" data-size="17"></span>Note</div>
+<p><b>A device that ran nothing before is left as it is.</b> There is nothing to go
 back to, and inventing something would be worse than leaving it. The deployment
 says so in its reason: <i>"n ran nothing before and were left as they are"</i>.</p>
 </div>
@@ -275,7 +279,8 @@ manifest do not go together</td>
 </table>
 
 <div class="tip">
-<p><span class="ico-slot" data-ico="bulb" data-size="16"></span><b>The quick test:</b> did other systems succeed with this same manifest? On
+<div class="adm-head"><span class="ico-slot" data-ico="bulb-fill" data-size="17"></span>Good to know</div>
+<p><b>The quick test:</b> did other systems succeed with this same manifest? On
 the screenshot above, three did. That makes it a problem with that one system,
 not with the manifest — so a retry is the right move. If <i>every</i> system
 rolled back, the manifest is the suspect.</p>
@@ -312,7 +317,8 @@ blocking the rest.</li>
   $Q/qawk/v1/systemdeployments/51/runs/700/retry</code></pre>
 
 <div class="warn-box">
-<p><span class="ico-slot" data-ico="alert" data-size="16"></span><b>If the deployment's release was halted, the channel is still halted.</b>
+<div class="adm-head"><span class="ico-slot" data-ico="alert-fill" data-size="17"></span>Careful</div>
+<p><b>If the deployment's release was halted, the channel is still halted.</b>
 Taking a system again restarts the <i>orchestrator</i>, not the release. Go to
 <b>Fleets</b> and press <b>resume</b> on the channel as well. Two separate
 decisions, deliberately: one says "this system is worth another go", the other

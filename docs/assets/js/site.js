@@ -208,10 +208,15 @@
       sec.items.forEach(function (it) {
         var li = el('li');
         var link = el('a', { href: url(it.h) }, it.t);
-        // the page itself, not one of its anchors, is the one highlighted
-        if (!ownTree && it.h === here) {
-          link.className = 'on'; mine = true;
-        } else if (here && it.h.split('#')[0] === here) { mine = true; }
+        if (here && it.h.split('#')[0] === here) {
+          mine = true;
+          // remember which anchor this entry stands for; which one is lit is
+          // decided afterwards, by syncActive
+          if (!ownTree) link.setAttribute('data-frag', it.h.split('#')[1] || '');
+          // on the API reference these are routes, not anchors: tag them the
+          // way its own tree is tagged so one marker lights them all
+          else link.setAttribute('data-h', (it.h.split('#')[1] || '').replace(/^\//, ''));
+        }
         li.appendChild(link); ul.appendChild(li);
       });
       if (mine) g.className = 'grp open';
@@ -234,6 +239,40 @@
   }
 
   // ------------------------------------------------------- content chrome
+
+  // Put the highlighted entry where the eye is: a sidebar of twelve sections
+  // opens on whichever one you are in, and the entry itself can still be
+  // below the fold. Scrolling the container rather than calling
+  // scrollIntoView keeps the page itself where it was.
+  function centreActive(aside) {
+    var on = aside.querySelector('a.on');
+    if (!on) return;
+    var want = on.offsetTop - (aside.clientHeight / 2) + (on.offsetHeight / 2);
+    aside.scrollTop = Math.max(0, want);
+  }
+
+  // Which sidebar entry is lit: the section actually being read, not the first
+  // one of the page. Clicking "Kubernetes" and watching "Docker and compose"
+  // light up is worse than no highlight at all -- it says you are somewhere
+  // you are not.
+  function syncActive(aside, wrap) {
+    var links = aside.querySelectorAll('a[data-frag]');
+    if (!links.length) return;
+    var marks = [];
+    links.forEach(function (a) {
+      var f = a.getAttribute('data-frag');
+      var h = f ? wrap.querySelector('[id="' + f + '"]') : null;
+      marks.push({ a: a, top: h ? h.getBoundingClientRect().top + window.scrollY : 0 });
+    });
+    var best = marks[0], y = window.scrollY + 130;
+    marks.forEach(function (m) { if (m.top <= y && m.top >= best.top) best = m; });
+    // at the very bottom the last section is the one being read, whatever the
+    // arithmetic says
+    if (window.innerHeight + window.scrollY >= document.body.scrollHeight - 4) {
+      best = marks[marks.length - 1];
+    }
+    links.forEach(function (a) { a.className = a === best.a ? 'on' : ''; });
+  }
 
   function crumbs(page) {
     var c = el('div', { class: 'crumbs' });
@@ -262,21 +301,37 @@
     main.className += ' has-toc';
 
     var links = t.querySelectorAll('a');
-    function mark() {
-      var best = 0, top = 0;
-      for (var i = 0; i < hs.length; i++) {
-        var y = hs[i].getBoundingClientRect().top;
-        if (y < 140) { best = i; top = y; }
-      }
+    function light(best) {
       for (var j = 0; j < links.length; j++) links[j].className =
         (hs[j].tagName === 'H3' ? 'h3' : '') + (j === best ? ' on' : '');
     }
+    // What the reader clicked wins at once and keeps winning for a moment:
+    // the scroll to the heading is animated, so working the answer out from
+    // the position mid-flight lights whatever is passing by.
+    var held = 0;
+    function mark() {
+      if (Date.now() < held) return;
+      var best = 0;
+      for (var i = 0; i < hs.length; i++) {
+        if (hs[i].getBoundingClientRect().top < 140) best = i;
+      }
+      light(best);
+    }
+    for (var k = 0; k < links.length; k++) {
+      (function (i, a) {
+        a.addEventListener('click', function () { held = Date.now() + 900; light(i); });
+      })(k, links[k]);
+    }
     mark();
+    window.addEventListener('load', mark);
     var pending = false;
     window.addEventListener('scroll', function () {
       if (pending) return; pending = true;
       requestAnimationFrame(function () { pending = false; mark(); });
     }, { passive: true });
+    ['wheel', 'touchmove', 'keydown'].forEach(function (e) {
+      window.addEventListener(e, function () { held = 0; }, { passive: true });
+    });
   }
 
   function anchors(page) {
@@ -313,10 +368,13 @@
     var i = FLOW.indexOf(here);
     if (i < 0) return;
     var p = el('div', { class: 'pager' });
+    var arrow = function (n) {
+      return window.QawkIcons ? window.QawkIcons.markup(n, 18) : '';
+    };
     if (i > 0) p.appendChild(el('a', { class: 'prev', href: url(FLOW[i - 1]) },
-      '<small>Previous</small><b>' + TITLES[FLOW[i - 1]] + '</b>'));
+      arrow('arrow-left') + '<span><small>Previous</small><b>' + TITLES[FLOW[i - 1]] + '</b></span>'));
     if (i < FLOW.length - 1) p.appendChild(el('a', { class: 'next', href: url(FLOW[i + 1]) },
-      '<small>Next</small><b>' + TITLES[FLOW[i + 1]] + '</b>'));
+      '<span><small>Next</small><b>' + TITLES[FLOW[i + 1]] + '</b></span>' + arrow('arrow-right')));
     if (p.children.length) page.appendChild(p);
   }
 
@@ -389,7 +447,7 @@
     page.remove();
 
     header();
-    sidebar(ownTree);
+    var aside = sidebar(ownTree);
 
     var shell = el('div', { class: 'shell' });
     var main = el('main');
@@ -411,6 +469,49 @@
     if (!ownTree) pager(wrap);
     search();
 
+    if (!ownTree) {
+      // A hash is what the reader just asked for, so it wins outright -- and
+      // it keeps winning for a moment, because the browser's own jump to the
+      // anchor raises a scroll event, and because the screenshots on these
+      // pages load late and move every heading while they do. Working out the
+      // position before that has settled gets the answer confidently wrong.
+      var held = 0;
+      var byHash = function () {
+        var f = decodeURIComponent(location.hash.slice(1));
+        var a = f && aside.querySelector('a[data-frag="' + CSS.escape(f) + '"]');
+        if (!a) return false;
+        aside.querySelectorAll('a[data-frag]').forEach(function (x) { x.className = ''; });
+        a.className = 'on';
+        held = Date.now() + 900;
+        return true;
+      };
+      var follow = function () {
+        if (Date.now() < held) return;
+        syncActive(aside, wrap);
+      };
+
+      if (!byHash()) follow();
+      centreActive(aside);
+      // images change every heading's position: work it out again once they
+      // have arrived
+      window.addEventListener('load', function () {
+        if (!byHash()) follow();
+        centreActive(aside);
+      });
+      window.addEventListener('hashchange', function () { if (!byHash()) follow(); });
+
+      var pending = false;
+      window.addEventListener('scroll', function () {
+        if (pending) return;
+        pending = true;
+        requestAnimationFrame(function () { pending = false; follow(); });
+      }, { passive: true });
+      // a deliberate scroll by the reader takes the highlight back
+      ['wheel', 'touchmove', 'keydown'].forEach(function (e) {
+        window.addEventListener(e, function () { held = 0; }, { passive: true });
+      });
+    }
+
     document.title = (wrap.querySelector('h1') ?
       wrap.querySelector('h1').textContent.replace('#', '').trim() + ' · ' : '') + 'Qawk documentation';
   }
@@ -418,5 +519,5 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 
-  window.QawkDocs = { url: url, el: el, here: here };
+  window.QawkDocs = { url: url, el: el, here: here, centreActive: centreActive };
 })();

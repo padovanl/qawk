@@ -217,6 +217,63 @@
     ta.remove();
   }
 
+  // ------------------------------------------------------- what can go wrong
+
+  // Almost every endpoint can answer 401, 403, 404 or 400, and writing those
+  // out ninety-one times would be ninety-one places to get them wrong. They
+  // are derived from what the endpoint IS -- it needs credentials, it names a
+  // permission, its path has an {id}, it takes a body -- and merged with
+  // whatever the endpoint declares for itself, which always wins.
+  //
+  // The bodies below were taken from a running server, not imagined.
+  var COMMON = {
+    401: {
+      d: 'No credentials, or they were not accepted. <b>This one answer does not use ' +
+         'hawkBit\'s error shape</b> — it uses the shape hawkBit itself answers 401 with.',
+      ex: { error: 'Unauthorized', path: '/qawk/v1/fleets', status: 401,
+        timestamp: '2026-09-23T08:11:19.498Z' }
+    },
+    403: function (perm) {
+      return {
+        d: 'Signed in, but not allowed to do this — the account holds no role with ' +
+           (perm === 'admin' ? 'administrator rights' : '<code>' + esc(perm) + '</code>') + '.',
+        ex: { errorCode: 'hawkbit.server.error.insufficientpermission',
+          exceptionClass: 'org.eclipse.hawkbit.im.authentication.InsufficientPermissionException',
+          message: 'Insufficient Permission: ' + (perm === 'admin' ? 'SYSTEM_ADMIN' : perm) }
+      };
+    },
+    404: {
+      d: 'No such thing. <code>info</code> says which kind and which identifier was asked for.',
+      ex: { errorCode: 'hawkbit.server.error.repo.entityNotFound',
+        exceptionClass: 'org.eclipse.hawkbit.repository.exception.EntityNotFoundException',
+        message: 'Fleet with given identifier {9999} does not exist.',
+        info: { entityId: 9999, type: 'Fleet' } }
+    },
+    400: {
+      d: 'The request was understood and refused: a field missing or out of range, a query ' +
+         'that does not parse, a set that cannot be assigned. <code>message</code> is written ' +
+         'to be shown to a person as it is.',
+      ex: { errorCode: 'hawkbit.server.error.repo.constraintViolation',
+        exceptionClass: 'jakarta.validation.ConstraintViolationException',
+        message: 'a fleet needs a name' }
+    }
+  };
+
+  // responsesFor: the endpoint's own answers, plus the ones it can give by
+  // virtue of what it is. Its own always win.
+  function responsesFor(ep, api) {
+    var out = {}, own = ep.res || {};
+    var a = ep.auth || api.auth;
+    if (a !== 'none') out[401] = COMMON[401];
+    if (ep.perm) out[403] = COMMON[403](ep.perm);
+    if (/\{\w+\}/.test(ep.p)) out[404] = COMMON[404];
+    if (ep.body !== undefined || ep.bf || ep.raw || (ep.q && ep.q.some(function (q) { return q[2]; }))) {
+      out[400] = COMMON[400];
+    }
+    Object.keys(own).forEach(function (k) { out[k] = own[k]; });
+    return out;
+  }
+
   // ------------------------------------------------------------ try it out
 
   // Where the requests go, and who they go as. Kept in the browser only: the
@@ -423,8 +480,9 @@
     }
 
     // responses, with the status codes as tabs
-    if (ep.res) {
-      var codes = Object.keys(ep.res);
+    var RES = responsesFor(ep, api);
+    if (RES) {
+      var codes = Object.keys(RES).sort(function (a, b) { return a - b; });
       var rw = el('div');
       rw.innerHTML = '<h2 id="responses">Responses</h2>';
       var tabs = el('div', { class: 'tabs' });
@@ -441,7 +499,7 @@
         tabs.appendChild(b);
       });
       function showCode(c) {
-        var r = ep.res[c];
+        var r = RES[c];
         pane.innerHTML = '<p>' + r.d + '</p>' +
           (r.ex ? '<pre><code>' + esc(json(r.ex)) + '</code></pre>' : '');
         if (r.ex && window.QawkHL) window.QawkHL.paint(pane.querySelector('pre'), 'json');
@@ -471,8 +529,11 @@
       cb.onclick = function () { copyText(text, cb); };
     }
     LANGS.forEach(function (L) {
-      var b = el('button', { type: 'button', class: L === lang ? 'on' : '' },
-        ic(L, 14) + (L === 'javascript' ? 'JS' : L === 'powershell' ? 'PS' : L));
+      // the real mark, in its own colours -- that is what a reader recognises
+      var b = el('button', { type: 'button', class: L === lang ? 'on' : '', title: L },
+        (window.QawkLogos ? window.QawkLogos.markup(L, 22) : ic(L, 16)) +
+        '<span>' + (L === 'javascript' ? 'JavaScript' : L === 'powershell' ? 'PowerShell'
+          : L === 'curl' ? 'cURL' : L === 'go' ? 'Go' : 'Python') + '</span>');
       b.onclick = function () {
         lang = L;
         try { localStorage.setItem('qawk-docs-lang', L); } catch (e) {}
@@ -687,6 +748,10 @@
         if (g) g.classList.add('open');
       }
     });
+    // and bring it into view: the endpoint tree is long, and whichever entry
+    // you are reading is usually well below the fold
+    var side = document.querySelector('aside.side');
+    if (side && D.centreActive) D.centreActive(side);
   }
 
   function boot() {
