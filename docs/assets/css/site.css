@@ -139,8 +139,14 @@ aside.side .grp > button .n {
 }
 aside.side .grp > button:hover .n,
 aside.side .grp.open > button .n { color: var(--accent); }
-aside.side .grp > button .caret { margin-left: auto; color: var(--fg-faint); transition: transform .15s; font-size: 10px; }
-aside.side .grp.open > button .caret { transform: rotate(90deg); }
+aside.side .grp > button .caret {
+  margin-left: auto; display: flex; align-items: center;
+  color: var(--fg-faint); opacity: .45;
+  transition: transform .18s cubic-bezier(.4, 0, .2, 1), opacity .15s, color .15s;
+}
+aside.side .grp > button:hover .caret { opacity: .95; color: var(--fg-dim); }
+aside.side .grp.open > button .caret { transform: rotate(90deg); opacity: .9; color: var(--accent); }
+aside.side .grp .caret .ico { stroke-width: 2.2; }
 aside.side .grp ul { display: none; list-style: none; margin: 1px 0 6px; padding: 0 0 0 10px; }
 aside.side .grp.open ul { display: block; }
 aside.side .grp ul a {

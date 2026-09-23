@@ -215,7 +215,8 @@
       var g = el('div', { class: 'grp' });
       var b = el('button', { type: 'button' },
         '<span class="n">' + (window.QawkIcons ? window.QawkIcons.markup(sec.ico, 17) : '') +
-        '</span><span>' + sec.t + '</span><span class="caret">▶</span>');
+        '</span><span>' + sec.t + '</span><span class="caret">' +
+        (window.QawkIcons ? window.QawkIcons.markup('chevron', 14) : '') + '</span>');
       var ul = el('ul');
       var mine = false;
       sec.items.forEach(function (it) {

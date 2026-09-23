@@ -747,7 +747,7 @@
       var li = el('li');
       var g = el('div', { class: 'grp sub' });
       var b = el('button', { type: 'button' },
-        '<span>' + esc(api.title) + '</span><span class="caret">\u25b6</span>');
+        '<span>' + esc(api.title) + '</span><span class="caret">' + ic('chevron', 13) + '</span>');
       var ul = el('ul');
       ul.appendChild(el('li', null, '<a href="#/' + api.id + '" data-h="' + api.id +
         '">Overview</a>'));
