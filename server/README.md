@@ -93,6 +93,11 @@ Everything is an environment variable; nothing is read after startup.
 | `QAWK_METRICS_TOKEN` | *(empty)* | when set, `/metrics` answers only `Authorization: Bearer <token>`; empty leaves it open, for a scraper on an internal network |
 | `QAWK_PUBLIC_URL` | *(empty)* | base of every link Qawk hands out; empty means "the address the client used", which is right unless a proxy rewrites it |
 | `QAWK_POLLING_TIME` | `00:05:00` | device polling interval until one is set through the API |
+| `QAWK_TLS_CERT` / `QAWK_TLS_KEY` | *(empty)* | both set, the server speaks HTTPS itself (TLS 1.2 floor, 1.3 when the client can) instead of plain HTTP; half a pair is refused at startup rather than falling back silently |
+| `QAWK_TLS_CLIENT_CA` | *(empty)* | with TLS on, a PEM bundle of authorities: a device must then present a certificate of one of them, verified during the handshake, before any handler runs |
+| `QAWK_REDIRECT_HTTP` | *(empty)* | with TLS on, an extra plain-HTTP address answering everything with a 308 to the HTTPS one — 308 keeps the method, so a device POSTing feedback does not have it turned into a GET |
+| `QAWK_CORS_ORIGINS` | *(empty)* | browser origins allowed to read this server's answers, comma separated, or `*`. Empty sends no CORS header at all, which is what a server only devices and scripts talk to wants |
+| `QAWK_SOURCE_URL` | *(this repository)* | where **this build's** source is. Answered by `/qawk/v1/info` without credentials and shown on the console's About page: it is the offer AGPL section 13 requires, so a modified deployment points it at its own repository. Unset falls back to the default; blank stops the server |
 | `QAWK_LOG_LEVEL` | `info` | `debug` logs every request |
 
 Tenant settings — the gateway token, the polling interval, whether the

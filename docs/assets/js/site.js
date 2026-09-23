@@ -341,8 +341,20 @@
         a.addEventListener('click', function () { held = Date.now() + 900; light(i); });
       })(k, links[k]);
     }
-    mark();
-    window.addEventListener('load', mark);
+    // A hash is a hash wherever it came from -- this list, the sidebar, or a
+    // link somebody pasted. Both lists follow it, or they disagree about where
+    // the reader is, which is worse than either of them being wrong alone.
+    function byHash() {
+      var f = decodeURIComponent(location.hash.slice(1));
+      if (!f) return false;
+      for (var i = 0; i < hs.length; i++) {
+        if (hs[i].id === f) { held = Date.now() + 900; light(i); return true; }
+      }
+      return false;
+    }
+    window.addEventListener('hashchange', function () { if (!byHash()) { held = 0; mark(); } });
+    if (!byHash()) mark();
+    window.addEventListener('load', function () { if (!byHash()) mark(); });
     var pending = false;
     window.addEventListener('scroll', function () {
       if (pending) return; pending = true;
