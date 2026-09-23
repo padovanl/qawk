@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
+name: Something is wrong
+description: A device that will not update, a release that will not move, an answer that looks incorrect.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before anything else: if this is a **security** problem, do not open an
+        issue. [Report it privately](https://github.com/padovanl/qawk/security/advisories/new).
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+      placeholder: |
+        I moved centre c03 into prod. Its standalone devices took prod's
+        release, but the four systems in it are still on the old version an
+        hour later.
+    validations: { required: true }
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Which Qawk
+      description: |
+        The answer from `/qawk/v1/info`, which says the version and the
+        features this build has.
+      render: shell
+      placeholder: curl -s https://your-server/qawk/v1/info
+    validations: { required: true }
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: What the server said
+      description: |
+        Anything from the log around the time it happened. `QAWK_LOG_LEVEL=debug`
+        logs every request, if you can reproduce it.
+        **Please take out your gateway token, passwords and any API token.**
+      render: shell
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where it happened
+      multiple: true
+      options:
+        - Channels and releases
+        - Centres
+        - The orchestrator (systems)
+        - Devices (the DDI API)
+        - The hawkBit Management API
+        - The console
+        - Installing or configuring the server
+        - Somewhere else
+
+  - type: textarea
+    id: shape
+    attributes:
+      label: The shape of your fleet
+      description: |
+        Roughly how many devices, how many centres, whether you use systems,
+        and anything unusual about the setup. Most of what looks like a bug in
+        one fleet is ordinary behaviour in another.

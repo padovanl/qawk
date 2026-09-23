@@ -27,15 +27,22 @@ window.QAWK_API = {
 
       { t: 'Server', eps: [
         { id: 'info', m: 'GET', p: '/qawk/v1/info', t: 'Read server information',
-          d: 'Name, version, the hawkBit version it speaks, the tenant and the list of features. ' +
-             'This is the only endpoint that needs no credentials: a console asks it first, to find ' +
-             'out whether it is talking to Qawk or to a stock hawkBit, and shows only what the ' +
-             'server supports.',
+          d: 'Name, version, the hawkBit version it speaks, the tenant, the list of features, and ' +
+             'the licence with the source of this build.<br><br>' +
+             'It needs no credentials, deliberately, for two reasons: a console asks it first, to ' +
+             'find out whether it is talking to Qawk or to a stock hawkBit and show only what the ' +
+             'server supports — and the AGPL\'s offer of source has to reach anyone using the ' +
+             'server, which an answer behind a sign-in would not. An operator who has changed Qawk ' +
+             'points <code>source</code> at their own repository with ' +
+             '<code>QAWK_SOURCE_URL</code>.',
           auth: 'none',
-          res: { 200: { d: 'What this server is: its version, the hawkBit version it speaks, its tenant, and the list of features a console uses to decide what to show.', ex: {
+          res: { 200: { d: 'What this server is: its version, the hawkBit version it speaks, its ' +
+            'tenant, the features a console uses to decide what to show, and — because the AGPL ' +
+            'asks for it — the licence and where <b>this build\'s</b> source can be had.', ex: {
             name: 'Qawk', version: '0.1.0', api: 'v1', hawkbit: '1.1.0', tenant: 'DEFAULT',
             features: ['download-progress', 'fleets', 'users', 'tokens', 'audit', 'pipeline',
-              'metrics', 'batch', 'deployments', 'systems', 'centres'] } } } }
+              'metrics', 'batch', 'deployments', 'systems', 'centres'],
+            licence: 'AGPL-3.0-or-later', source: 'https://github.com/padovanl/qawk' } } } }
       ] },
 
       { t: 'Channels', eps: [

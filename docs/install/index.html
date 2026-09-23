@@ -59,6 +59,7 @@ from a file except the optional users list.</p>
 <tr><td><code>QAWK_DB_WAIT</code></td><td><code>5m</code></td><td>How long to wait for the database at startup. PostgreSQL's first start initialises its data directory before it listens — over a minute on a busy disk — so the default is generous.</td></tr>
 <tr><td><code>QAWK_AUDIT_DAYS</code></td><td><code>180</code></td><td>Audit retention. <code>0</code> keeps it for ever.</td></tr>
 <tr><td><code>QAWK_METRICS_TOKEN</code></td><td><i>none</i></td><td>Bearer token for <code>/metrics</code>. Empty leaves it open, for a scraper on an internal network.</td></tr>
+<tr><td><code>QAWK_SOURCE_URL</code></td><td><i>the Qawk repository</i></td><td>Where <b>this build's</b> source is. Answered by <code>/qawk/v1/info</code> and shown on the console's About page. <b>If you have changed Qawk and other people use it over a network, point this at your own repository</b> — see <a href="#agpl">below</a>. Blanking it stops the server.</td></tr>
 <tr><td><code>QAWK_LOG_LEVEL</code></td><td><code>info</code></td><td><code>debug</code> logs every request.</td></tr>
 <tr><td><code>OTEL_*</code></td><td><i>none</i></td><td>The standard OpenTelemetry variables turn on OTLP export.</td></tr>
 </tbody>
@@ -362,6 +363,42 @@ temporary directory, no embedded store, nothing in the image:</p>
 <pre><code>docker rm -f qawk qawk-console qawk-db
 docker volume rm qawk-db qawk-artifacts</code></pre>
 
+<h2 id="agpl">If you have changed Qawk</h2>
+
+<p>Qawk is AGPL-3.0-or-later, and section 13 of that licence is the reason it is
+the AGPL rather than the GPL: <b>if you modify Qawk and let other people use it
+over a network, those people are entitled to the source of your version.</b></p>
+
+<p>Running it unchanged, or changing it and keeping it to yourself, carries no
+obligation at all — most deployments are one of those two and can stop reading
+here.</p>
+
+<p>If you did change it, one variable is what makes the offer reach the people
+entitled to it:</p>
+
+<pre><code>-e QAWK_SOURCE_URL=https://git.example.com/acme/qawk</code></pre>
+
+<p>Qawk then reports it in two places, which between them are everyone who
+interacts with the server:</p>
+
+<ul>
+<li><code>GET /qawk/v1/info</code>, <b>without credentials</b> — an offer you
+have to sign in to read is not an offer;</li>
+<li>the console's <b>About</b> → <i>Licence and source</i>, read from the
+server, so it names your build and not the project's.</li>
+</ul>
+
+<div class="warn-box">
+<div class="adm-head"><span class="ico-slot" data-ico="alert-fill" data-size="17"></span>Careful</div>
+<p>Leaving the variable unset is fine — it falls back to the upstream
+repository, so you cannot blank the offer by forgetting. Setting it to
+whitespace <b>stops the server at startup</b>, because that would be hiding it
+on purpose.</p>
+</div>
+
+<p>What the licence does and does not ask of you, in full:
+<a href="../about/">Licence and credits</a>.</p>
+
 <h2 id="checklist">Before you call it production</h2>
 
 <ul>
@@ -376,6 +413,8 @@ reachable from outside.</li>
 <li>Real users exist with real roles — nobody is doing daily work as the
 administrator.</li>
 <li>The gateway token is not the one from the demo.</li>
+<li>If you have changed Qawk and others use it over a network,
+<code>QAWK_SOURCE_URL</code> points at <i>your</i> repository.</li>
 </ul>
 
 </div>

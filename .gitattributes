@@ -1,0 +1,15 @@
+# Text is text, with LF, whatever the machine it was written on.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.woff2 binary
+
+# Vendored and recorded: not ours, and not worth reviewing line by line.
+console/js/vendor/** linguist-vendored
+server/reference/*.json linguist-generated
+server/reference/samples/** linguist-generated
+
+# What this project is written in, so the language bar says something true.
+docs/** linguist-documentation
+*.mjs linguist-language=JavaScript

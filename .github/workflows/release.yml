@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
+# A release, from a tag.
+#
+#   git tag -a v0.1.0 -m "..." && git push origin v0.1.0
+#
+# builds both images, pushes them to this repository's own container registry
+# (ghcr.io -- no secrets to set up, the token GitHub already gives the job is
+# enough) and opens a draft release with the changelog in it. Draft, not
+# published: the last read before something is announced is worth having.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  images:
+    name: Build and publish the images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The version, from the tag
+        id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The server carries its version so /qawk/v1/info and the console's
+      # About page say which build this is -- which is also where the source
+      # offer the licence requires is shown.
+      - name: The server
+        uses: docker/build-push-action@v6
+        with:
+          context: server
+          push: true
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.v.outputs.version }}
+            ghcr.io/${{ github.repository }}:latest
+          platforms: linux/amd64,linux/arm64
+
+      - name: The console
+        uses: docker/build-push-action@v6
+        with:
+          context: console
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}-console:${{ steps.v.outputs.version }}
+            ghcr.io/${{ github.repository }}-console:latest
+          platforms: linux/amd64,linux/arm64
+
+  draft:
+    name: Draft the release
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Whatever CHANGELOG.md says about this version, and nothing else.
+      - name: What changed
+        id: notes
+        run: |
+          python3 - <<'PY' > notes.md
+          import os, re
+          tag = os.environ["GITHUB_REF_NAME"]
+          text = open("CHANGELOG.md").read()
+          m = re.search(r"^## \[" + re.escape(tag.lstrip("v")) + r"\].*?$(.*?)(?=^## |\Z)",
+                        text, re.S | re.M)
+          print((m.group(1).strip() if m else
+                 "See CHANGELOG.md.") + "\n")
+          PY
+          cat notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: ${{ github.ref_name }}
+          body_path: notes.md

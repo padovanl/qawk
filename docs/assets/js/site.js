@@ -75,6 +75,7 @@
       { t: 'A test certificate', h: 'install/#testcert' },
       { t: 'Mutual TLS', h: 'install/#mtls' },
       { t: 'Letting a browser call it', h: 'install/#cors' },
+      { t: 'If you have changed Qawk', h: 'install/#agpl' },
       { t: 'Backup and upgrade', h: 'install/#backup' }
     ] },
     { t: 'Users and audit', ico: 'users', items: [
@@ -94,7 +95,9 @@
     ] },
     { t: 'About', ico: 'scale', items: [
       { t: 'hawkBit compatibility', h: 'hawkbit/' },
-      { t: 'Licence', h: 'about/' }
+      { t: 'Licence', h: 'about/' },
+      { t: 'Where the source is offered', h: 'about/#offer' },
+      { t: 'Contributing', h: 'about/#contributing' }
     ] }
   ];
 

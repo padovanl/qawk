@@ -42,6 +42,23 @@ convey the software to someone else, or when you run a modified version as a
 service that other people use. Updating your own machines is neither.</p>
 </div>
 
+<h2 id="offer">Where the source is offered</h2>
+
+<p>A licence that requires an offer is worth what the offer is. Qawk makes it in
+the two places a person meets the server:</p>
+
+<ul>
+<li><code>GET /qawk/v1/info</code> answers <code>licence</code> and
+<code>source</code>, <b>without credentials</b>;</li>
+<li>the console's <b>About</b> → <i>Licence and source</i> shows both, read from
+the server.</li>
+</ul>
+
+<p>Both name <b>the build you are talking to</b>. An operator who has changed
+Qawk sets <code>QAWK_SOURCE_URL</code> to their own repository, and their users
+are pointed there rather than here — which is the whole point of section 13.
+<a href="../install/#agpl">How to set it</a>.</p>
+
 <h2 id="why">Why the AGPL</h2>
 
 <p>MIT lets anyone take the work, close it, rebrand it and sell it, and all they

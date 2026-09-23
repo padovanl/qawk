@@ -317,6 +317,25 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
+## 🤝 Contributing
+
+Bug fixes, documentation and tests need no ceremony — send them. For anything
+larger, open an issue first: Qawk has strong opinions about how it behaves, and
+a change that crosses one of them wants a conversation before it wants code.
+
+| | |
+|---|---|
+| [CONTRIBUTING.md](CONTRIBUTING.md) | How to run it, what the checks are, and what review will ask of you |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Be decent. Argue about the code, not the person |
+| [SECURITY.md](SECURITY.md) | Found a hole? **Do not open an issue** — report it privately |
+| [CHANGELOG.md](CHANGELOG.md) | What changed, for someone deciding whether to upgrade |
+| [LICENSING.md](LICENSING.md) | The licence, in full, and why |
+
+Every source file carries an SPDX header, and CI refuses a pull request that
+adds one without.
+
+---
+
 ## 📁 Repository layout
 
 ```
@@ -331,6 +350,7 @@ server/                 Qawk
 console/                the web console: index.html, js/, serve.py, test/
 demo/                   start.sh, simulate.sh, seed.py, compose.yml
 docs/                   the documentation site (GitHub Pages), docs/serve.sh
+.github/                CI, the release workflow, issue and PR templates
 ```
 
 ---
@@ -343,6 +363,11 @@ docs/                   the documentation site (GitHub Pages), docs/serve.sh
 - ✅ **Change it**, and share the changes under the same licence.
 - ❌ **Take it, close it, sell it as your own** — that is what this licence prevents.
 - 💼 **Need other terms?** Open an issue. Commercial licences are available.
+
+> 🔗 **If you change Qawk and let other people use it over a network**, they are
+> entitled to *your* version's source. Set `QAWK_SOURCE_URL` to your own
+> repository: it is answered by `/qawk/v1/info` and shown on the console's About
+> page, which is how that offer reaches the people entitled to it.
 
 Why the AGPL and not MIT, the Apache-2.0 alternative, the third-party components,
 and the EPL-2.0 exception the embedded hawkBit files need: **[LICENSING.md](LICENSING.md)**

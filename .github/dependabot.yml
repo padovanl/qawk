@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
+# Dependency updates, weekly and grouped, so the repository does not become a
+# stream of one-line pull requests nobody reads.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /server
+    schedule: { interval: weekly }
+    groups:
+      opentelemetry:
+        patterns: ["go.opentelemetry.io/*"]
+      golang-x:
+        patterns: ["golang.org/x/*"]
+      everything-else:
+        patterns: ["*"]
+        exclude-patterns: ["go.opentelemetry.io/*", "golang.org/x/*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
+
+  - package-ecosystem: docker
+    directories: [/server, /console]
+    schedule: { interval: monthly }

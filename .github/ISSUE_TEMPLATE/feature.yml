@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Luca Padovan
+
+name: Something is missing
+description: A thing Qawk cannot do that it should.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: |
+        What are you trying to do, and what stops you? Describe the situation
+        rather than the feature — the best answer is often a different one from
+        the one you had in mind.
+      placeholder: |
+        When a system rolls back overnight nobody notices until someone opens
+        the console. I want to be told.
+    validations: { required: true }
+
+  - type: textarea
+    id: today
+    attributes:
+      label: What you do today instead
+      description: The workaround, if there is one, and why it is not enough.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you had in mind
+      description: Optional. If you already have a shape for it, say so.
