@@ -24,7 +24,7 @@ jobs:
     name: Build and publish the images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: The version, from the tag
         id: v
@@ -66,7 +66,7 @@ jobs:
     needs: images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Whatever CHANGELOG.md says about this version, and nothing else.
       - name: What changed
