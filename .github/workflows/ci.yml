@@ -21,7 +21,7 @@ jobs:
     name: Server (Go)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
@@ -65,7 +65,7 @@ jobs:
     name: Console (Node)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -78,7 +78,7 @@ jobs:
     name: Licence headers and settings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Every source file we wrote carries an SPDX header
         run: python3 .github/check-headers.py
       - name: Every setting is documented, and no document invents one
@@ -88,7 +88,7 @@ jobs:
     name: Documentation site
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -103,6 +103,6 @@ jobs:
     name: Images build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: docker build -t qawk:ci server/
       - run: docker build -t qawk-console:ci console/
