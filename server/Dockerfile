@@ -4,7 +4,7 @@
 #
 # Two stages: the Go toolchain builds static binaries, and the image that
 # runs them has nothing else in it but a user and a directory for artifacts.
-FROM golang:1.25-bookworm AS build
+FROM golang:1.27-bookworm AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
