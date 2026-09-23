@@ -14,7 +14,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
       -ldflags "-s -w -X qawk/internal/server.Version=${VERSION}" \
       -o /out/ ./cmd/...
 
-FROM alpine:3.20
+FROM alpine:3.24
 # Not root: Qawk opens one port and writes one directory.
 RUN adduser -D -u 10001 qawk \
  && mkdir -p /var/lib/qawk/artifacts \
