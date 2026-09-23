@@ -131,8 +131,11 @@ aside.side .grp > button {
 }
 aside.side .grp > button:hover { background: var(--bg-3); }
 aside.side .grp > button .n {
-  color: var(--fg-faint); font-family: var(--mono); font-size: 11px; min-width: 14px;
+  display: flex; align-items: center; justify-content: center;
+  width: 18px; flex: none; color: var(--fg-faint); transition: color .14s;
 }
+aside.side .grp > button:hover .n,
+aside.side .grp.open > button .n { color: var(--accent); }
 aside.side .grp > button .caret { margin-left: auto; color: var(--fg-faint); transition: transform .15s; font-size: 10px; }
 aside.side .grp.open > button .caret { transform: rotate(90deg); }
 aside.side .grp ul { display: none; list-style: none; margin: 1px 0 6px; padding: 0 0 0 10px; }
@@ -595,3 +598,13 @@ pre.hl[data-lang="text"]::after { content: none; }
 /* No sideways bar under a sample: it wraps instead, which is what a reader
    wants from a shell line they are about to copy anyway. */
 pre, .panel pre, .resp pre { overflow-x: hidden; }
+
+/* The API reference's endpoint tree sits inside the numbered section, so its
+   own groups nest one level further in. */
+aside.side .grp.sub { margin: 2px 0; }
+aside.side .grp.sub > button {
+  font-size: 12.5px; font-weight: 600; color: var(--fg-dim); padding: 6px 10px;
+}
+aside.side .grp.sub > button:hover { color: var(--fg); }
+aside.side .grp.sub ul { padding-left: 8px; }
+aside.side .grp.sub .sec-label { padding: 10px 10px 3px; font-size: 9.5px; }

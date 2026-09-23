@@ -10,23 +10,25 @@
   'use strict';
 
   // ---------------------------------------------------------------- the map
-  // Numbered sections, as Mender's documentation is: a reader who is told
-  // "see 7.2" can find it without searching.
+  // A mark per section rather than a number. Twelve numbers in a column are
+  // twelve things to read before finding the one you want; a shape is
+  // recognised without being read, and the search box is how anyone actually
+  // jumps straight to a section anyway.
 
   var NAV = [
-    { t: 'Get started', n: 1, items: [
+    { t: 'Get started', ico: 'rocket', items: [
       { t: 'What Qawk is', h: 'start/' },
       { t: 'Try it in five minutes', h: 'start/#demo' },
       { t: 'Build it and run it', h: 'start/#run' },
       { t: 'Your first update', h: 'start/#first-update' }
     ] },
-    { t: 'Concepts', n: 2, items: [
+    { t: 'Concepts', ico: 'bulb', items: [
       { t: 'How Qawk is put together', h: 'concepts/' },
       { t: 'Devices, modules and sets', h: 'concepts/#catalogue' },
       { t: 'Channels, centres, systems', h: 'concepts/#grouping' },
       { t: 'Glossary', h: 'concepts/#glossary' }
     ] },
-    { t: 'Using the console', n: 3, items: [
+    { t: 'Using the console', ico: 'cursor', items: [
       { t: 'A tour of the console', h: 'console/' },
       { t: 'Ship an update, step by step', h: 'console/#ship' },
       { t: 'Reading what you see', h: 'console/#reading' },
@@ -34,18 +36,18 @@
       { t: 'A fleet to practise on', h: 'console/#practise' },
       { t: 'Making it yours', h: 'console/#yours' }
     ] },
-    { t: 'Channels and releases', n: 4, items: [
+    { t: 'Channels and releases', ico: 'route', items: [
       { t: 'The release pipeline', h: 'channels/' },
       { t: 'Gates and approvals', h: 'channels/#gates' },
       { t: 'Waves and error thresholds', h: 'channels/#waves' },
       { t: 'Freezes and maintenance', h: 'channels/#freezes' },
       { t: 'Temporary channels', h: 'channels/#temporary' }
     ] },
-    { t: 'Centres', n: 5, items: [
+    { t: 'Centres', ico: 'building', items: [
       { t: 'Centres in channels', h: 'centres/' },
       { t: 'Moving a centre', h: 'centres/#moving' }
     ] },
-    { t: 'The orchestrator', n: 6, items: [
+    { t: 'The orchestrator', ico: 'puzzle', items: [
       { t: 'Systems updated as a whole', h: 'orchestrator/' },
       { t: 'Topologies (system types)', h: 'orchestrator/#topology' },
       { t: 'Manifests', h: 'orchestrator/#manifest' },
@@ -55,14 +57,14 @@
       { t: 'Releases through the orchestrator', h: 'orchestrator/#releases' },
       { t: 'Mender YAML', h: 'orchestrator/#yaml' }
     ] },
-    { t: 'Connecting devices', n: 7, items: [
+    { t: 'Connecting devices', ico: 'device', items: [
       { t: 'How a device talks to Qawk', h: 'devices/' },
       { t: 'SWUpdate (suricatta)', h: 'devices/#swupdate' },
       { t: 'HTTPS on a device', h: 'devices/#tls' },
       { t: 'Attributes that matter', h: 'devices/#attributes' },
       { t: 'Simulated devices', h: 'devices/#simulate' }
     ] },
-    { t: 'Installing the server', n: 8, items: [
+    { t: 'Installing the server', ico: 'server', items: [
       { t: 'Docker and compose', h: 'install/' },
       { t: 'Configuration', h: 'install/#config' },
       { t: 'Kubernetes', h: 'install/#kubernetes' },
@@ -72,22 +74,22 @@
       { t: 'Letting a browser call it', h: 'install/#cors' },
       { t: 'Backup and upgrade', h: 'install/#backup' }
     ] },
-    { t: 'Users and audit', n: 9, items: [
+    { t: 'Users and audit', ico: 'users', items: [
       { t: 'Users, roles and tokens', h: 'users/' },
       { t: 'The audit log', h: 'users/#audit' }
     ] },
-    { t: 'Operations', n: 10, items: [
+    { t: 'Operations', ico: 'chart', items: [
       { t: 'Metrics and tracing', h: 'operations/' },
       { t: 'Scaling', h: 'operations/#scaling' },
       { t: 'Troubleshooting', h: 'operations/#troubleshooting' }
     ] },
-    { t: 'API reference', n: 11, items: [
+    { t: 'API reference', ico: 'keyboard', items: [
       { t: 'Introduction', h: 'api/' },
       { t: 'Qawk API', h: 'api/#/qawk' },
       { t: 'Device API (DDI)', h: 'api/#/ddi' },
       { t: 'Management API', h: 'api/#/mgmt' }
     ] },
-    { t: 'About', n: 12, items: [
+    { t: 'About', ico: 'scale', items: [
       { t: 'hawkBit compatibility', h: 'hawkbit/' },
       { t: 'Licence', h: 'about/' }
     ] }
@@ -177,7 +179,8 @@
     h.appendChild(sw);
 
     h.appendChild(el('a', { class: 'icon-btn', href: 'https://github.com/padovanl/qawk',
-      title: 'Qawk on GitHub', 'aria-label': 'GitHub' }, '⌂'));
+      title: 'Qawk on GitHub', 'aria-label': 'Qawk on GitHub' },
+      (window.QawkIcons ? window.QawkIcons.markup('github', 17) : 'GitHub')));
     var t = el('button', { class: 'icon-btn', id: 'theme-btn', 'aria-label': 'Light or dark' }, '◐');
     h.appendChild(t);
     document.body.appendChild(h);
@@ -202,7 +205,8 @@
     NAV.forEach(function (sec) {
       var g = el('div', { class: 'grp' });
       var b = el('button', { type: 'button' },
-        '<span class="n">' + sec.n + '</span><span>' + sec.t + '</span><span class="caret">▶</span>');
+        '<span class="n">' + (window.QawkIcons ? window.QawkIcons.markup(sec.ico, 17) : '') +
+        '</span><span>' + sec.t + '</span><span class="caret">▶</span>');
       var ul = el('ul');
       var mine = false;
       sec.items.forEach(function (it) {
@@ -220,6 +224,9 @@
         li.appendChild(link); ul.appendChild(li);
       });
       if (mine) g.className = 'grp open';
+      // the API reference replaces its own list with the endpoint tree, so it
+      // has to be findable: one tree, one highlight
+      if (sec.t === 'API reference') ul.setAttribute('data-api-list', '');
       b.onclick = function () { g.classList.toggle('open'); };
       g.appendChild(b); g.appendChild(ul); a.appendChild(g);
     });
@@ -247,8 +254,11 @@
   function centreActive(aside) {
     var on = aside.querySelector('a.on');
     if (!on) return;
-    var want = on.offsetTop - (aside.clientHeight / 2) + (on.offsetHeight / 2);
-    aside.scrollTop = Math.max(0, want);
+    // already comfortably in view: leave it alone. Scrolling a sidebar that
+    // did not need scrolling is what makes a page feel like it is fidgeting.
+    var top = on.offsetTop - aside.scrollTop;
+    if (top > 60 && top + on.offsetHeight < aside.clientHeight - 60) return;
+    aside.scrollTop = Math.max(0, on.offsetTop - (aside.clientHeight / 2) + (on.offsetHeight / 2));
   }
 
   // Which sidebar entry is lit: the section actually being read, not the first
@@ -494,10 +504,9 @@
       centreActive(aside);
       // images change every heading's position: work it out again once they
       // have arrived
-      window.addEventListener('load', function () {
-        if (!byHash()) follow();
-        centreActive(aside);
-      });
+      // the images move every heading as they land, so work out which entry is
+      // lit again -- but do not scroll the sidebar a second time
+      window.addEventListener('load', function () { if (!byHash()) follow(); });
       window.addEventListener('hashchange', function () { if (!byHash()) follow(); });
 
       var pending = false;

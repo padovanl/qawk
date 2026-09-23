@@ -242,12 +242,22 @@
           message: 'Insufficient Permission: ' + (perm === 'admin' ? 'SYSTEM_ADMIN' : perm) }
       };
     },
-    404: {
-      d: 'No such thing. <code>info</code> says which kind and which identifier was asked for.',
-      ex: { errorCode: 'hawkbit.server.error.repo.entityNotFound',
-        exceptionClass: 'org.eclipse.hawkbit.repository.exception.EntityNotFoundException',
-        message: 'Fleet with given identifier {9999} does not exist.',
-        info: { entityId: 9999, type: 'Fleet' } }
+    404: function (api) {
+      var own = api.id === 'qawk';
+      return {
+        d: 'No such thing. <code>info</code> says which kind and which identifier was asked for.' +
+           (own ? ' The code says <code>qawk</code> because a channel is Qawk\'s own: the shape is ' +
+                  'hawkBit\'s so one parser reads both surfaces, but the name is not borrowed.' : ''),
+        ex: own
+          ? { errorCode: 'qawk.error.repo.entityNotFound',
+              exceptionClass: 'qawk.EntityNotFoundException',
+              message: 'Fleet with given identifier {9999} does not exist.',
+              info: { entityId: 9999, type: 'Fleet' } }
+          : { errorCode: 'hawkbit.server.error.repo.entityNotFound',
+              exceptionClass: 'org.eclipse.hawkbit.repository.exception.EntityNotFoundException',
+              message: 'Target with given identifier {device-0001} does not exist.',
+              info: { entityId: 'device-0001', type: 'Target' } }
+      };
     },
     400: {
       d: 'The request was understood and refused: a field missing or out of range, a query ' +
@@ -266,7 +276,7 @@
     var a = ep.auth || api.auth;
     if (a !== 'none') out[401] = COMMON[401];
     if (ep.perm) out[403] = COMMON[403](ep.perm);
-    if (/\{\w+\}/.test(ep.p)) out[404] = COMMON[404];
+    if (/\{\w+\}/.test(ep.p)) out[404] = COMMON[404](api);
     if (ep.body !== undefined || ep.bf || ep.raw || (ep.q && ep.q.some(function (q) { return q[2]; }))) {
       out[400] = COMMON[400];
     }
@@ -644,10 +654,16 @@
       '<pre><code>' + esc(json({ exceptionClass: 'org.eclipse.hawkbit.repository.exception.EntityNotFoundException',
         errorCode: 'hawkbit.server.error.repo.entitiyNotFound',
         message: 'Target with given identifier {shop-prod-017} does not exist.' })) + '</code></pre>' +
-      '<p>What Qawk adds uses its own codes under the same shape — ' +
+      '<p><b>The shape is always the same; the names say whose the thing is.</b> An error about ' +
+      'something hawkBit has — a target, a distribution set, an action — carries hawkBit\'s code ' +
+      'and class, exactly. An error about something only Qawk has carries Qawk\'s: ' +
+      '<code>qawk.error.repo.entityNotFound</code> for a channel or a manifest, and ' +
       '<code>qawk.fleet.gateClosed</code>, <code>qawk.system.state</code>, ' +
-      '<code>qawk.release.fourEyes</code> — so a client that already handles hawkBit\'s errors ' +
-      'handles these without a new branch.</p>' +
+      '<code>qawk.release.fourEyes</code> for the situations hawkBit has no word for. One parser ' +
+      'reads both, and no answer claims an Eclipse class raised it when none did.</p>' +
+      '<p>The one exception is <b>validation</b> (400), which keeps hawkBit\'s ' +
+      '<code>constraintViolation</code> on both surfaces: the same checks serve both, so splitting ' +
+      'the name would mean deciding which half of a shared check an error came from.</p>' +
 
       '<h2 id="try">Sending a request from this page</h2>' +
       '<p>Every endpoint page has a <b>Send this request</b> panel: put in your server\'s address ' +
@@ -711,31 +727,37 @@
       'Qawk API reference';
   }
 
-  // The endpoint tree in the sidebar, under the API section.
+  // The endpoint tree goes INSIDE the numbered "API reference" section, in
+  // place of its four static entries. It used to be a second tree below the
+  // first, which meant two highlighted rows at once -- one saying "Qawk API",
+  // the other "Overview" -- and a reader reasonably asking which one they
+  // were on.
   function apiSidebar() {
-    var side = document.querySelector('aside.side');
-    if (!side) return;
-    var host = el('div');
-    host.appendChild(el('div', { class: 'sec-label' }, 'API reference'));
+    var host = document.querySelector('aside.side ul[data-api-list]');
+    if (!host) return;
+    host.innerHTML = '';
+    host.appendChild(el('li', null,
+      '<a href="#/" data-h=""><b>Introduction</b></a>'));
+
     Object.keys(SPEC).forEach(function (k) {
       var api = SPEC[k];
-      var g = el('div', { class: 'grp' });
+      var li = el('li');
+      var g = el('div', { class: 'grp sub' });
       var b = el('button', { type: 'button' },
-        '<span class="n">·</span><span>' + esc(api.title) + '</span><span class="caret">▶</span>');
+        '<span>' + esc(api.title) + '</span><span class="caret">\u25b6</span>');
       var ul = el('ul');
-      ul.appendChild(el('li', null, '<a href="#/' + api.id + '" data-h="' + api.id + '"><b>Overview</b></a>'));
+      ul.appendChild(el('li', null, '<a href="#/' + api.id + '" data-h="' + api.id +
+        '">Overview</a>'));
       api.groups.forEach(function (grp) {
-        ul.appendChild(el('li', null, '<div class="sec-label" style="padding:9px 10px 3px">' +
-          esc(grp.t) + '</div>'));
+        ul.appendChild(el('li', null, '<div class="sec-label">' + esc(grp.t) + '</div>'));
         grp.eps.forEach(function (e) {
           ul.appendChild(el('li', null, '<a href="#/' + api.id + '/' + e.id + '" data-h="' +
             api.id + '/' + e.id + '">' + esc(e.t) + '</a>'));
         });
       });
       b.onclick = function () { g.classList.toggle('open'); };
-      g.appendChild(b); g.appendChild(ul); host.appendChild(g);
+      g.appendChild(b); g.appendChild(ul); li.appendChild(g); host.appendChild(li);
     });
-    side.appendChild(host);
   }
 
   function markSide() {

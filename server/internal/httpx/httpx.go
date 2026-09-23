@@ -39,11 +39,26 @@ const (
 )
 
 // NotFound: "<Type> with given identifier {<id>} does not exist."
+// qawkEntity is the set of things Qawk has and hawkBit has not. A 404 for one
+// of them keeps hawkBit's error SHAPE -- so one parser still reads both
+// surfaces -- but says qawk in the code and the class, because claiming
+// org.eclipse.hawkbit.repository.exception.EntityNotFoundException for a
+// Fleet names a class that never produced one and never could.
+var qawkEntity = map[string]bool{
+	"Fleet": true, "Release": true, "Centre": true, "SystemType": true,
+	"Manifest": true, "SystemDeployment": true, "SystemRun": true,
+	"User": true, "Role": true, "Token": true, "Command": true,
+}
+
 func NotFound(entity string, id any) *Error {
+	code, class := "hawkbit.server.error.repo.entityNotFound", pkgRepo+"EntityNotFoundException"
+	if qawkEntity[entity] {
+		code, class = "qawk.error.repo.entityNotFound", "qawk.EntityNotFoundException"
+	}
 	return &Error{
 		Status:  http.StatusNotFound,
-		Code:    "hawkbit.server.error.repo.entityNotFound",
-		Class:   pkgRepo + "EntityNotFoundException",
+		Code:    code,
+		Class:   class,
 		Message: fmt.Sprintf("%s with given identifier {%v} does not exist.", entity, id),
 		Info:    map[string]any{"type": entity, "entityId": id},
 	}
